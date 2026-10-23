@@ -1,0 +1,147 @@
+=====================================================================
+ TEST RAPORU  (TEST ajani yazar)
+=====================================================================
+TEST: IKNA OLDUM (2026-10-23) - Gerekce: tum KRITIK/ONEMLI hatalar (H-005, H-008, H-009, H-010) ve butun KUCUK hatalar
+ (H-001..H-004, H-006, H-007, H-011, H-012) DOGRULANDI; temiz DB + backend v5 ile 47 otomatik test (api, verify-calc [estimated=false rekor],
+ regression, scenarios) seri kosuda gecti, IP limiti (spray) testi ayri surecte gecti; tarayici akisi (375px + masaustu, zorunlu sifre,
+ gecmis kitap, hizli guncelleme onayi, soru-cevap, uye rafi, admin sekmeleri, feed current_streak = stats, kartta 🔥N) sorunsuz.
+ Yeni kod gelirse tekrar kosulur; geri alinabilir.
+SON GUNCELLEME: 2026-10-23 (backend v5 + frontend son duzeltmeler; temiz DB, seri kosu)
+SON CALISTIRMA: 2026-10-23 | GECEN: 47/47 (1 atlandi: SPRAY, ayri surecte gecti) | KALAN: 0 | AKTIF HATA: 0
+DURUM OZETI:
+ - Hazir: testler/lib/client.js (cerezli HTTP istemcisi), testler/start-backend.js
+   (PORT=4100, DB_PATH=testler/data/test.db; --fresh ile DB sifirlar),
+   testler/seed-demo.js (admin + 6 aile uyesi, ~30 kitap kaydi, 90 gunluk log,
+   film/dizi/yorum/soru/talep; idempotent), testler/api.test.js (node:test).
+ - Backend kodu (backend/src) gelince: node testler/start-backend.js --fresh,
+   node testler/seed-demo.js, node --test testler/*.test.js
+
+CALISTIRMA
+ 1) node testler/start-backend.js --fresh     (ayri terminal; 4100)
+ 2) node testler/seed-demo.js
+ 3) node --test testler/*.test.js
+
+ILK TUR OZETI: Backend API genel olarak saglam: yetki (401/403/IDOR), girdi dogrulama,
+ ilerleme hesabi (fark, ayni gun toplama, geri alma, otomatik bitti), rekor/ortalama/bitiren
+ tablolari elle hesapla ayni, scrypt hash, oturum iptali, cascade silme, SSRF/file:// reddi OK.
+ Seed: node testler/seed-demo.js idempotent (kullanicilari silip kurar; katalog her
+ seferinde ek kayit uretir -> temiz DB icin: sh testler/restart.sh).
+
+TARAYICI AKISI (5273): admin girisi, oturum yenilemeyle korunuyor, cikis -> korumali sayfa giris ekranina duser,
+ kullanici ekle (native required dogrulamasi), yeni kullanici girisi, uye /yonetim -> yonlendirilir, kitap arama (internet+kapak),
+ ekle, hizli sayfa guncelleme (max dogrulamasi), liderlik podyumu (Elif 187 dogru), HTML baslik/ad XSS metin olarak gorunuyor,
+ konsolda sadece beklenen ilk 401. Yuk (500 kitap/5000 log): feed 37ms, liderlik 45-88ms, stats 38ms.
+
+HATA LISTESI
+------------
+H-001  [DOGRULANDI] KUCUK  BACKEND   Kapak yolunda ters egik cizgi ile 500
+  Tekrar : curl -i "http://localhost:4100/api/covers/..%5c..%5cpackage.json"
+  Beklenen: 404 (ya da 400). Gerceklesen: 500 {"code":"SERVER"}. Dosya sizmiyor, ama
+  sunucu hatasi donuyor (Windows'ta backslash yol ayirici).
+
+H-002  [DOGRULANDI] KUCUK  BACKEND   Govde limiti asildiginda yaniltici hata mesaji
+  Tekrar : POST /api/entries/:id/comments body 1.5MB'lik JSON (giris yapmis)
+  Beklenen: "Istek cok buyuk" gibi genel mesaj (JSON govde limiti). Gerceklesen:
+  400 "Dosya cok buyuk (en fazla 5MB)" - 1.5MB'lik metin icin 5MB mesaji yaniltici.
+
+H-003  [DOGRULANDI] KUCUK  BACKEND   devam durumunda end_date<start_date sessizce yutuluyor
+  Tekrar : POST /api/entries {catalog_id, status:"devam", start_date:<dun>, end_date:"2000-01-01"}
+  Beklenen: 400 (tutarsiz tarih) ya da en azindan end_date'in yok sayildigi belgelensin.
+  Gerceklesen: 201, end_date null. (status bitti iken 400 donuyor; o dogru.)
+
+H-004  [DOGRULANDI] KUCUK  BACKEND   Login rate limit sadece IP+kullanici adi ikilisine bagli
+  Tekrar : 30 farkli kullanici adiyla yanlis sifre denemesi -> hepsi 401, 429 yok.
+  Beklenen: Ayni IP'den kullanici adi degistirerek yapilan deneme (sifre puskurtme/
+  kullanici adi tarama) icin de IP bazli ust sinir. Gerceklesen: sadece ayni kullaniciya
+  10 deneme/5dk (bu kisim calisiyor: test gecti).
+
+H-005  [DOGRULANDI] ONEMLI FRONTEND  375px genislikte ust menu tasiyor (admin)
+  Tekrar : admin ile giris, tarayici genisligi 375px (iframe ile olculdu: / /liderlik /rafim /yonetim)
+  Beklenen: yatay kaydirma yok, "Cikis" dugmesi gorunur. Gerceklesen: sayfa genisligi 445px;
+  "Cikis" (BUTTON.btn small ghost) sagdan 445px'e, bildirim dugmesi 390px'e tasiyor ->
+  yatay scroll, Cikis kesik. Admin menusu 4 baglanti + zil + tema + cikis; uye menusunde de sinirda olabilir.
+
+H-006  [DOGRULANDI] KUCUK  FRONTEND  Biten dizi satirinda bos meta basinda "·" kaliyor
+  Tekrar : ana sayfa, sezon/bolumu girilmemis "bitti" dizi (orn. Can - The Office)
+  Gerceklesen: alt satir "· 3 dk once". Beklenen: sadece "3 dk once".
+
+H-007  [DOGRULANDI] KUCUK  BACKEND/FRONTEND  Feed kartinda oge sayisi sinirsiz
+  Tekrar : node testler/load.js (dede'ye 500 devam eden kitap ekler) -> GET /api/feed 220KB,
+  kartta 500 satir. Beklenen: kart basina ust sinir (orn. 5-10) + "N tane daha". Hiz sorunu yok
+  (feed 37ms, liderlik <90ms), sorun payload/arayuz uzunlugu. Rekor liderlik detail.books de
+  ayni kullanicinin cok kitabini listeliyor (15KB).
+
+H-008  [DOGRULANDI] ONEMLI BACKEND  planlandi -> ilk ilerleme (300. sayfa) rekora giriyor (E-24 b)
+  Tekrar : uye kitap ekler {status:"planlandi", total_pages:500}; POST /entries/:id/progress {current_page:300}
+         ; GET /api/users/:id/stats -> record
+  Beklenen: tahmini/dagitilmis ya da rekora girmez (kullanici 300 sayfayi ne zaman okudugunu bilmiyoruz).
+  Gerceklesen: record = {pages:300, date:bugun}. (testler/regression.test.js "(b)")
+
+H-009  [DOGRULANDI] ONEMLI BACKEND  current_page=0 gonderilince tum okuma gecmisi siliniyor (E-16)
+  Tekrar : kitap 3 gun logla 60. sayfa; POST /progress {current_page:0} -> 200, logs=[] (hepsi silindi)
+  Beklenen: 0 gecersiz/onay isteyen bir islem olmali (400) ya da gecmis korunmali. Bos/null/''/'x'/-1/1.5 zaten 400 (dogrulandi).
+  Not: tek adimlik geriye gidis (60->50) satirlari silmiyor (e3 gecti).
+
+H-010  [DOGRULANDI] ONEMLI BACKEND/FRONTEND  Yonetici hesabi ana ekran feed'inde kart olarak donuyor (E-21 / E-24 h)
+  Tekrar : uye ile GET /api/feed -> cards icinde {user:{id:1,display_name:"Yonetici"}, items:[]}
+  Beklenen: yonetici feed kartlarinda olmamali. Liderlik tablolarinda yok (dogrulandi).
+
+H-001 NOT 2026-10-23: kapak yolu hala 500 (GET /api/covers/..%5c..%5cpackage.json). Ayrica Content-Type
+  application/xml ile POST /api/auth/login -> 500 (E-08 ile ayni; test regression "(i)" ).
+H-007 NOT: yeni v3 kodunda hala 15 kitap -> kartta 15 oge (sinir yok).
+
+DOGRULANDI (backend v3, canli, regression.test.js): (a) 3 gun atlayip tek guncelleme rekoru sisirmiyor;
+  (c) 'bitti' isaretiyle 800 sayfa rekora girmiyor; (d) gecmisten eklenen bitmis kitap ortalamayi bozmuyor (300/11);
+  (d2) tarihsiz bitmis kitap 300 sayfa/gun saymiyor; (e) bos/null/gecersiz progress 400 + log korunuyor;
+  (e3) geri gidis satir silmiyor; (f) X-Forwarded-For donduruldugunde 429; (g) film eklenme zamanindan 48s
+  (DB'de created_at 47s/49s yapilarak: 47s gorunur, 49s gorunmez); H-003 (devam+end<start 400).
+  ACIK KALAN: H-004 (kullanici adi degistirerek IP bazli limit; (f) ayni kullanici adi icin).
+
+NOT (hata degil, tasarim): Film "2 gun" kurali tarih bazli (bugun+dun). Dun 00:05'te
+ izlenen film bugun 23:55'te hala gorunur (~48s), onceki gun 23:59'da izlenen film
+ bugun 00:01'de (~24s) gorunmez. end_date sadece tarih tuttugu icin 47s/49s testi
+ birebir yapilamaz; kural sozlesmeyle uyumlu. Birakilan kitabin gunluk ortalamasi
+ son log gunune gore, devam edene gore degil (Can: 45 vs elle 40.7) - belgelenmemis.
+=====================================================================
+
+H-005 DOGRULANDI 2026-10-23: 375px iframe olcumu, uye ve admin icin /, /liderlik, /rafim, /yonetim: tasma yok (sw 356-371), Cikis gorunur.
+
+V4 DOGRULAMA 2026-10-23 (temiz DB + yeni kod, node --test testler/*.test.js): H-001 (404), H-002 (413 "Istek cok buyuk"),
+ H-003, H-004 (IP bazli 40/5dk, SPRAY=1 testi), H-007 (kart <=8 oge), H-008 (planlandi tahmini), H-009 (cp<1 -> 400,
+ geri gidis confirm:true ister ve log silmez), H-010 (yonetici feedde yok), xml 415, backend frontend/dist'i SPA olarak sunuyor.
+ verify-calc rekor testi estimated=false satirlariyla duzeltildi (karar geregi).
+
+NOT: spray testi artik SPRAY=1 ile calisir (IP 5 dk kilitlenir). Tekrar kosu icin ~5 dk bekle: sh testler/restart.sh && node --test testler/*.test.js
+
+TUTARLILIK 2026-10-23: H-001..H-005, H-007..H-010 [DOGRULANDI]. H-006 (frontend) acik: frontend.txt'de [YAPILDI] gelince UI'da bakilacak.
+ Spray testi (IP limiti) ana test sunucusunu kilitlememek icin ayri surec: PORT=4101 DB_PATH=testler/data/spray.db node backend/src/server.js;
+ TEST_API=http://localhost:4101 SPRAY=1 node --test --test-name-pattern="IP limiti" testler/regression.test.js  -> gecti.
+ Siradaki senaryolar: eszamanli guncelleme, tarih siniri (yil sonu/artik yil/saat dilimi), uzun baslik, internet yok, 375px UI akislari.
+
+YENI SENARYOLAR 2026-10-23 (testler/scenarios.test.js, 7/7 gecti): eszamanli 20 progress (log toplami=current_page), iki kullanici ayni kayit,
+ cift eszamanli ekleme (tek 201), artik yil/yil sonu/Istanbul gunu, 300/301 karakter baslik, internet-yok aramasi 200, 30 eszamanli feed.
+FRONTEND BEKLENEN: H-006, zorunlu sifre degisimi (E-02), bos giris onayi, gecmis kitap ekleme akisi, uye rafi: frontend.txt [YAPILDI] gelince tarayicida test edilecek.
+
+TARAYICI TURU 2026-10-23 (5273 -> 4100; zorunlu sifre icin ayri yigin 5274 -> 4102, ADMIN_PASSWORD yok):
+ DOGRULANDI: H-006 (biten dizi satirinda fazladan "·" yok); H-005/E-26 375px (iframe 375px: uye+admin, / /liderlik /rafim /yonetim /uye/:id;
+  scrollWidth 356-371, ust cubuk sigiyor, ana menu alt sekme cubugu, Cikis erisilebilir, uzun baslik sarilir).
+ CALISTI: rastgele admin sifresi -> giriste "Sifreni degistir" penceresi; yanlis mevcut sifre "Mevcut sifre hatali" gosterir (oturum dusmez);
+  6 karakterden kisa yeni sifre HTML dogrulamasiyla engellenir; dogru degisimle must_change_pw=false, pencere kapanir.
+  Yeni ekle > kitap > "Zaten bitirdim" + "Ne zaman basladigimi bilmiyorum" -> start_date=null, avg_source=no_dates, ortalamaya katilmaz.
+  Hizli guncelleme: bos/0 -> "Gecerli bir sayfa numarasi yaz (en az 1)", max asimi HTML dogrulamasi, geri gidis "279'dan 100'e dusuyorsun ... Emin misin?"
+  onayi (reddedilince degismiyor). Uye rafi (/uye/:id), Rafim (istatistik, sorular, kayitlar), cevap verme (HTML metin olarak kalir, img olusmaz),
+  yonetim: gelen kutusu (5), kullanicilar, katalog ekle, katalog listesi (35 kayit).
+ YENI KUCUK HATALAR:
+ H-011  [DOGRULANDI] KUCUK  FRONTEND  Zorunlu sifre penceresinde "Kapat" (✕) dugmesi islevsiz (frontend.txt'te bilinen kusur diye yazili)
+   Beklenen: ya dugme gizli olmali ya da kapatilabilmeli. Gerceklesen: tiklayinca hicbir sey olmuyor.
+ H-012  [DOGRULANDI] KUCUK  FRONTEND  Var olmayan uye rafi (/uye/999, /uye/abc) bos iskelet + "Kullanici bulunamadi / Tekrar dene" gosteriyor
+   Beklenen: net "Bu uye bulunamadi" ekrani ve ana sayfaya baglanti ("Tekrar dene" 404 icin anlamsiz; sekmeler/istatistik iskeleti gorunmemeli).
+ NOT (backend/katalog, hata degil): "Simyacı" aramasi yerel dogru sonuctan sonra alakasiz Japonca manga sonuclari getiriyor (E-22 recall/ilgi).
+ NOT (ortam): tarayici tarafinda cerezler host bazli (port degil): ayni anda 5273 ve 5274 yiginlarinda oturum acmak oturumlari birbirinin
+  uzerine yazar -> testte kisa sureli yanlis 401 goruldu, uygulama hatasi degil. Uretimde tek origin oldugu icin sorun yok.
+
+SON TUR 2026-10-23: feed.cards[].current_streak == /users/:id/stats.current_streak (Can 8, Reg kullanicilari 3); kart 🔥N yalniz seri>=2'de gorunur.
+ H-011 (zorunlu sifre penceresinde islevsiz ✕ kaldirildi) ve H-012 (/uye/999 -> "Bu uye bulunamadi / Ana sayfaya don") dogrulandi.
+ NOT (test ortami): tam paket her kosuda temiz DB ister (restart.sh) ve --test-concurrency=1 ile kosulmali: giris limiti (IP basina 40 basarisiz/5dk)
+ art arda kosularda testin kendi yanlis girislerinden dolayi tetiklenir.
+ Komut: sh testler/restart.sh && node --test --test-concurrency=1 testler/*.test.js

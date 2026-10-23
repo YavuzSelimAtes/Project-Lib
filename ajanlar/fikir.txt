@@ -1,0 +1,86 @@
+=====================================================================
+ FIKIR LISTESI (Fikir ajani)
+=====================================================================
+SON GUNCELLEME: 2026-10-23 17:15
+
+DURUM OZETI
+-----------
+Elestirmen E-09/E-11/E-12/E-13'e gore 20 fikir -> 6 fikre indirildi.
+KURAL: Cekirdek (elestiri E-01 dahil) bitmeden backend/frontend'e hicbir fikir
+dayatilmaz. Sozlesmede alan/uc olmasi "yapildi" demek DEGILDIR; YAPILDI sadece
+kullaniciya ulasan ozellik icin kullanilir. #2 #3 #5 #18 kodda goruldu (YAPILDI-kodda var); canli dogrulama test ajaninda.
+Menu (gercek, frontend): Ana Sayfa / Liderlik / Rafim / Yonetim. Hicbir fikir
+yeni menu ogesi acmaz. Ana ekran ucu: GET /api/feed (/api/home yok).
+
+---------------------------------------------------------------------
+ AKTIF FIKIRLER (6)
+---------------------------------------------------------------------
+#3 [DOGRULANDI-elestirmen canli test; bos kutu+Kaydet ilerlemeyi 0 yapiyor: E-16 acik] Hizli sayfa guncelleme  (ONCELIK 1)
+   Ana sayfadaki kendi kitap kartinda sayfa no kutusu + Kaydet, +10/+20
+   butonlari. Neden: cekirdek akis (gunluk ilerleme) surtunmesiz olmali, yoksa
+   ortalama/rekor/seri verisi bos kalir. Kim: frontend (POST /entries/:id/progress
+   var). Efor: kucuk. Sade: evet, yeni ekran yok.
+
+#2 [DOGRULANDI-elestirmen: Home ve Rafim] Bos / ilk kullanim deneyimi  (ONCELIK 2)
+   Rafim bossa "Ilk kitabini ekle" kartlari, ana sayfada uyesiz/ogesiz kart
+   metinleri. Neden: aile uyeleri teknik degil, bos ekran = terk. Kim: frontend.
+   Efor: kucuk.
+
+#5 [DOGRULANDI-elestirmen: ara, bagla ve tamamla] Talep -> katalog kisayolu  (ONCELIK 3)
+   Admin gelen kutusunda talepte "Bunu ara/ekle" -> /admin/catalog/import veya
+   arama baslangic metni talepten dolar; ekleyince talep tamamlandi olur.
+   Neden: cekirdek akisin adim sayisini azaltir. Kim: frontend (+ backend
+   resolved_catalog_id zaten var). Efor: kucuk.
+
+#18 [DOGRULANDI-elestirmen: backup 200, yetkisiz 401] Admin DB yedegi  (ONCELIK 4)
+   Admin panelinde "Yedek indir" (SQLite dosyasinin tutarli kopyasi).
+   JSON/CSV disa aktarma YOK (elestirmen: DB kopyasi yeterli ve daha onemli).
+   Neden: tum aile verisi tek dosya. Kim: backend (+ tek buton). Efor: kucuk.
+
+#1 [YAPILDI-kodda: feed.js current_streak + Home.jsx kartta 🔥N (2+ gun); canli dogrulama bekliyor] Seri (streak) rozeti  (E-01'e BAGLI)
+   Kartta "🔥 4 gun". Sadece E-01 (atlanan gunlerin sayfasi tek gune yazilmasin)
+   cozulunce anlamli; ondan once dayatilmaz. Kim: frontend (stats.current_streak
+   sozlesmede var). Efor: kucuk.
+
+#9 [RED-kodda yok, frontend cevap vermedi; uye rafi zaten var, kalan fark kucuk. Isteyen acarsa yeniden ele alinir] "Listeme al" (eski #9/#10/#11 birlestirildi)
+   Baskasinin kayit/kart detayinda tek buton: "Ben de okuyacagim" ->
+   kendi rafima 'planlandi' olarak ekler. Oneri/ortak okuma gostergesi bu tek
+   butonun sonucudur ("Ayse de okuyor" satiri detayda zaten /catalog/:id icinde
+   var). Kim: frontend (POST /entries). Efor: kucuk. Sade: ayri sayfa/bildirim yok.
+
+---------------------------------------------------------------------
+ ILERIDE (PARK - simdilik dayatilmaz, cekirdek ve yukaridakiler oturunca
+ proje sahibi isterse)
+---------------------------------------------------------------------
+ - Puan (#12), hatirlatma (#15), hedef (#8): tartismali, sonra karar.
+ - Tepki emojileri (#4): yorum zaten var; bildirimde "tepki verdi" turu ACILMAZ.
+ - Rozetler (#7): log saat bilgisi tutmuyor, "Gece kusu" hesaplanamaz; cikarildi.
+ - Yilbasi/ay ozeti (#13), eglenceli istatistik/dunya cevresi (#14), kitap
+   kulubu (#16), alinti (#20): eglence, ihtiyac degil; park.
+ - Bildirim zili (#6): sozlesmede var; frontend kullanacaksa karar frontend'in.
+ - Koyu tema (#19): frontend zaten yapmis, fikir olarak sayilmaz.
+=====================================================================
+
+---------------------------------------------------------------------
+ YENI ONERILER (2026-10-23 13:30, kullanim odakli, 3 adet)
+---------------------------------------------------------------------
+#21 [RED-AddFlow "bilmiyorum" kutusu ihtiyaci karsiliyor, ek mod gereksiz (E-27)] Gecmis kitaplari hizli ekleme  (ONCELIK 1 - asil ilk kullanim sorunu)
+   Aile ilk gun "daha once okudugum 15 kitabi" girmek ister; su an her biri
+   tam AddFlow (ara, durum, tarihler). Oneri: AddFlow'da "Daha once bitirdim"
+   modu: kitabi sec, sadece ay/yil (veya "bu yil") + istege bagli yildiz,
+   "Kaydet ve siradakini ekle" butonu (form kapanmaz, arama kutusuna doner).
+   KRITIK kural (E-01'le ayni sorun): bu kayitlar tek gune sayfa yazmamali ->
+   backend gecmis kayitta gunluk log OLUSTURMAZ ya da "gecmis" isaretler;
+   rekor/seri/gunluk ortalamaya girmez, sadece "bitirilen kitap" sayisina
+   girer. Kim: ikisi. Efor: orta (karar backend'te). Sade: yeni ekran yok.
+
+#22 [RED-bos ekranlar zaten yonlendiriyor, karsilama karti gereksiz (E-27)] Ilk girisi karsilayan 3 adimli kart  (ONCELIK 2)
+   Uye ilk giris yapinca (ve rafi bossa) ana sayfanin ustunde kapatilabilir
+   kart: 1) "Merhaba Ayse" 2) ilk kitabini/filmini ekle (tek buton AddFlow) 3)
+   sayfa gunceller misin diye QuickUpdate'i goster. Adimlar tamamlaninca kendi
+   kendine kaybolur. Kapatilma durumu localStorage (sunucuya gerek yok).
+   Kim: frontend. Efor: kucuk. Sade: yeni sayfa yok.
+
+#23 [YAPILDI-feed karti 8 oge + more_count, Home.jsx "N tane daha" (E-27)] Feed kartinda oge siniri  (test H-007'den)
+   Bir kullanicinin 500 devam eden kitabi kartta 500 satir. Karta ust sinir 5
+   + "N tane daha" (Rafim'e gider). Kim: backend (limit) + frontend. Efor: kucuk.

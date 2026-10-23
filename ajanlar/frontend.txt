@@ -1,0 +1,91 @@
+FRONTEND - frontend.txt
+SON GUNCELLEME: 2026-10-23 (gercek backend ile gorsel kontrol yapildi: masaustu + mobil 375px)
+DURUM OZETI: Tum ekranlar calisiyor (giris, ana sayfa, liderlik, rafim, yonetim, yeni ekle, detay).
+ Mock KULLANILMADI (sozlesme tam oldugu icin dogrudan gercek API). npm run build hatasiz.
+ Test: kendi backend'imi 4200'de (DB: gecici), test ajaninin seed-demo.js verisiyle calistirdim;
+ vite 5373'te. (4000/4100/5173/5273 portlarina dokunmadim.)
+
+CALISTIRMA
+  cd frontend && npm install && npm run dev        (http://localhost:5173, /api -> 127.0.0.1:4000)
+  Baska backend: API_TARGET=http://127.0.0.1:4100 PORT=5273 npm run dev
+  Uretim: npm run build
+
+TEKNOLOJI / KARARLAR
+  - React 19 + Vite + react-router-dom, JS. Ek kutuphane yok (useAsync kancasi + context).
+  - Font Nunito. Acik/koyu tema (sistem + 🌙/☀️ anahtari). Menu: Ana Sayfa, Liderlik, Rafim, (admin) Yonetim.
+  - Sag ust: 🔔 bildirim, tema, "Cikis" dugmesi (gorunur yazi).
+  - Hizli guncelleme: ana sayfada kendi kitap/dizi kartinda "Sayfa [ ] Kaydet +10" / "Sezon Bolum Kaydet".
+  - Film suresi (2 gun) feed'den gelen veriyle: frontend ayrica filtrelemez.
+  - %: tam bitmeden %100 gosterilmez (Math.floor). Tarihler "22 Eki 2026" bicimi.
+  - 401 gelirse (oturum bitti) otomatik giris ekranina doner.
+  - Cevap bekleyen sorular ana sayfada ozet kutusu + "Cevapla" ile acilir (kart alani kapanmasin diye).
+  - Kapak yoksa baslik bas harfli renkli kutu.
+
+EKRANLAR
+  /            kullanici kartlari + hizli guncelleme + cevap bekleyen sorular + "+ Yeni ekle"
+  /liderlik    3 tablo x donem, podyum + liste, sayarak gelen sayilar
+  /rafim       istatistik, 13 haftalik isi haritasi, kayitlar (tur filtresi), sorular, taleplerim
+  /yonetim     gelen kutusu (katalogda ara+bagla, durum, not), kullanicilar, katalog (elle/ice aktar)
+  Detay modali: yorum, soru-cevap, sahibi icin ilerleme/bitti/biraktim/sil.
+
+API v3 UYUMU [YAPILDI]: arama sonucu id:null+key ise POST /entries {catalog_key}; admin talebe baglarken
+  /catalog/pick; kullanici "Pasife al / Etkinlestir / Kalici sil"; ilk giriste zorunlu sifre degistirme
+  (must_change_pw); yedek indirme dugmesi (Yonetim > Kullanicilar); /progress spread_days mesaji
+  ("N gune dagittik"); isi haritasinda tahmini gunler soluk. /catalog ve /users cagrilari kaldirildi.
+  Canli denendi: "Âşık Sefil Ali" (internet sonucu) secilip kaydedildi.
+
+TUR 3 (elestiri/test_raporu frontend maddeleri):
+  E-26 / H-005 [YAPILDI] 375px: ust cubuk = marka + zil + tema + Cikis (sigiyor), ana menu mobilde ALT sekme
+       cubugu; scrollWidth=375 (olculdu), alt cubuk tarayicida dogrulandi. (backdrop-filter fixed'i bozuyordu, kaldirildi)
+  E-16 [YAPILDI] bos/gecersiz sayfa reddedilir; geriye gidiste "214'ten 2'ye dusuyor, loglar silinir, emin misin?" onayi.
+  E-15 [YAPILDI] "Zaten bitirdim": baslangic + bitis tarihi; "Ne zaman basladigimi bilmiyorum" -> start_date
+       GONDERILMEZ (backend ortalamaya katmaz). Devam kitapta "Kacinci sayfadasin?" alani (current_page).
+  E-17 [YAPILDI] kullanici karti basligina tikla -> /uye/:id (menu ogesi eklenmedi): istatistik, isi haritasi, tum
+       kayitlar, kayda tiklayip soru sorma (biten dahil). Detayda "Ailede bunu da:" (GET /catalog/:id).
+  E-02 [YAPILDI] must_change_pw -> kapatilamaz sifre degistirme penceresi (canli: admin rastgele sifreyle, pencere acildi).
+  E-19 [YAPILDI] today()/yesterday()/isi haritasi Europe/Istanbul.
+  E-23 [YAPILDI] Modal: onClose degisse de odak calinmaz, Tab focus trap, kapaninca odak geri doner.
+  H-006 [YAPILDI] meta satiri bos parcalari atar. H-007 [YAPILDI] kartta ilk 5 oge + "N tane daha".
+  E-21 [KISMEN] yonetici kendi karti bos ise gizli; baska yonetici kartlari icin feed'de user.role lazim (backend'e yazildi).
+  E-20 [YAPILDI] Yonetim > "Katalog listesi": ara/tur filtresi, duzenle, sil (409 mesaji gosterilir). Canli acildi.
+  E-21 [YAPILDI] backend gizliyor; frontend ek filtre de tutuyor.
+  v4 uyumu [YAPILDI]: progress sayfa>=1 + geriye gidiste confirm:true (onayli), feed more_count ("N tane daha" -> raf),
+       no_dates notu, talep "Tamamlandi" yalniz katalog baglayarak.
+  Fikir #1 (kartta seri ikonu): [YAPILDI-UI] kartta c.current_streak>=2 ise "🔥N" gosterilir. Test sirasinda calisan
+       backend (4200) feed'de current_streak donmedi (alan yok), bu yuzden ikonu canli goremedim.
+  TUR 4: Seri ikonu [DOGRULANDI] canli: kartlarda "🔥2", "🔥10" (0/1 gosterilmez). H-011 [YAPILDI] zorunlu sifre
+   penceresinde ✕ gizli. H-012 [YAPILDI] /uye/999 ve /uye/abc -> "Bu uye bulunamadi" + "Ana sayfaya don" (canli denendi).
+   Fikir #9 "Listeme al" [YAPILDI]: baska uyenin kitap/dizi kaydi detayinda kucuk dugme -> POST /entries
+   {catalog_id, status:'planlandi'}; canli: "Listene eklendi". Yeni ekran yok. Film icin gosterilmez.
+  UCTAN UCA TARAYICI DOGRULAMASI (gercek backend, ekran goruntuleri alindi):
+   - E-02 [DOGRULANDI] taze DB + rastgele admin sifresi -> giris -> kapatilamaz "Sifreni degistir" penceresi acildi;
+     eski+yeni sifre arayuzden girildi -> pencere kapandi, uygulama acildi.
+   - E-17 [DOGRULANDI] ana ekranda uye karti basligi -> /uye/5 (istatistik, isi haritasi, kayit listesi) -> biten
+     dizi (The Office) acildi, "Soru sor" ve yorum alanlari gorunuyor.
+   - E-20 [DOGRULANDI] Yonetim > Katalog listesi: arama ("Chapterhouse"), Duzenle, baslik degistirip Kaydet -> liste
+     guncel basligi gosterdi.
+   Not: forced sifre penceresinde ✕ dugmesi gorunuyor ama islevsiz (bilinen kucuk kusur).
+
+CEVAPLAR
+  [FRONTEND -> ELESTIRMEN] E-10:
+   (1) [YAPILDI] gorunur "Cikis" dugmesi eklendi.
+   (2) [YAPILDI] kitap hizli guncellemede "Dun icin kaydet" kutusu (progress'e date=dun). Backend'in
+       "baslangic tarihinden once olamaz" hatasi kullaniciya gosteriliyor (denendi).
+   (tarih bicimi: GG.AA.YYYY)
+   (3) [YAPILDI] kapak dosyasi tur (jpg/png/webp) ve 5MB on dogrulamasi.
+   (4) [YAPILDI] 401'de oturum dusurme (auth-expired olayi).
+   (5) [YAPILDI] tarihler Turkce bicimde.
+  [FRONTEND -> ELESTIRMEN] E-09: sozlesmedeki uclardan frontend'in KULLANDIGI: bildirim, heatmap, stats(seri),
+   rating (film/bitti), planlandi/birakildi, pending-questions, /users yok (kullanilmiyor). Kullanilmayan:
+   /auth/change-password, /catalog (gezme), /catalog/:id, /users, series disinda ek yok -> backend isterse kaldirabilir.
+  [FRONTEND -> FIKIR]: #3 (+10 butonu) [YAPILDI], #2 bos durumlar [YAPILDI], #6 zil [YAPILDI], #1 seri: Rafim'da
+   gosteriliyor (kartta degil, sade kalsin diye) [YAPILDI]. #5 talepten katalog kisayolu: admin gelen kutusunda
+   "Ara -> Bunu bagla ve tamamla" [YAPILDI]. #9 "listeme al": beklemede (cekirdek sonrasi).
+
+BACKEND'DEN ISTEKLERIM
+  - Katalog aramasi internetle ~10 sn surebiliyor (UI'da "birkac saniye surebilir" yaziyor). Yerel sonucu once
+    donen bir yol / daha kisa zaman asimi guzel olurdu (dusuk oncelik).
+
+BILINEN EKSIKLER
+  - Baska uyenin rafina bakma yok. Kitap bitirince kutlama mesaji kart yeniden cizildigi icin kisa suruyor.
+  - Gercek kapakli (internet) katalog sonuclari goruldu (Dune); seed verisinde kapak yok.

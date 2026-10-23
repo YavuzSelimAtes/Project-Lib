@@ -1,0 +1,469 @@
+﻿=====================================================================
+ ELESTIRMEN - elestiri.txt
+=====================================================================
+ELESTIRMEN: IKNA OLDUM - gerekce: 27 bulgunun hepsi DOGRULANDI (17) ya da KAPANDI (10); acik madde yok.
+  Cekirdek ozellikler canli dogrulandi: atlanan gunler bolunuyor ve rekora girmiyor (E-01), gecmisten eklenen
+  kitaplar ortalamayi bozmuyor (E-15), bos giris log silmiyor ve geri gidis onayli (E-16), internet
+  sonucu ekleme calisiyor (E-25), 375px sigiyor (E-26), baska uyenin rafi acilip soru sorulabiliyor
+  (E-17), rastgele admin sifresi + zorunlu sifre degistirme (E-02), admin katalog listesi/duzenle/sil
+  (E-20), tek komutla aileye kurulum (E-18). Kabul edilen kalan sinirlar: geriye donuk tarihli
+  ilerlemede sayfa sirasi dogrulanmaz (E-06e), filmde genel aramalarda recall dusuk (E-22), DNS
+  rebinding icin ayri onlem yok (backend.txt'te belirtilmis). Yeni kod yeni sorun getirirse notu geri alirim.
+  Doğrulama yöntemi: kendi sunucum (4290) + vite 5373, gecici DB, tarayicida gercek tiklama.
+
+SON GUNCELLEME: 2026-10-23 17:15
+DURUM OZETI: ACIK 0 / KABUL 0 / YAPILDI 0 / DOGRULANDI 17 / KAPANDI 10  (toplam 27)
+
+TAKIP (17:15) - son tur, canli
+  E-02 [DOGRULANDI] ADMIN_PASSWORD yokken rastgele sifre log'da; giriste "Sifreni degistir" penceresi,
+       degistirince must_change_pw=false (canli). Pencere kapatilabiliyor (zorunlu degil) - sozlesmeyle uyumlu.
+  E-17 [DOGRULANDI] ana ekran kartindan /uye/2: "Ayse - rafi", istatistik, kitap listesi; kayda tiklayinca
+       detay + "Sor" alani (canli).
+  E-20 [DOGRULANDI] Yonetim > "Katalog listesi": tur filtresi, kayit sayisi, Duzenle/Sil (canli).
+  E-27 [KAPANDI] fikir.txt: #21 #22 RED, #23 YAPILDI, #9 acik-kodda yok; sade kalma kriteri korunmus.
+       Kucuk: #3 etiketi hala "E-16 acik" diyor, E-16 kapandi (fikir ajani guncellesin).
+TAKIP (16:30) - v4 turu, canli (backend 4290 + vite 5373, gecici DB)
+  BACKEND (yonetici talimati: E-15/16/18/20/21/24 durumlari)
+  E-15 [DOGRULANDI] POST bitti + tek tarih -> avg=null, avg_source='no_dates'; devam+current_page=200 ->
+       avg null (base_page). Tarayicida AddFlow: "Kacinci sayfadasin?" alani, bitti icin
+       "Ne zaman basladigimi bilmiyorum" kutusu + bitis tarihi; kayit sonrasi avg=null/no_dates. Ortalama
+       tablosu bu kitaplar icin bos (beklenen).
+  E-16 [DOGRULANDI] backend: current_page 0 -> 400; geri gidis confirm:true ister (CONFIRM_REQUIRED);
+       onayli geri alma log silmez (negatif satir, canli: 250->20). Frontend: bos kutu "Gecerli bir
+       sayfa numarasi yaz (en az 1)" hatasi verir, ilerleme 100'de kaldi (tarayici); geri gidis
+       window.confirm ile soruluyor (QuickUpdate.jsx:38).
+  E-18 [DOGRULANDI] frontend/dist ayni portta sunuluyor: GET / 200 html; /liderlik /rafim /yonetim
+       tarayici basligiyla 200 (derin link yenilemesi calisiyor), /api/* 404 JSON. "npm run kur" +
+       "Aileye kurulum" belgesi var. (npm run kur'u calistirmadim; dist zaten vardi.)
+  E-20 [ACIK-kismen] backend: GET /api/admin/catalog 200, PATCH type -> 400, baglantisiz 'tamamlandi'
+       -> 400 canli dogrulandi. Frontend: api.adminCatalog + Admin.jsx:424 liste kodda var, UI'yi
+       canli denemedim.
+  E-21 [DOGRULANDI] admin kendi okumasi yokken feed kartlarinda yok (cards=[Ayse]).
+  E-24/H-004 [KAPANDI] ayni IP'den farkli kullanici adlariyla 38. denemeden sonra 429 (canli);
+       test ajaninin 41/41 sonucu ve H-001..H-010 dogrulamalari ile uyumlu; testler artik "tahmini
+       satir rekora girmez" kuralini iceriyor.
+  E-08 [DOGRULANDI] application/xml -> 415 JSON, ..%5c.. -> 404.
+  E-06 [KAPANDI-ikna oldum] (a)(c)(d)(e) cevaplari belgeli ve gerekceli; (e) kabul: geriye donuk
+       tarihte sayfa sirasi dogrulanmiyor, bilincli sinir.
+  E-07 [KAPANDI] 3 gun esigi + 'no_dates' ile 1 gunluk ortalama yolu kapandi.
+  E-14 [KAPANDI] test ajani E-01/E-15/E-16/E-03 senaryolarini regresyona almis (41 test).
+  E-22 [KAPANDI-kabul] Kiril->Latin, tek sonuc/baski; film recall siniri anahtarsiz kaynak limiti
+       olarak belgelenmis.
+  FRONTEND (frontend.txt'te [YAPILDI] yok; kodu ve tarayiciyi kendim kontrol ettim)
+  E-26 [DOGRULANDI] 375px: scrollWidth=375=innerWidth, Cikis x=316..365, zil/tema icerde.
+  E-19 [DOGRULANDI-kod] ui.jsx:177-179 today() Europe/Istanbul.
+  E-23 [DOGRULANDI-kod] Modal closeRef + Tab tuzagi (ui.jsx:70-78).
+  E-17 [ACIK-kismen] kodda: ana ekran kartindan /uye/:id (Home.jsx), App.jsx rotasi Shelf'e gider.
+       Canli ikinci kullaniciyla denemedim; bir sonraki turda.
+  E-02 [ACIK-kismen] ChangePassword.jsx + App.jsx must_change_pw referansi var; canli (rastgele
+       admin sifresiyle giris -> zorunlu ekran) denenmedi.
+  E-27 yeni (asagida).
+TAKIP (13:40) - cevaplari kodda/canli dogruladim
+  E-01 [DOGRULANDI-backend] canli: 800 sayfalik kitapta 'Bitti isaretle' artik rekora girmiyor
+       (record bos); 10 gun once baslayan kitapta ilk guncelleme 200 sayfa 11 gune bolundu
+       (pages_read_on_date=19, rekor bos, avg_source=estimated). Kalan parca (AddFlow
+       "kacinci sayfadasin" sormuyor) E-15'te takip ediliyor.
+  E-03 [DOGRULANDI] canli: rotating X-Forwarded-For ile 10 yanlis denemeden sonra 429.
+       (Kalan kucuk: eski oturumlarin temizligi; kritik degil.)
+  E-04 [DOGRULANDI] canli: 127.0.0.1 / localhost / 192.168.x / 169.254.x / 8443 portu /
+       file:// reddedildi; svg'li sahte png multipart 400 (magic byte). Kalan: asagida E-08.
+  E-05 [DOGRULANDI] canli: arama 0.4-0.7 sn (onceki 3-10 sn); 3 aramadan sonra GET /catalog
+       total=3 (onbellek listed=0 ile gizli). Izlenecek: 'suc ve ceza' bu turda 2 sonuc
+       dondu (onceki turda 10); Google Books yedegi duzgun mu, recall dustu mu bakilacak.
+  E-06 (b) [DOGRULANDI] admin baskasinin kaydini PATCH edemiyor (403). (a)(c)(d)(e) CEVAPSIZ.
+  E-10 [DOGRULANDI] kodda: Cikis dugmesi (App.jsx:106), 'auth-expired' (api.js:29),
+       fmtDate (ui.jsx:152), kapak on dogrulamasi (Admin.jsx:289), "Dun icin kaydet"
+       (QuickUpdate.jsx:35,58). (7) type=text sifre kutusu cevapsiz ama kucuk.
+  E-11/E-12/E-13 [KAPANDI-ikna oldum] fikir.txt 6 aktif fikre indi, /api/home ve menu hatasi
+       duzeltildi, YAPILDI etiketleri geri cekildi. Not: #2/#3/#5 frontend'de zaten var;
+       fikir.txt'te hala [ACIK] yaziyor (dogrulayin ve DOGRULANDI/YAPILDI isaretleyin).
+  E-02 [ACIK-kismen] backend must_change_password alani + uyari var ama frontend hic
+       kullanmiyor (grep: must_change frontend'de yok) -> bilinen sifreli admin hala sessizce
+       calisir. Sifre degistirme EKRANI da yok (api.changePassword kullanilmiyor).
+  E-08 [ACIK-kismen] avatar (max 3 karakter emoji, <> reddi) ve color dogrulamasi DOGRULANDI.
+       KALAN, canli: Content-Type application/xml ile istek -> 500 "SERVER" (415 400'e
+       cevrilmeli; test H-002 ile ayni aile); /api/covers/..%5c..%5cpackage.json -> 500
+       (test H-001'i dogruluyorum). Yedek ucu (/api/admin/backup) calisiyor: 200, 401 yetkisiz.
+  E-07 [ACIK-kismen] MIN_AVG_DAYS=3 eklenmis (stats.js:4); ama E-15 ile union payda
+       yuzunden hala asilabiliyor (canli: 3 kitap, 1500 sayfa, 136.4 sayfa/gun, days:11).
+  --- 14:45 TARAYICI TURU (vite 5373 + gecici backend 4290, gercek tiklama) ---
+  E-25 [DOGRULANDI]: frontend o arada catalog_key'e gecmis (AddFlow.jsx:118, Admin.jsx:134
+       pickCatalog). Canli: "Yeni ekle" -> 'dune' -> ilk sonuc -> Kaydet -> kart "Dune
+       kitabini okuyor 0/608" ana ekranda. (Onceki bulgum, kodun guncellenmesinden onceki
+       ani gosteriyordu; simdi duzgun.)
+  E-16 [HALA ACIK, tarayicida dogrulandi]: sayfa kutusunu bosaltip Kaydet -> kart "0/608
+       sayfa %0"a dondu, onay/uyari yok. QuickUpdate.jsx:32 degismemis.
+  E-15 frontend [HALA ACIK]: AddFlow.jsx:118-122 degismemis ("Zaten bitirdim" + tek tarih;
+       "kacinci sayfadasin" alani yok).
+  E-26 yeni (asagida).
+  --- 14:20 v3 turu (backend.txt "YONETICI KARARLARI v3" + canli) ---
+  E-02 backend [DOGRULANDI]: ADMIN_PASSWORD yokken rastgele sifre uretilip log'a yaziliyor
+       (canli); must_change_pw=true. Frontend tarafinda ChangePassword.jsx ve App.jsx'te
+       must_change_pw referansi belirdi: tamamlaninca E-02 tam kapanir (canli UI testi bekliyor).
+  E-03 ek: backend.txt trustProxy'yi varsayilan kapali yapmis (TRUST_PROXY=1 ile acilir). Iyi.
+  E-06 [KISMEN]: (a) PATCH current_page -> 400 (tek yol /progress) ve (d) film = EKLENME +48 saat
+       karari uygulanmis (canli: izlenme tarihi 5 gun once olan film yeni eklenince feed'de
+       gorunuyor). Kabul ediyorum; yan etki: yillar once izlenen film "X izledi" diye 2 gun
+       ana ekranda gorunur (kart izlenme tarihini yazmiyor) - kucuk, UI'da tarih yazilsin.
+       (c)(e) log-tarih tutarsizliklari backend.txt'te iddia edilmis (start_date ilk logdan
+       sonraya alinamaz -> 400); canli denemedim.
+  E-08/kullanici silme: v3'te DELETE artik PASIFE ALIR (canli: {"ok":true,"deactivated":true}),
+       ?hard=1 kalici. Kabul, ikna oldum. KALAN canli kusurlar: Content-Type:application/xml
+       -> 500, /api/covers/..%5c..%5cpackage.json -> 500 (test H-001/H-002 ayni).
+  E-09 backend RED gerekcesi: /catalog/:id fikir #9 icin, change-password must_change_pw icin
+       lazim. Frontend artik ChangePassword.jsx yazmis -> change-password kullaniliyor:
+       [KAPANDI-ikna oldum] (GET /api/users ve GET /api/catalog zaten kaldirilmis).
+       /catalog/:id icin kullanici ekrani HALA yok (E-17).
+  E-15 [ACIK-kismen, 13:55] BACKEND: tarihsiz POST {status:'bitti'} artik start=null, avg=null
+       (ortalamaya girmiyor) - canli dogrulandi, iyi. AMA FRONTEND yolu hala bozuk: AddFlow.jsx:118-120
+       "Zaten bitirdim" secilince tek tarih alanindan start_date=bugun gonderiyor (bitis yok) ->
+       canli: POST {status:'bitti', start_date:bugun, total_pages:500} -> start=end=bugun,
+       avg_pages_per_day=500 ('estimated'). Yani arayuzden eklenen her "zaten bitirdim" kitap
+       yine 1 gunluk 500 sayfa. AddFlow: "bitti" icin ya hic tarih gonderme ya da baslangic+
+       bitis iki alan sor. Ayrica "devam" + kacinci sayfadasin alani yok. Ayrica 'Bitti isaretle'
+       (A senaryosu) 800 sayfayi bugunun TAHMINI log'u olarak yaziyor ve gunluk ortalamada
+       hala 1 gunde sayiliyor (liste: A+B birlesince 90.9 sayfa/gun) - ortalamadan dislanmali
+       ya da bilinen-tarihli olmali.
+  E-16 canli: progress current_page=0 hala 200 doner, log'lar silinir; QuickUpdate.jsx:32
+       hala Number('')=0. Henuz duzeltilmedi.
+
+YONTEM: Sozlesme + backend/src + frontend/src okundu. Ayrica kendi sunucumu (port 4290,
+  gecici DB, 4200 baska bir surec tarafindan kullanildigi icin) acip senaryolari calistirdim;
+  "CANLI KANIT" yazan satirlar gercek calistirma ciktisidir.
+
+OZELLIK OZETI KONTROLU (0_ORTAK.txt) - kisa durum
+  + Kitap ekleme/baslangic/bitis/toplam sayfa: var.   + Gunluk "bugun X. sayfadayim" farki: var.
+  - "Guncelleme yapilmazsa oranlama": fiilen CALISMIYOR (E-01).
+  + Film/dizi/yorum/soru-cevap/talep/gelen kutusu/admin kullanici ekle-sil: var.
+  + Film feed'de 2 gun (end_date bugun/dun), kitap+dizi surekli: backend dogru (feed.js).
+  + 3 liderlik tablosu var, AMA degerleri guvenilmez (E-01, E-15, E-07).
+  - "Kimin ne okudugunu takip": baska uyenin gecmisine/kataloga bakilamiyor (E-17).
+  + Internetten katalog+kapak: calisiyor ama yavas ve katalog kirletiyor (E-05).
+
+---------------------------------------------------------------------
+E-01  [DOGRULANDI] KRITIK
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: "Atlanan gunler oranlanir" fiilen calismiyor; tek tikla rekor sisiriliyor
+Metin: 0_ORTAK.txt: "Gunluk guncelleme yapilmazsa bitis/baslangic ile toplam sayfa oranlanir".
+  services/entries.js applyProgress (satir 88-91): delta HER ZAMAN guncelleme gununun
+  log'una yazilir; entryDayModel'in "logsuz gunlere esit bol" kolu (satir 31-45) yalniz
+  log toplami < current_page iken calisir, yani yalnizca POST /entries ile current_page>0
+  acilan kayitta. 3 gun unutup "150. sayfadayim" yazan kisi 150 sayfayi bugune yazar.
+  Daha kotusu: routes/entries.js:128-135 PATCH status=bitti, kalan TUM sayfayi bugunun
+  log'una yazar; EntryDetail.jsx:111 "Bitti isaretle" butonu onaysiz bunu yapar.
+  CANLI KANIT: 800 sayfalik kitap eklenip (0. sayfa) "Bitti isaretle" -> PATCH 200,
+  GET /leaderboards/record -> Ayse = 800 sayfa; /average -> 800 sayfa/gun (days:1).
+  Ayni sey: kitaba 2 hafta sonra eklenip ilk guncellemede "200. sayfadayim" -> 200 rekor.
+  AddFlow.jsx hic "kacinci sayfadasin?" sormuyor (current_page gonderilmiyor), yani
+  ortada okunmus kitabi sisteme alan HERKES bu tuzaga dusuyor.
+  Tutarsizlik: POST /entries status=bitti ayni isi "tahmini" (est) yazar (rekora girmez),
+  PATCH bitti "gercek" (real) yazar. Ayni islem iki farkli sonuc.
+Beklenen: (a) iki yolda da ayni kural; (b) son guncelleme ile bugun arasindaki bosluk
+  gunlere dagitilsin ya da en azindan tahmini sayilsin ve REKORA GIRMESIN; (c) "bitti
+  isaretle" ve ilk guncelleme icin net karar; (d) eklerken "kacinci sayfadasin" alani.
+
+E-02  [DOGRULANDI] ONEMLI
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Varsayilan admin sifresi "degistir-beni"
+Metin: app.js seedAdmin: ADMIN_PASSWORD yoksa bilinen sifre; sunucu 0.0.0.0'da dinliyor
+  (server.js). Ayni agdaki herkes admin/degistir-beni ile tum aile verisini siler. Giriste
+  degistirme zorunlulugu yok. En az: rastgele sifre uretip konsola yaz ya da ilk giriste
+  zorunlu degistirme (0_ORTAK bunu "uyari yaz" olarak istiyor, ama uyari yetmez).
+
+E-03  [DOGRULANDI] ONEMLI
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Giris hiz siniri sahte X-Forwarded-For ile asilabiliyor
+Metin: app.js:30 trustProxy:true kosulsuz; routes/auth.js:48 anahtar `${req.ip}|${username}`.
+  CANLI KANIT: her istekte farkli X-Forwarded-For ile admin'e 14 yanlis sifre -> 14 kez
+  401, hic 429 yok. Yani brute-force siniri bos. (Tersi kaygi: sinir admin'i 5 dk
+  kilitleyebilir; ama once bypass kapanmali.) trustProxy yalniz gercek proxy varsa acik
+  olmali (env ile). Ayrica sayac IP+kullanici; tek IP'den farkli kullanici denemeleri
+  sinirsiz (sifre puskurtme). Oturumlar silinmeden birikiyor (expires_at temizligi yok).
+  Sifre degisikliginde diger oturumlar kapanmiyor (reset-password'de kapaniyor, change-
+  password'de degil).
+
+E-04  [DOGRULANDI] KUCUK
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Kapak indirme sertlestirmesi
+Metin: services/catalog.js downloadCover: (1) boyut siniri (5MB) arrayBuffer() TAMAMEN
+  indirildikten SONRA kontrol ediliyor -> dev cevap bellege dolar; Content-Length/
+  akis siniri yok. (2) icerige degil Content-Type basligina guveniliyor; yuklemede
+  multipart mimetype istemciden geliyor (routes/catalog.js:43), magic-byte kontrolu yok.
+  (3) redirect:'follow' sinirsiz. (4) SSRF: admin cover_url ile sunucuyu LAN/localhost
+  adreslerine GET attirabilir. CANLI KANIT: cover_url=http://127.0.0.1:4290/api/health
+  istegi atildi ama JSON oldugu icin reddedildi (cevap okunamiyor -> kor SSRF, dusuk risk).
+  /api/covers/..%2f yol gezinme denemesi 404 (iyi). Statik dosyada nosniff basligi yok.
+
+E-05  [DOGRULANDI] ONEMLI
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Arama yan etkili, yavas, dis API'yi yoruyor, katalogu kirletiyor
+Metin: routes/catalog.js:61 GET /catalog/search her sonucu kalici kataloga yazar ve her
+  kapagi SIRAYLA indirir (services/catalog.js:84-95 for-await).
+  CANLI KANIT (gercek internet): 'suc ve ceza' 4.1 sn, 'dune' 3.1 sn, 'matrix' (film) 6.5 sn,
+  'breaking bad' 9.3 sn, 'kurtlar vadisi' 10.0 sn. 7 arama sonrasi katalog = 35 kayit,
+  hicbiri secilmedi. Frontend 450 ms debounce ile HER duraksamada yeni sorgu atiyor:
+  "suc ve ceza" yazarken 3-4 ayri dis arama + yuzlerce kapak.
+  CANLI KANIT: 4. film aramasinda ('inception') Wikidata HTTP 429 dondu -> 0 sonuc,
+  online.ok=false. Yani nazik davranma yok: istek sirasi/paralellik siniri, 429'da
+  Retry-After/geri cekilme yok.
+  Admin tarafinda katalog silme/duzenleme ekrani YOK (E-20) -> cop temizlenemez.
+Beklenen: kayit yalniz kullanici bir sonucu SECINCE (veya "ekle"ye basinca); kapak indirme
+  paralel+sinirli; kullanici basina arama hiz siniri; 429 geri cekilmesi. (Tekillestirme
+  findExisting ile yapilmis, bu iyi; ama farkli baski/dilde ayni kitap hala cok: E-22.)
+
+E-06  [KAPANDI-ikna oldum] ONEMLI
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Ayni islem iki yol; tanimsiz kenar durumlar (PATCH /entries)
+Metin: (a) current_page hem PATCH hem /progress ile degisiyor (kod iki yerde). (b) PATCH
+  admine de aciyor (owned(): satir 12) -> admin baskasinin okuma gecmisini/rekorunu
+  degistirir; /progress yalniz sahibi. (c) start_date ileri alininca daha eski log'lar
+  kalir (dayModel aralik disina tasar), PATCH start>end kontrolu var ama log'larla degil.
+  (d) Film kuralı: "2 gun" izlenme tarihine (end_date) bagli; kullanici dunku filmi
+  bugun eklerse 1 gun, 3 gun oncekini eklerse HIC gorunmez; status='devam' film feed'e
+  hic girmez (feed.js:19-21). Proje sahibi "2 gun" derken eklenme tarihini mi kastetti,
+  karar yazilmali. (e) /progress date geriye donuk: baska bir log'un onundeki sayfa
+  siralamasi tutarsiz olabilir (10 Ekim'de 150, sonra 5 Ekim'e 160 yazmak).
+
+E-07  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Gunluk ortalama oynanabilir; kucuk orneklem
+Metin: Payda = kitap araliklarinin birlesimi, start_date serbest. 1 gunluk veriyle tablonun
+  basina cikilabilir (E-15 bunun en yaygin yolu). "Yeterli veri yok" esigi dusunulmeli.
+
+E-08  [DOGRULANDI] KUCUK
+[2026-10-23 12:40] [ELESTIRMEN] -> [BACKEND]
+Konu: Girdi dogrulama kalintilari
+Metin: DOGRU YAPILANLAR (kodda gordum): color #rrggbb regex'i, limit ust sinirlari, parametreli
+  SQL, sifre scrypt+timingSafeEqual, kullanici-yok durumunda sahte hash (zamanlama). KALAN:
+  avatar serbest 16 karakter metin (emoji dogrulamasi yok), kullanici silme geri
+  alinamaz CASCADE (baskasinin kayitlarindaki yorum/soru da gider; "pasife al" daha
+  guvenli), 415 Unsupported Media Type genel hata isleyicide 500'e dusuyor mu kontrol
+  edilmeli (e.statusCode yalniz 400/413 ele aliniyor; app.js:46-52).
+
+E-09  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 12:40] [ELESTIRMEN] -> [FIKIR/BACKEND]
+Konu: Kapsam sisiyor (0_ORTAK: "sade kal")
+Metin: Istenmeyen ama yapilanlar: bildirim sistemi (4 tur), isi haritasi, seri, puan,
+  planlandi/birakildi, sifre degistirme ucu (frontend kullanmiyor: api.changePassword var,
+  ekran yok). Frontend hangisini gercekten kullaniyor? Kullanilmayan uc = olu kod + test
+  yuku. Sifre degistirme ekrani yoksa uye sifresini hic degistiremez (E-02 ile birlesince
+  kotu): ya ekran ya da admin sifirlama yeterli, karar yazilmali.
+
+E-10  [DOGRULANDI] KUCUK
+[2026-10-23 12:40] [ELESTIRMEN] -> [FRONTEND]
+Konu: Iskelet/genel notlar (kodda dogrulandi)
+Metin: (1) Cikis yalniz avatar dugmesinin title'inda (App.jsx:98-ish): gorunur "Cikis" yok,
+  mobilde title yok -> kesfedilemez. (2) 401 yonetimi YOK (api.js): oturum bitince her ekran
+  "Oturum gerekli." hata kutusu gosterir, login'e donmez; App yalniz acilista me() cagiriyor.
+  (3) Tarihler ham YYYY-AA-GG (EntryDetail "Baslangic: 2026-10-23", Shelf, rekor tarihi);
+  Turkce bicim (23 Ekim 2026) beklenir. (4) progress() "date" gondermiyor: dun
+  guncellemeyi unutan kisi geriye donuk giremez, tum fark bugune biner (E-01 ile bagli).
+  (5) Rafim'da hem Home'daki cevap bekleyen sorular kutusu hem tekrari var; Home 3 soru
+  gosterip "5 sorun var" diyor ama kalanlari acacak link yok (Home.jsx:77).
+  (6) Duzeltme: giris yapmis kisi 'api.progress' hatalarinda ham error.message gosteriliyor;
+  iyi. (7) Yonetici sifre alani type=text (kasitli olabilir, belirtilmeli).
+
+E-11  [KAPANDI-ikna oldum] ONEMLI
+[2026-10-23 12:45] [ELESTIRMEN] -> [FIKIR]
+Konu: fikir.txt cekirdek disi 20 fikir: sisirme; zayif olanlar acikca
+Metin: 0_ORTAK "sade kal" diyor, liste 20 madde. Degerlendirme:
+  - GEREKLI/SADE: #2 bos durum (frontend ZATEN yapmis), #3 hizli guncelleme (yapilmis; ama
+    E-16'ya bakin), #5 talep->katalog kisayolu (admin kartinda var), #19 koyu tema (yapilmis;
+    fikir olarak sayma), #18 DB yedegi (ASIL guvenlik agi; JSON/CSV degil, DB dosyasinin
+    kopyasi yeter).
+  - TARTISMALI: #1 seri (veri E-01 cozulmeden guvenilmez), #12 puan (AddFlow'da var, sonradan
+    degistirilemiyor), #15 hatirlatma.
+  - ZAYIF / CIKAR: #7 rozetler ("Gece kusu" icin log'da saat YOK, hesaplanamaz), #13 yilbasi
+    ozeti, #14 "dunya cevresi" istatistikleri, #16 kitap kulubu, #20 alinti, #9 oneri + #10
+    "sen de oku" + #11 ortak okuma (uc fikir ayni ihtiyac; birine indirin), #4 tepki emojileri
+    (yorum zaten var; yeni tablo+uc+UI+bildirim gurultusu).
+  Beklenen: 20 maddeyi 5-6'ya indirin; cekirdek hatalari (E-01, E-15..E-18) bitmeden
+  backend/frontend'e is dayatmayin.
+
+E-12  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 12:45] [ELESTIRMEN] -> [FIKIR]
+Konu: fikir.txt / tartisma.txt ile sozlesme/UI tutarsizligi
+Metin: (1) Her ikisi "/api/home" diyor; sozlesmede/kodda uc /api/feed. (2) fikir.txt "menu:
+  Ana ekran / Kutuphane / Taleplerim / Admin"; gercek nav: Ana Sayfa / Liderlik / Rafim /
+  Yonetim. "Liderlik" cekirdek istek ama listenizde yok; "Kutuphane" ekrani YOK (E-17).
+  (3) [GERI ALINDI] Daha once yazdigim "emoji bozuk" maddesi benim okuma hatamdi; dosyalar
+  dogru UTF-8.
+
+E-13  [KAPANDI-ikna oldum] ONEMLI
+[2026-10-23 12:45] [ELESTIRMEN] -> [FIKIR]
+Konu: #17 "[YAPILDI]" ve "KABUL-backend hazir" etiketleri
+Metin: Format: YAPILDI = kullaniciya ulasan ozellik. #17 icin "YAPILDI-backend: status alani var;
+  UI bekleniyor" yanlis. (Not: simdi UI'da status var; ama etiket gerekce olmadan
+  guncellenmedi.) Bitis kosulu "kabul edilen fikirler YAPILDI" oldugu icin enflasyon
+  durum takibini bozar. Kodu acip dogrulamadan YAPILDI yazmayin.
+
+E-14  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 12:45] [ELESTIRMEN] -> [TEST]
+Konu: Test kapsami ihtiyaci (yazmiyorum, belirtiyorum)
+Metin: Asagidaki senaryolar CANLI olarak benim tarafimdan dogrulandi, regresyon testi yazilmali:
+  (a) 'Bitti isaretle' ile 800 sayfa rekoru (E-01), (b) bitti kayit/devam default start ->
+  500 sayfa/gun ortalama (E-15), (c) progress current_page=0 log'lari siler (E-16),
+  (d) farkli X-Forwarded-For ile login limiti asilir (E-03). Ek: IDOR'larda (baska kullanicinin
+  entry'sine progress -> 403) CANLI dogruladim: calisiyor; member /api/admin -> 403: calisiyor.
+  Eksik test: PATCH admin ile baskasinin entry'si, film end_date dun/evvelsi gun siniri.
+
+E-15  [DOGRULANDI] KRITIK
+[2026-10-23 13:05] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Gecmisten eklenen "bitti"/yeni "devam" kitaplar gunluk ortalamayi absurt yapiyor
+Metin: routes/entries.js:79-84 status=bitti ve tarih yoksa start=end=bugun; AddFlow.jsx:118-121
+  "Zaten bitirdim" secilince yalniz TEK tarih (baslangic=bugun) gonderiyor, bitis yok.
+  Sonuc: kitap 1 gunluk aralik, entryAvg = total_pages/1.
+  CANLI KANIT: 500 sayfalik kitap POST /entries {status:'bitti'} -> avg_pages_per_day=500,
+  avg_source='estimated'. Aile ilk gun gecmiste okuduklari kitaplari ekleyecek (en
+  yaygin ilk kullanim); gunluk ortalama tablosu ilk gunden anlamsiz. Ayni sekilde 'devam'
+  kitap bugun baslangicla + current_page girilirse (sozlesme izin veriyor) sayfa/1 gun.
+  Frontend 'bitti' icin bitis tarihi alani da sormuyor.
+Beklenen: gecmisten ekleniyorsa baslangic+bitis iste (ya da bilinmiyorsa ortalamaya hic
+  katma, "tarih yok" de); backend de dayanikli olsun.
+
+E-16  [DOGRULANDI] ONEMLI
+[2026-10-23 13:05] [ELESTIRMEN] -> [FRONTEND, BACKEND]
+Konu: Bos sayfa kutusu + Kaydet = ilerleme sifirlanir ve log'lar SILINIR
+Metin: QuickUpdate.jsx:30 Number('') === 0 (NaN degil), kontrol gecmiyor, api.progress(id,0)
+  gidiyor. Backend delta<0 duzeltme sayiyor ve log'lari siler. CANLI KANIT: bitti 800 sayfa
+  kitaba progress current_page=0 -> 200, delta=-800, status 'devam'a doner, logs=[] (tum
+  gecmis silindi). Onay yok, geri alma yok, mesaj sadece "Kaydedildi".
+  Ayni kutuya "21" yerine yanlislikla "2" yazmak da sessizce geriye alir.
+Beklenen: bos/gecersiz girdi engellensin; delta<0 icin acik onay ("214'ten 2'ye dusuyor,
+  emin misin?"); yazim hatasina karsi geri al.
+
+E-17  [DOGRULANDI] ONEMLI
+[2026-10-23 13:05] [ELESTIRMEN] -> [FRONTEND]
+Konu: "Kimin ne okudugunu takip" tamamlanmamis: baskasinin rafi/katalog gezme yok
+Metin: frontend.txt'in kendi itirafi: "Rafim sadece kendi kayitlari". Ana ekran yalniz aktif
+  kitap/dizi + son 2 gunun filmi + son 7 gunun bitenlerini gosterir. Baska uyenin 2 ay
+  once bitirdigi kitabi ya da filmi gormenin yolu YOK; GET /catalog/:id ("kim okudu/izledi")
+  ve GET /entries?user_id= ucları kullanilmiyor. Aile uygulamasinin ana degeri (ne
+  okuyalim/izleyelim, sorulari kime soralim) icin kullanici profili/rafi ya da katalog
+  detay ekrani gerekli. Soru sorma da su an yalniz feed'deki guncel kartlardan
+  ulasilabiliyor; biten kitaba soru sorulamaz hale geliyor. fikir.txt "Kutuphane" menusu
+  buna isaret ediyor ama yapilmamis.
+
+E-18  [DOGRULANDI] ONEMLI
+[2026-10-23 13:05] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Aile telefonlardan nasil kullanacak? Yayinlama/erisim yolu belgelenmemis
+Metin: Hedef "mobilde de rahat". Backend 0.0.0.0'da dinliyor ama SPA'yi sunmuyor; Vite
+  yalniz localhost (vite.config.js: host yok). Telefondan erisim icin Vite'in --host'u,
+  CORS (yalniz localhost regex, app.js:32 -> LAN IP'den dogrudan API cagrisi calismaz) ve
+  uretim derlemesinin backend'den sunulmasi (npm run build + @fastify/static ya da
+  tek komut) tanimli degil. Cookie "secure"/https durumu da belgesiz. backend.txt/
+  frontend.txt'te "aileye nasil kurulur" bolumu yok. Tek komutla (npm start) hem API hem
+  arayuz ayaga kalkmali.
+
+E-19  [DOGRULANDI] KUCUK
+[2026-10-23 13:05] [ELESTIRMEN] -> [FRONTEND]
+Konu: Tarih UTC; gece okuyan kisi yanlis gune dusuyor
+Metin: ui.jsx:153 today() = new Date().toISOString().slice(0,10) (UTC). Turkiye'de 00:00-03:00
+  arasi bir onceki gunu verir; AddFlow'daki date input'un max/varsayilani yanlis ve
+  "bugun" secilemez. Backend Europe/Istanbul kullaniyor -> tutarsiz. Ayrica entryDayModel
+  `created_at.slice(0,10)` UTC (services/entries.js:25).
+
+E-20  [DOGRULANDI] KUCUK
+[2026-10-23 13:05] [ELESTIRMEN] -> [FRONTEND, BACKEND]
+Konu: Admin katalog yonetimi eksik; katalog PATCH tur degistirebilir
+Metin: Admin panelinde katalog LISTESI/duzenle/sil yok (yalniz ekle). Hatali ya da cop
+  (E-05) kayit duzeltilemez. Backend PATCH /admin/catalog/:id type'i degistirebiliyor
+  (routes/catalog.js:31); mevcut entries.type kopyasi eski kalir -> kayit tipi ile katalog tipi
+  ayrisir (feed entries.type kullaniyor). Ayrica katalog.pages sonradan duzeltilince
+  entries.total_pages (kopya) guncellenmez. Admin "Tamamlandi" butonu katalog baglamadan da
+  talebi kapatiyor (uye "Eklendi ✅" gorur ama yok).
+
+E-21  [DOGRULANDI] KUCUK
+[2026-10-23 13:05] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Yonetici hesabi aile uyesi gibi sayiliyor
+Metin: CANLI KANIT: feed.cards icinde "Yonetici" karti da var; admin yalniz yonetim icin
+  kullaniliyorsa ana ekranda surekli bos "Su an bir sey okumuyor" karti ve liderlik
+  hesaplarinda aday olur. Karar: yonetici kendi okumasi yoksa gizlensin ya da onerilen
+  kurulum "admin + her uye normal kullanici" belgelensin.
+
+E-22  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 13:05] [ELESTIRMEN] -> [BACKEND]
+Konu: Kaynak kalitesi (CANLI)
+Metin: 'suc ve ceza' sonuclari: yazar Kiril harfiyle ("Fyodor Mihailovic Dostoyevski" yerine
+  "Фёдор Михайлович Достоевский"), ayni kitap 'Suc ve Ceza' / 'Suç ve Ceza' ayri kayit ve
+  yil baski yili (2013/2015/2016) gibi duruyor; 10 sonucun cogu ayni eser. Film aramasi
+  Wikidata aciklama regex'ine (/film|movie|sinema/) bagli ve ilk 20 sonuctan sonra
+  suzuyor: genel adli aramalarda film kaciriyor ('yesilcam' -> 1 alakasiz sonuc), 429
+  durumunda 0. Film yonetmeni 'Matrix' icin 'Lana Vahovski, Lilly Vahovski' (dogru ama
+  aile "Wachowski" arar). Sozlesme "iTunes" yazıyor, kodda yok (sozlesme guncel degil).
+
+E-23  [DOGRULANDI] KUCUK
+[2026-10-23 13:05] [ELESTIRMEN] -> [FRONTEND]
+Konu: Modal odak/erisilebilirlik
+Metin: ui.jsx Modal useEffect bagimliligi [onClose]; ebeveyn her render'da yeni ok fonksiyonu
+  gecirince (Home.jsx:136-137) efekt yeniden calisir -> odak her render'da dialog'a
+  zorlanir, `prev` kapaninca acan dugme yerine dialog olur; yazarken (yorum, cevap) feed
+  yenilenirse odak calinabilir. Focus trap da yok (Tab modal disina cikar). Tarayicida
+  denemedim; kod okumasi.
+
+E-24  [KAPANDI-ikna oldum] ONEMLI
+[2026-10-23 13:25] [ELESTIRMEN] -> [TEST]
+Konu: test_raporu.txt "ilerleme hesabi tamam, tablolar elle hesapla ayni" sonucu yaniltici
+Metin: Testler sozlesmedeki kurali dogruluyor; kuralin KENDISININ urun hedefine uymadigini
+  (E-01 atlanan gunler dagitilmiyor, E-15 gecmisten eklenen kitap 1 gunde sayiliyor, E-16 bos
+  girdi log siler) yakalamiyor. "Elle hesapla ayni" = ayni yanlis formul. Lutfen bu
+  senaryolari ekleyin ve test_raporu'ya H-numarasi olarak acin. Ayrica H-004'te IP-bazli ust
+  sinirdan once asil acik: trustProxy:true ile X-Forwarded-For degistirerek BIR kullanici
+  adina bile sinirsiz deneme (E-03, canli kanit); testiniz sabit IP'den denedigi icin
+  bunu gormemis. Film '2 gun' notu icin: karar sizin degil proje sahibinin (E-06d).
+
+E-25  [DOGRULANDI] KRITIK
+[2026-10-23 14:20] [ELESTIRMEN] -> [FRONTEND]
+Konu: v3 sozlesmesi ile frontend UYUMSUZ: internetten gelen hicbir sonuc eklenemiyor
+Metin: API v3: arama sonuclari yan etkisiz, internetten gelenler id:null + key doner
+  (canli: 'dune' -> [null,'8mG7YY','Dune'], [null,'UkZmIn','Dune Messiah']). Frontend
+  AddFlow.jsx:76 `key={it.id}` (hepsi null -> React cift key), AddFlow.jsx:118
+  `{ catalog_id: item.id }`. CANLI KANIT: POST /api/entries {catalog_id:null,...} -> 400
+  "catalog_id zorunludur". Yani "Yeni ekle" akisi ilk aramada bulunan her kitap/film/dizi
+  icin kirik; yalniz onceden katalogda olan (yerel) sonuclar eklenebilir. Admin gelen
+  kutusunda Admin.jsx:122-127 `resolved_catalog_id: it.id` ve key={it.id} ayni sorunu
+  tasiyor (null -> "Bunu bagla" calismaz). Dogru yol: catalog_key ile POST /api/entries ya da
+  POST /api/catalog/pick. Bu, v3 kararinin entegrasyon maliyeti; backend ile frontend
+  ayni anda guncellenmeden "calisiyor" denemez. (Frontend kodu bu turda henuz degismemisti;
+  aktif calisiyorsaniz kapatin, ben tekrar canli dogrularim.)
+
+E-26  [DOGRULANDI] ONEMLI
+[2026-10-23 14:45] [ELESTIRMEN] -> [FRONTEND]
+Konu: 375px telefonda ust cubuk tasiyor; "Cikis", tema ve zil erisilemez
+Metin: Canli, tarayicida 375x812 mobil emulasyon: .topbar-in icerigi 445px, kutu 375px
+  (overflow:visible); "Cikis" dugmesi x=396..445 (ekran disinda), sayfa yatay genisliyor
+  (documentElement.scrollWidth=446 TUM sayfalarda: Ana, Liderlik, Rafim, Yonetim). Ekran
+  goruntusunde sag ustte tema dugmesi yari kesik. Cekirdek ihtiyac "mobilde rahat" ve
+  frontend.txt "375px kontrol edildi" diyor; "Cikis" yazisi (E-10 duzeltmesi) eklenince
+  cubuk sigmaz hale gelmis olabilir. Beklenen: dar ekranda menu/aksiyonlar sigsin
+  (ikon/kisaltma/ikinci satir) ve yatay kayma olmasin. Diger ekran govdeleri 375px'te
+  tasmiyor (kontrol ettim).
+
+E-27  [KAPANDI-ikna oldum] KUCUK
+[2026-10-23 16:30] [ELESTIRMEN] -> [FIKIR]
+Konu: Liste 6'dan tekrar 9'a cikti (#21 #22 #23); sade kalma kriteri
+Metin: tartisma.txt: #21 "gecmis kitaplari hizli ekleme" (ay/yil + "kaydet ve siradakini ekle"),
+  #22 ilk giris karsilama karti, #23 feed 5 oge siniri (H-007 ile backend zaten yapti).
+  #21 gercek ihtiyac ama AddFlow artik 'bilmiyorum' kutusuyla bunu karsiliyor; ek mod acmayin.
+  #22 gereksiz: boş ekranlar zaten yonlendiriyor; cikarin. #23 YAPILDI sayilir (feed karti 8 oge +
+  more_count), yeni is degil. #9 "listeme al" hala yok; E-17 uye rafi gelince anlamli. Hedef: 6 fikri
+  gecme.
+=====================================================================
+SIRADAKI TUR: cevaplar ([KABUL]/[RED]/[YAPILDI]) takip edilecek; yapildi denenler tekrar
+  calistirilarak dogrulanacak. Gorsel/mobil kontrol (ekran goruntusu) henuz yapilmadi.
+=====================================================================
+
+
+
+
+
+[2026-10-23 15:10] [TEST] -> [ELESTIRMEN]
+Konu: E-24 cevabi (H-numaralari ve regresyon senaryolari)
+Metin: Haklisiniz; sozlesmeyi degil urun hedefini sinayan testler eklendi: testler/regression.test.js.
+  (a) DOGRULANDI  (c) DOGRULANDI  (d)/(d2) DOGRULANDI (E-15)  (e) bos/null/gecersiz DOGRULANDI (E-16 kismen)
+  (e3) DOGRULANDI  (f) XFF ile limit DOGRULANDI  (g) film 47s/49s DOGRULANDI (eklenme zamanina gore)
+  ACIK: H-008 (b: planlandi->300. sayfa rekor)  H-009 (current_page=0 gecmisi siler, E-16 kalani)
+        H-010 (yonetici feed kartinda, E-21)  H-001 (kapak %5c 500 + xml content-type 500)  H-007  H-004
+  Mobil 375px: H-005 / E-26 frontend duzeltmesini bekliyor. Dogrulama dongusu surer.
+
+

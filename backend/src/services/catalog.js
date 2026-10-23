@@ -1,0 +1,217 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
+import net from 'node:net';
+import { COVERS_DIR } from '../db.js';
+import { nowIso, addDays, todayStr } from '../util.js';
+import { norm, searchOnline, TIMEOUT } from './sources.js';
+
+const MAX_COVER = 5 * 1024 * 1024;
+
+export const catalogOut = (r) => r && ({
+  id: r.id, type: r.type, title: r.title, author_or_creator: r.author_or_creator, year: r.year, pages: r.pages,
+  description: r.description, cover_url: r.cover_url, external_id: r.external_id, source: r.source, seasons: r.seasons, created_at: r.created_at,
+});
+export const normOf = (title, author) => norm(`${title} ${author || ''}`);
+
+// ---------- guvenli indirme (SSRF korumali) ----------
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v = ip.toLowerCase();
+  if (v === '::1' || v === '::') return true;
+  if (v.startsWith('::ffff:')) return isPrivateIp(v.slice(7));
+  return v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe8') || v.startsWith('fe9') || v.startsWith('fea') || v.startsWith('feb');
+}
+async function assertPublicUrl(u) {
+  if (!['http:', 'https:'].includes(u.protocol)) throw new Error('protokol');
+  if (u.port && !['80', '443'].includes(u.port)) throw new Error('port');
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  if (net.isIP(host)) {
+    if (isPrivateIp(host)) throw new Error('ozel adres');
+    return;
+  }
+  const addrs = await dns.lookup(host, { all: true });
+  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) throw new Error('ozel adres');
+}
+// En fazla 3 yonlendirme; her adim yeniden dogrulanir. Govde MAX_COVER'i asarsa iptal.
+async function safeGetBuffer(url, { maxBytes = MAX_COVER, timeout = Math.max(TIMEOUT, 8000) } = {}) {
+  const signal = AbortSignal.timeout(timeout);
+  let cur = new URL(url);
+  for (let hop = 0; hop <= 3; hop++) {
+    await assertPublicUrl(cur);
+    const res = await fetch(cur, { signal, redirect: 'manual', headers: { 'User-Agent': 'AileKutuphanesi/1.0' } });
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      cur = new URL(res.headers.get('location'), cur);
+      continue;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const len = Number(res.headers.get('content-length'));
+    if (len && len > maxBytes) throw new Error('cok buyuk');
+    const chunks = [];
+    let total = 0;
+    for await (const c of res.body) {
+      total += c.length;
+      if (total > maxBytes) throw new Error('cok buyuk');
+      chunks.push(c);
+    }
+    return Buffer.concat(chunks);
+  }
+  throw new Error('cok fazla yonlendirme');
+}
+// Dosya iceriginden (magic byte) tur: jpg/png/webp. SVG vb. reddedilir.
+export function sniffImage(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return '.jpg';
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return '.png';
+  if (buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return '.webp';
+  return null;
+}
+
+// Uzak kapagi indir -> /api/covers/<dosya>. Basarisizsa null.
+export async function downloadCover(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  try {
+    const buf = await safeGetBuffer(url);
+    if (buf.length < 500) return null; // 1x1 yer tutucu
+    const ext = sniffImage(buf);
+    return ext ? saveCoverBuffer(buf, ext) : null;
+  } catch {
+    return null;
+  }
+}
+// Yuklenen dosyayi kaydet: icerik dogrulanir (mimetype'a guvenilmez). Gecersizse null.
+export function saveUploadedCover(buf) {
+  const ext = sniffImage(buf);
+  return ext ? saveCoverBuffer(buf, ext) : null;
+}
+export function saveCoverBuffer(buf, ext) {
+  fs.mkdirSync(COVERS_DIR, { recursive: true });
+  const name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 20) + ext;
+  const file = path.join(COVERS_DIR, name);
+  if (!fs.existsSync(file)) fs.writeFileSync(file, buf);
+  return `/api/covers/${name}`;
+}
+export function coverFileFromUrl(u) {
+  if (!u || !u.startsWith('/api/covers/')) return null;
+  return path.join(COVERS_DIR, path.basename(u));
+}
+
+// ---------- arka planda kapak yerellestirme ----------
+const queue = [];
+let running = 0;
+function pump(db) {
+  while (running < 4 && queue.length) {
+    const job = queue.shift();
+    running++;
+    downloadCover(job.remote)
+      .then((local) => {
+        if (local) db.prepare('UPDATE catalog SET cover_url=? WHERE id=? AND cover_url=?').run(local, job.id, job.remote);
+      })
+      .catch(() => {})
+      .finally(() => { running--; pump(db); });
+  }
+}
+function queueCover(db, id, remote) {
+  queue.push({ id, remote });
+  pump(db);
+}
+
+export function insertCatalog(db, it) {
+  const info = db.prepare(`INSERT INTO catalog (type,title,author_or_creator,year,pages,description,cover_url,external_id,source,seasons,norm,listed,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    it.type, it.title, it.author_or_creator ?? null, it.year ?? null, it.pages ?? null, it.description ?? null, it.cover_url ?? null,
+    it.external_id ?? null, it.source || 'manual', it.seasons ?? null, normOf(it.title, it.author_or_creator), it.listed === 0 ? 0 : 1, nowIso(),
+  );
+  return db.prepare('SELECT * FROM catalog WHERE id=?').get(info.lastInsertRowid);
+}
+export const markListed = (db, id) => db.prepare('UPDATE catalog SET listed=1 WHERE id=? AND listed=0').run(id);
+
+export function searchLocal(db, q, type, limit, offset = 0, { listedOnly = false } = {}) {
+  const words = norm(q).split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const where = [listedOnly ? 'listed=1' : '1=1'];
+  const args = [];
+  if (type) { where.push('type=?'); args.push(type); }
+  for (const w of words) { where.push("norm LIKE ? ESCAPE '\\'"); args.push(`%${w.replace(/[\\%_]/g, '\\$&')}%`); }
+  const rows = db.prepare(`SELECT * FROM catalog WHERE ${where.join(' AND ')} LIMIT 300`).all(...args);
+  const nq = words.join(' ');
+  const score = (r) => {
+    const t = norm(r.title);
+    return (r.listed ? 0 : 4) + (t === nq ? 0 : t.startsWith(nq) ? 1 : t.includes(nq) ? 2 : 3);
+  };
+  rows.sort((a, b) => score(a) - score(b) || a.title.length - b.title.length);
+  return rows.slice(offset, offset + limit);
+}
+
+// Arama yan etkisizdir: internet sonuclari sadece bellekte (10 dk) tutulur ve bir 'key' alir.
+// Kullanici birini secince (pick / entries catalog_key / admin import) kalici katalog kaydi olusur.
+const TTL = 10 * 60 * 1000;
+const searchCache = new Map(); // q-anahtari -> {at, items, errors}
+const pickCache = new Map(); // key -> {at, item}
+const inflight = new Map();
+
+export async function onlineSearch(q, type) {
+  const ck = `${type || '*'}|${norm(q)}`;
+  const hit = searchCache.get(ck);
+  if (hit && Date.now() - hit.at < TTL) return hit;
+  if (inflight.has(ck)) return inflight.get(ck);
+  const p = (async () => {
+    const { items, errors } = await searchOnline(q, type);
+    const out = items.slice(0, 40).map((it) => {
+      const key = crypto.randomBytes(9).toString('base64url');
+      pickCache.set(key, { at: Date.now(), item: it });
+      return { ...it, key };
+    });
+    const res = { at: Date.now(), items: out, errors };
+    if (!errors.length) searchCache.set(ck, res);
+    if (searchCache.size > 300) searchCache.clear();
+    if (pickCache.size > 3000) for (const [k, v] of pickCache) if (Date.now() - v.at > TTL) pickCache.delete(k);
+    return res;
+  })().finally(() => inflight.delete(ck));
+  inflight.set(ck, p);
+  return p;
+}
+
+// Ham internet ogesini kalici kataloga al (varsa mevcut kaydi dondurur). Kapak arka planda yerellestirilir.
+export function persistOnline(db, it) {
+  let row = findExisting(db, it);
+  if (row) {
+    if (!row.cover_url && it.cover_remote) {
+      db.prepare('UPDATE catalog SET cover_url=? WHERE id=?').run(it.cover_remote, row.id);
+      row.cover_url = it.cover_remote;
+      queueCover(db, row.id, it.cover_remote);
+    }
+    return row;
+  }
+  row = insertCatalog(db, { ...it, cover_url: it.cover_remote || null });
+  if (it.cover_remote) queueCover(db, row.id, it.cover_remote);
+  return row;
+}
+export function pickByKey(db, key) {
+  const e = typeof key === 'string' ? pickCache.get(key) : null;
+  if (!e) return null;
+  return persistOnline(db, e.item);
+}
+
+export function findExisting(db, it) {
+  if (it.external_id) {
+    const r = db.prepare('SELECT * FROM catalog WHERE source=? AND external_id=?').get(it.source, it.external_id);
+    if (r) return r;
+  }
+  // ayni tur + ayni baslik + ayni yazar/yonetmen (kaynaklar arasi tekrar onleme)
+  const nt = norm(it.title);
+  const cands = db.prepare('SELECT * FROM catalog WHERE type=? AND norm LIKE ?').all(it.type, `${nt}%`);
+  const na = norm(it.author_or_creator || '');
+  for (const c of cands) {
+    if (norm(c.title) !== nt) continue;
+    const ca = norm(c.author_or_creator || '');
+    if (it.type === 'book') { if (!na || !ca || na === ca || na.includes(ca) || ca.includes(na) || na.split(' ').pop() === ca.split(' ').pop()) return c; }
+    else if (!it.year || !c.year || it.year === c.year) return c;
+  }
+  return null;
+}
+

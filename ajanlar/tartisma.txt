@@ -1,0 +1,146 @@
+=====================================================================
+ TARTISMA (fikir <-> backend <-> frontend)
+=====================================================================
+SON GUNCELLEME: 2026-10-23 12:30
+Not: fikir listesi ajanlar/fikir.txt'de. Eski girdiler silinmez.
+
+[2026-10-23 12:30] [FIKIR] -> [BACKEND, FRONTEND]
+Konu: Merhaba + oncelik onerisi (ONCE grubu: #1-#6)
+Metin: fikir.txt hazir. Cekirdek bitmeden hicbirini dayatmiyorum; sadece
+ veri modelini ilerde acik birakmanizi rica ediyorum. Cekirdek bitince su 6
+ kucuk is en yuksek etki/efor orani:
+  #1 seri (streak) - gunluk ilerleme tablosundan turetilir, /api/home
+     cevabina "streak" alani. Backend: sizce mevcut tablodan kolay mi?
+  #2 bos/ilk kullanim ekranlari - frontend.
+  #3 ana ekrandan tek dokunusla sayfa guncelleme (+10/+20 butonlari).
+  #4 tepki emojileri (4 sabit emoji, reaction tablosu).
+  #5 talepten tek tikla katalog aramasi + tamamlaninca talep sahibine haber.
+  #6 uygulama ici bildirim zili (e-posta yok).
+ Lutfen her biri icin [KABUL]/[RED-neden]/[BEKLEMEDE] yazin; gerekce
+ verirseniz fikri kucultur ya da geri cekerim. Backend: "bildirim" tablosu
+ (#5,#6,#9 ortak kullanir) tek seferde tasarlanirsa uc fikir icin yeterli.
+ Frontend: menu 4 ogeyi gecmiyor, zil ust cubukta ikon.
+ Durum: [ACIK]
+
+[2026-10-23 12:30] [FIKIR] -> [BACKEND]
+Konu: Sorulari erken netlestirelim (sadece soru, is degil)
+Metin: (a) Kitap kaydinda durum alani var mi (okuyorum/bitirdim/okumak
+ istiyorum/biraktim)? #17 buna bagli. (b) Gunluk ilerleme kayitlari
+ tarih bazli mi, kullanici+kayit+gun tekil mi? Seri ve rekor hesabi ona bagli.
+ (c) /api/home tek cagrida kart verisini donuyor mu? Fikirlerin cogu ona alan
+ eklemek demek.
+ Durum: [ACIK]
+
+[2026-10-23 12:30] [FIKIR] -> [FRONTEND]
+Konu: Sade kalma sorusu
+Metin: Kullanici kartinda ayni anda seri (🔥), ilerleme cubugu ve tepki
+ satiri olunca kalabalik olabilir mi? Kart duzeni icin sizin tercihiniz
+ nedir; fikirleri ona gore kisitlayabilirim (ornegin tepkiler detayda).
+ Durum: [ACIK]
+=====================================================================
+
+[2026-10-23 12:40] [FIKIR] -> [BACKEND]
+Konu: API_SOZLESMESI v1'i okudum - tesekkurler, sorularim cevaplanmis
+Metin: (a) status var -> #17 modelde hazir. (b) log tarih bazli, seri/rekor
+ gercek logdan -> #1 backend tarafi hazir (stats.current_streak). (c) feed var.
+ Bildirim sistemi (#6) ve rating (#12) de sozlesmede. Cok iyi; fikir.txt'yi buna
+ gore isaretledim. Kalan backend istekleri (dusuk oncelik, cekirdek sonrasi):
+  - #4 tepki: reaction tablosu + POST/DELETE /api/entries/:id/reactions,
+    feed item'larina "reactions":{"👍":2,...,"mine":"👍"|null}
+  - #1 icin feed kartina "current_streak" eklemek (kullanici basina ayri istek
+    yapmamak icin).
+ Durum: [ACIK]
+
+[2026-10-23 12:40] [FIKIR] -> [FRONTEND]
+Konu: Backend hazir olanlar icin UI listesi (oncelik sirasiyla)
+Metin: 1) Bos durum ekranlari (#2) 2) Ana ekranda tek dokunus sayfa guncelleme
+ (#3) -> POST /entries/:id/progress, +10/+20 butonlari 3) Ust cubukta bildirim
+ zili (#6) 4) Kartta seri ikonu (#1) 5) Bitirince puan (#12). Her biri mevcut
+ ekranlara girer, menu 4 ogeyi gecmez. Itiraziniz varsa yazin.
+ Durum: [ACIK]
+
+[2026-10-23 13:00] [FIKIR] -> [BACKEND, FRONTEND]
+Konu: Onceki mesajlarimi GERI CEKIYORUM / fikir listesi 20 -> 6
+Metin: Elestirmen kapsam sisirme ve yanlis etiket uyarisi yapti, hakliydi.
+ - 12:40 mesajlarimdaki "ONCE yapilmali" listesi gecersiz. Tepki emojileri,
+   bildirimde "tepki verdi", /api/home istegi, "Kutuphane/Taleplerim" menusu
+   iptal. Gercek menu: Ana Sayfa / Liderlik / Rafim / Yonetim; ana ekran
+   ucu /api/feed.
+ - Cekirdek (elestiri E-01: atlanan gunlerin oranlanmasi, rekor sismesi dahil)
+   bitmeden sizden hicbir sey istemiyorum. Yeni liste fikir.txt'de: #3 hizli
+   sayfa guncelleme, #2 bos durum, #5 talep->katalog kisayolu, #18 DB yedegi,
+   #1 seri (E-01'e bagli), #9 "listeme al". Cekirdek bitince sirayla gorusuruz.
+ Durum: [ACIK]
+
+[2026-10-23 12:00] [TEST] -> [BACKEND]
+Konu: H-001..H-004, H-007 acildi
+Metin: bak ajanlar/test_raporu.txt. Genel olarak backend saglam (yetki/IDOR/hesap/liderlik elle dogrulandi). Kucuk: kapak yolunda %5c ile 500, govde limiti mesaji, devam+end_date sessiz yutma, IP bazli login limiti, feed oge siniri.
+
+[2026-10-23 12:00] [TEST] -> [FRONTEND]
+Konu: H-005 (ONEMLI), H-006 acildi
+Metin: 375px'de ust menu tasiyor (admin), Cikis kesik. Bak test_raporu.txt.
+
+[2026-10-23 13:30] [FIKIR] -> [BACKEND, FRONTEND]
+Konu: Kodu okudum: #2 #3 #5 #18 kodda var; 3 yeni kucuk oneri
+Metin: Tesekkurler, QuickUpdate (+10 hizli sayfa), bos durum ekranlari, talepte
+ ara-sec-bagla ve DB yedegi gorundu; fikir.txt'de YAPILDI-kodda var yazdim
+ (canli dogrulama test ajaninda). Seri sadece Rafim profilinde, ana kartta yok.
+ Yeni oneriler (cekirdek hatalari kapaninca, sirayla):
+  #21 Gecmis kitaplari hizli ekleme: AddFlow'da "Daha once bitirdim" modu, ay/yil
+      + "Kaydet ve siradakini ekle". BACKEND SORUSU: gecmis kayit rekora/seriye
+      sayfa yazmamali (E-01 ile ayni risk). Gecmis kayit icin log olusturmayip
+      sadece bitirilen kitap sayisina girmesi mumkun mu?
+  #22 Ilk giris karsilama karti (frontend, localStorage, 3 adim, kapatilabilir).
+  #23 Feed kartinda 5 oge siniri + "N tane daha" (test H-007).
+ FRONTEND: #22 ve #21 arayuzu sizce AddFlow'a sigar mi, yoksa fazla mi? Itiraz
+ edin, kucultelim.
+ Durum: [ACIK]
+
+[2026-10-23 13:45] [FIKIR] -> [FRONTEND, BACKEND]
+Konu: Elestirmen dogrulamasi: #2 #3 #5 #18 DOGRULANDI
+Metin: Elestirmen canli dogruladi. #1 seri artik E-01 duzeldigi icin anlamli:
+ ana sayfa kartina eklenmesi sirada (feed'e current_streak gerekir). #3'te
+ elestirmenin buldugu hata (bos kutu + Kaydet ilerlemeyi 0'a ceker, E-16)
+ frontend'e: lutfen duzeltin. #9 "Listeme al" kodda yok, #21-#23 cevap bekliyor.
+ Durum: [ACIK]
+
+[2026-10-23 15:10] [TEST] -> [BACKEND]
+Konu: H-008, H-009, H-010 (ONEMLI) + H-001 hala acik
+Metin: bak test_raporu.txt; tekrar icin: node --test testler/regression.test.js
+
+[2026-10-23 16:00] [TEST] -> [BACKEND]
+Konu: v4 dogrulandi
+Metin: H-001..H-004, H-007..H-010 [DOGRULANDI]; 41 test gecti. Regresyon: node --test testler/*.test.js
+
+[2026-10-23 16:45] [FIKIR] -> [BACKEND, FRONTEND]
+Konu: E-27: #21 ve #22 geri cekildi, #23 YAPILDI; #9 icin tek soru
+Metin: Elestirmen haklı: #21 AddFlow'daki "bilmiyorum" kutusuyla karsilaniyor, #22'yi
+ bos ekranlar zaten yapiyor -> ikisi [RED]. #23 feed 8 oge + more_count ile
+ yapilmis -> [YAPILDI]. Liste 6 fikirde: #3 #2 #5 #18 (DOGRULANDI), #23 (YAPILDI),
+ #1 (kismen), #9.
+ FRONTEND SORUSU: uye rafi (baskasinin Rafim'i) artik var; orada kitabin yaninda
+ tek bir "Ben de okuyacagim" butonu (POST /entries, status planlandi) eklenebilir mi?
+ Kucuk is, yeni ekran yok. Olmazsa #9'u [RED] yapip kapatirim. Ayrica #1: kullanici
+ kartinda tek "🔥 N gun" ikonu (feed'e current_streak) - ayni soru, olmazsa RED.
+ Durum: [ACIK]
+
+[2026-10-23 17:00] [TEST] -> [FRONTEND]
+Konu: H-005/H-006 DOGRULANDI, yeni H-011/H-012 (KUCUK)
+Metin: bak test_raporu.txt "TARAYICI TURU". Zorunlu sifre, gecmis kitap, hizli guncelleme onayi, uye rafi, admin sekmeleri calisiyor.
+
+[2026-10-23 17:15] [FIKIR] -> [HEPSI]
+Konu: FIKIR AJANI: Calisma ikna edici, son notlarim
+Metin: Kodda dogruladim: #1 seri artik feed kartinda (feed.js current_streak,
+ Home.jsx 🔥N). Son durum (fikir.txt):
+  #2 #3 #5 #18 : DOGRULANDI (elestirmen canli)   #23 : YAPILDI   #1 : YAPILDI-kodda
+  #9 listeme al: [RED] - kodda yok, frontend cevap vermedi; uye rafi geldigi icin
+   kayip kucuk. #21 #22: [RED] (E-27). Park listesi (rozet, tepki, ozet vb.) acilmadi.
+ Kalan notlar: (1) E-16 (bos kutu+Kaydet ilerlemeyi 0'a ceker) kapandi mi, elestirmen
+ teyit etsin. (2) Tum aile verisi tek SQLite: Yedek butonunu aileye duzenli
+ kullandirin (README'ye tek cumle). (3) Yeni fikir icin aile ilk haftalarda
+ ne takiliyor diye gozlemlenmeli; simdilik ek oneri yok.
+ Durum: [KABUL]
+
+[2026-10-23 18:00] [TEST] -> [HEPSI]
+Konu: TEST: IKNA OLDUM
+Metin: H-001..H-012 DOGRULANDI, 47/47 test gecti (temiz DB, v5). Ayrinti: test_raporu.txt.

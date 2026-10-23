@@ -1,0 +1,134 @@
+=====================================================================
+ AILE KUTUPHANESI - ORTAK KURALLAR (BUTUN AJANLAR ONCE BUNU OKUR)
+=====================================================================
+
+PROJE
+-----
+Ailemizle okudugumuz kitaplari, izledigimiz film ve dizileri listeledigimiz,
+kimin ne okudugunu/izledigini takip ettigimiz, kucuk bir "aile kutuphanesi"
+web uygulamasi. Hedef: modern, sade, sikmayan bir arayuz + saglam bir backend.
+
+Proje klasoru: C:\Users\yavuz.ates\Desktop\Proje\kutuphane
+(Tum yollar bu klasore gore verilir. Windows + PowerShell/Git Bash ortami.)
+
+TEKNOLOJI (KESIN, DEGISTIRME)
+-----------------------------
+- Backend : Node.js (v24 kurulu) + Fastify, klasor: backend/
+            Veritabani: SQLite. Windows'ta derleme derdi olmasin diye
+            Node'un yerlesik "node:sqlite" modulunu tercih et (Node 24'te
+            var). Calismazsa better-sqlite3 kullan, nedenini backend.txt'ye yaz.
+            Port: 4000. DB dosyasi: backend/data/kutuphane.db
+            (ortam degiskeni DB_PATH ile degistirilebilmeli - test icin sart).
+- Frontend: React + Vite (JavaScript veya TypeScript, frontend karar verir),
+            klasor: frontend/. Port: 5173. Vite proxy ile /api -> localhost:4000.
+- Dil     : Arayuz metinleri TURKCE. Kod/degisken isimleri Ingilizce olabilir.
+- Veri kaynaklari (API ANAHTARI GEREKTIRMEYEN):
+    * Kitap  : Open Library (openlibrary.org/search.json, covers.openlibrary.org)
+               Yedek: Google Books anahtarsiz arama ucu.
+    * Film/Dizi: TVMaze (api.tvmaze.com) dizi icin; film icin Wikipedia/
+               Wikidata REST veya anahtarsiz baska bir kaynak. Bulabildigini cek.
+  TMDB/OMDb gibi anahtar gerektiren kaynaklar KULLANILMAYACAK.
+
+KULLANICI / YETKI MODELI
+------------------------
+- Giris: kullanici adi + sifre. Kayit ol (signup) EKRANI YOK.
+- Kullanicilari sadece ADMIN olusturur. Admin panelinde "kullanici ekle"
+  formu olacak (kullanici adi, gorunen ad, sifre, renk/avatar emoji).
+  Aile bu hesaplarla giris yapar.
+- Admin hesabi: ilk calistirmada seed ile olusur (kullanici adi: admin,
+  sifre ortam degiskeni ADMIN_PASSWORD'den, yoksa "degistir-beni" ve konsola
+  uyari yaz).
+- Sifreler hash'li saklanir (node:crypto scrypt yeterli, ek paket gerekmez).
+- Oturum: JWT veya imzali cookie, backend karar verir; API_SOZLESMESI.txt'de
+  belgelenir.
+- "Listede olmayan bir sey" eklemek isteyen kullanici bir TALEP gonderir;
+  talep ADMIN GELEN KUTUSU'na duser. Admin internetten arastirip ekler,
+  talebi "tamamlandi" yapar.
+
+OZELLIK OZETI (kaynak: proje sahibi)
+------------------------------------
+Backend:
+ - Kitap ekleme: okuma baslangic tarihi, bitis tarihi, toplam sayfa.
+ - Gunluk ilerleme guncelleme: "bugun X. sayfadayim". Sistem onceki
+   kayittan farki hesaplayip O GUN okunan sayfayi kaydeder.
+ - Gunluk guncelleme yapilmazsa: bitis tarihi / baslangic tarihi ile toplam
+   sayfa oranlanir, gunluk ortalama sayfa hesaplanir.
+ - Film ekleme, dizi ekleme (dizi icin sezon/bolum ilerlemesi opsiyonel).
+ - Her kayda yorum yazilabilir.
+ - Her kayit hakkinda soru sorulabilir (aileden biri soru sorar, okuyan/
+   izleyen cevaplar). Soru-cevap ayri bir yapi, yorumdan farkli.
+ - Kitap/film/dizi katalogu internetten cekilir (kapak/poster dahil).
+ - Katalogda olmayan sey icin talep -> admin gelen kutusu.
+Frontend:
+ - Modern, sade, mobilde de rahat bir arayuz.
+ - Ana ekran: "son guncellemeler" KULLANICI KARTLARI ile
+   (ornek: "Ayse su an 'Suc ve Ceza' okuyor - 214/550 sayfa").
+ - Film ana ekranda yalnizca 2 gun gorunur, sonra kalkar.
+   Kitap ve dizi (devam eden) surekli gorunur.
+ - Liderlik tablolari (3 adet):
+     1) Rekor: bir gunde en cok okunan sayfa
+     2) Gunluk ortalama okunan sayfa
+     3) En cok kitap bitiren
+ - Admin paneli: kullanici ekle/sil, gelen kutusu (talepler), katalog ekle.
+
+DOSYA SAHIPLIGI (CAKISMAYI ONLEMEK ICIN KATI KURAL)
+---------------------------------------------------
+5 ajan AYNI KLASORDE ayni anda calisir. Sadece kendi dosyana/klasorune yaz.
+
+ Ajan      | Yazabilecegi yerler                      | Sadece okur
+ ----------|------------------------------------------|---------------------
+ BACKEND   | backend/**, ajanlar/backend.txt,         | hepsi
+           | ajanlar/API_SOZLESMESI.txt               |
+ FRONTEND  | frontend/**, ajanlar/frontend.txt        | hepsi
+ FIKIR     | ajanlar/fikir.txt, ajanlar/tartisma.txt  | hepsi
+ ELESTIRMEN| ajanlar/elestiri.txt                     | hepsi (kod dahil)
+ TEST      | testler/**, ajanlar/test_raporu.txt      | hepsi
+
+ - Baskasinin dosyasinda hata/eksik gordun mu: duzeltme, o ajanin
+   ISTEK dosyasina ya da ilgili txt'ye NOT yaz (asagiya bak).
+ - git commit / push YAPMA. Branch degistirme. Bu klasoru git ile oynama.
+ - Baska ajanin calistirdigi sunucuyu oldurme. Kendi sunucunu kendi
+   portunda ac (TEST ajani: backend 4100, frontend 5273 kullanir).
+
+ILETISIM KANALI (ajanlar birbirini bu dosyalarla ikna eder)
+-----------------------------------------------------------
+ ajanlar/backend.txt       : backend'in yaptiklari, kararlar, calistirma komutu
+ ajanlar/API_SOZLESMESI.txt: butun endpoint'ler, istek/cevap ornekleri (backend yazar,
+                             frontend buna gore kodlar. Degisirse en ustteki
+                             "SON DEGISIKLIK" satirini guncelle.)
+ ajanlar/frontend.txt      : frontend'in yaptiklari, kararlar, calistirma komutu
+ ajanlar/fikir.txt         : fikir ajaninin fikir listesi + durum (kabul/red/beklemede)
+ ajanlar/tartisma.txt      : fikir ajani <-> backend <-> frontend tartismasi
+ ajanlar/elestiri.txt      : elestirmenin bulgulari (sadece elestiri, kod yazmaz)
+ ajanlar/test_raporu.txt   : test ajaninin buldugu hatalar, tekrar adimlari, durum
+
+ Tartisma/elestiri/hata girdileri su formatta olur:
+   [YYYY-AA-GG SS:DD] [KIM] -> [KIME]
+   Konu: ...
+   Metin: ...
+   (cevap veren, altina ayni formatla ekler; eski girdileri SILMEZ)
+ Durum etiketleri: [ACIK] [KABUL] [RED-neden] [YAPILDI] [DOGRULANDI]
+
+CALISMA TEMPOSU (ONEMLI)
+------------------------
+- Proje sahibinden KOMUT BEKLEME, soru sorma. Belirsiz yerde en makul
+  karari ver, kararini kendi txt dosyana yaz, devam et.
+- Surekli dongu halinde calis: ise basla -> yaz -> diger ajanlarin txt'lerini
+  oku -> geri bildirimleri uygula -> tekrar.
+  Her turda ajanlar/ altindaki ilgili txt'lere bak (kendi dosyan haric ozellikle
+  tartisma.txt, elestiri.txt, test_raporu.txt).
+- Dongunun bitis kosulu: elestirmen ve test ajani "ikna oldum" notunu
+  yazar VE fikir ajaninin kabul edilmis fikirleri YAPILDI durumundadir.
+  Ondan once durma. Ya da kota biter.
+- Bir sey yapamiyorsan (baska ajani bekliyorsan) bos beklemek yerine
+  kendi isinin kalitesini artir, 2-3 dakikada bir ilgili dosyalari tekrar kontrol et.
+- Her ajan kendi txt'sinin en ustune "SON GUNCELLEME: tarih saat" ve altina
+  "DURUM OZETI" yazar; boylece digerleri bakinca durumu anlar.
+
+KALITE CITASI
+-------------
+- Calismayan kod teslim edilmez. Yazdigini calistirip dene.
+- Sade kal: gereksiz kutuphane, gereksiz ekran ekleme.
+- Hata durumlari (bos liste, internet yok, API cevap vermiyor) duzgun ele alinmali.
+- Ham stack trace kullaniciya gosterilmez.
+=====================================================================

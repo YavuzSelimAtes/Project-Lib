@@ -1,0 +1,351 @@
+=====================================================================
+ API SOZLESMESI  (backend yazar, frontend + test bunu okur)
+=====================================================================
+SON DEGISIKLIK: 2026-10-23 v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
+   confirm:true, geri alma log SILMEZ, base_page/"tarih yok" (avg_source:no_dates), arayuz backend
+   tarafindan sunulur (frontend/dist), GET/PATCH /api/admin/catalog, feed more_count, yonetici karti
+   gizlenir) -- onceki: v3 (yonetici kararlari) [v3] ile isaretli:
+   - arama YAN ETKISIZ: internet sonuclari id:null + key ile doner; secince POST /api/catalog/pick
+     (ya da POST /api/entries {catalog_key}) kalici kayit olusturur
+   - GET /api/catalog (gezme) ve GET /api/users KALDIRILDI
+   - kullanici silme = PASIFE ALMA (+activate, ?hard=1 kalici)
+   - PATCH /entries current_page KABUL ETMEZ (sadece /progress)
+   - film ana ekranda EKLENME zamanindan 48 saat
+   - ADMIN_PASSWORD yoksa rastgele sifre (konsola yazilir) + must_change_pw
+   (v2 isaretleri: atlanan gun dagitimi, estimated, backup, kapak guvenligi)
+
+GENEL
+-----
+- Taban adres: http://localhost:4000   (frontend Vite proxy: /api -> 4000)
+- TUM yollar /api ile baslar. Kapak resimleri: /api/covers/<dosya> (backend sunar).
+- Istek/cevap: JSON (UTF-8). Dosya yukleme ucu multipart kullanir (belirtilmis).
+- Tarih alanlari  : "YYYY-AA-GG" (yerel saat, TZ env, varsayilan Europe/Istanbul)
+- Zaman damgalari : ISO-8601 UTC ("2026-10-23T14:05:00.000Z")
+- Hata bicimi (hep ayni):
+      { "error": "Turkce mesaj", "code": "KISA_KOD", "fields": { "alan": "mesaj" }? }
+  Durumlar: 400 gecersiz girdi (VALIDATION), 401 giris yok (UNAUTHORIZED),
+  403 yetki yok (FORBIDDEN), 404 yok (NOT_FOUND), 409 cakisma (CONFLICT),
+  429 cok fazla deneme (RATE_LIMIT), 500 sunucu hatasi (SERVER; ham iz yok).
+- OTURUM: sunucu tarafli oturum. Login basarili olunca "kutuphane_sid" adli
+  HttpOnly + SameSite=Lax cookie set edilir (30 gun). Frontend ayrica bir sey
+  yapmaz; fetch(..., {credentials:"include"}) (ayni origin proxy ise gerekmez).
+  Giris gerektiren butun uclarda cookie yoksa 401 doner.
+  [v2] Giris siniri: ayni IP + ayni kullanici adi icin 5 dk icinde 10 BASARISIZ deneme -> 429; basarili
+  giris sayaci sifirlar (baska IP/kullaniciyi etkilemez). Ters vekil arkasinda TRUST_PROXY=1 ile calistirin.
+- Yetki: [A]=sadece admin, [U]=giris yapmis herkes (admin dahil), [-]=herkese acik.
+- Tum giris yapmis kullanicilar BIRBIRININ kayitlarini/yorumlarini gorebilir (aile).
+
+KULLANICI NESNESI (user)
+  { "id":1, "username":"ayse", "display_name":"Ayse", "role":"member"|"admin",
+    "avatar":"🦊", "color":"#f97316", "must_change_pw":false, "created_at":"..." }
+  [v2] must_change_pw=true ise (admin varsayilan "degistir-beni" sifresiyle acildiysa)
+  [v3] ADMIN_PASSWORD verilmezse sunucu rastgele sifre uretip KONSOLA yazar; ilk giriste degistirme istenir.
+  arayuz giris sonrasi POST /api/auth/change-password ekranina yonlendirmeli (zorunlu degil, uyari).
+  avatar en fazla 3 karakterlik emoji (<>&"' yasak), color kesin #rrggbb.
+  (password_hash HICBIR zaman donmez)
+
+KATALOG NESNESI (catalog)
+  { "id":12, "type":"book"|"movie"|"series", "title":"Suc ve Ceza",
+    "author_or_creator":"Fyodor Dostoyevski", "year":1866, "pages":550|null,
+    "description":"..."|null, "cover_url":"/api/covers/ab12.jpg"|"https://..."|null,
+    "external_id":"OL123W"|null, "source":"openlibrary|googlebooks|tvmaze|itunes|wikipedia|manual",
+    "seasons":5|null, "created_at":"..." }
+
+KAYIT NESNESI (entry)  -- kullanicinin kitap/film/dizi girdisi
+  { "id":7, "user_id":2, "catalog_id":12, "type":"book",
+    "status":"devam"|"bitti"|"birakildi"|"planlandi",
+    "start_date":"2026-10-01"|null, "end_date":null|"2026-10-20",
+    "total_pages":550|null, "current_page":214,
+    "season":null, "episode":null, "rating":null|1..5,
+    "created_at":"...", "updated_at":"...",
+    "percent":38.9,                  // kitap: current/total*100 (yoksa null)
+    "catalog":{...catalog nesnesi...},
+    "user":{ "id":2,"display_name":"Ayse","avatar":"🦊","color":"#f97316" },
+    "avg_pages_per_day": 21.4|null,  // kitap; asagidaki ORANLAMA kuraliyla
+    "avg_source": "logs"|"estimated"|null }
+
+=====================================================================
+1) AUTH & KULLANICILAR
+=====================================================================
+POST /api/auth/login            [-]
+   Istek : { "username":"admin", "password":"..." }
+   Cevap : 200 { "user": user }   + Set-Cookie kutuphane_sid
+   Hata  : 401 yanlis bilgi (mesaj ayni: "Kullanici adi veya sifre hatali"),
+           429 (IP+kullanici basina 10 deneme / 5 dk)
+POST /api/auth/logout           [U]  -> 200 { "ok":true }  (cookie silinir)
+GET  /api/auth/me               [U]  -> 200 { "user": user }   / 401
+POST /api/auth/change-password  [U]
+   Istek : { "old_password":"..", "new_password":"en az 6 karakter" } -> { "ok":true }
+
+[v3] GET /api/users KALDIRILDI (frontend kullanmiyor; secici icin feed/kullanici kartlari yeterli).
+
+GET  /api/admin/users           [A]  -> { "users":[ user + "entry_count" ] }
+POST /api/admin/users           [A]  (SIGNUP YOK; kullaniciyi sadece admin olusturur)
+   Istek : { "username":"ayse"(3-32, a-z0-9._-), "display_name":"Ayse",
+             "password":"min 6", "avatar":"🦊"?, "color":"#f97316"?, "role":"member"|"admin"? }
+   Cevap : 201 { "user": user }     409 kullanici adi alinmis
+PATCH /api/admin/users/:id      [A]  { display_name?, avatar?, color?, role? } -> { "user": user }
+POST /api/admin/users/:id/reset-password [A]  { "password":"min 6" } -> { "ok":true }
+DELETE /api/admin/users/:id     [A]  [v3] PASIFE ALIR -> { "ok":true, "deactivated":true }: giris kapanir, oturumlar silinir,
+   ana ekran/liderlik/listelerden kalkar; kayit, yorum, soru verisi KORUNUR. ?hard=1 -> kalici silme
+   (CASCADE, eski davranis) -> { "ok":true, "deactivated":false }.
+POST /api/admin/users/:id/activate [A] [v3] pasif hesabi tekrar acar -> { "user" }. user.active alani eklendi.
+   (asagidaki eski aciklama: "kayit/yorum silinir" artik sadece ?hard=1 icin gecerli)
+   Eski:
+   Kullanicinin kayit/yorum/soru/talepleri de silinir (CASCADE). Kendini silemez
+   (400), son admini silemez (400).
+
+=====================================================================
+2) KATALOG
+=====================================================================
+GET /api/catalog/search?q=suc+ve+ceza&type=book|movie|series&limit=20   [U]
+   - q en az 2 karakter. type opsiyonel (yoksa uc turde de arar).
+   - Once yerel katalog, sonra internet (Open Library+Google Books, TVMaze, Wikidata/Wikipedia film aramasi). [v3: bkz. YAN ETKISIZ]
+      - [v3] YAN ETKISIZ: veritabanina hicbir sey yazmaz. Yerel eslesmeler normal (id dolu, key:null).
+     Internetten gelip katalogda OLMAYAN sonuclar id:null, key:"abc..." ile doner (cover_url uzak https
+     adresi olabilir, <img src> ile calisir). Ayni eser (tur+baslik+yazar/yonetmen ya da kaynak+external_id)
+     katalogda varsa yerel kayit doner (tekillestirme). Key 10 dk gecerli (sonra 404 -> aramayi tekrarla).
+   - Kullanici basina dakikada 30 arama (429). Yerel sonuc hizli; internet kismi en fazla ~6 sn.
+POST /api/catalog/pick   [U]  [v3] { "key":"abc..." } -> 201 { "item": catalog }  (kalici kayit, kapak arka planda
+   yerellestirilir). POST /api/entries { "catalog_key":"abc..." } de ayni isi catalog_id yerine yapar.
+   - Cevap: { "items":[catalog...],
+              "online": { "ok":true|false, "errors":["openlibrary: zaman asimi"] },
+              "local_count":3 }
+   - Internet yoksa 200 doner, online.ok=false, items yerel sonuctur (hata degil).
+   - Aramalar 6 sn zaman asimi; ayni sorgu 10 dk icinde tekrar internete gitmez.
+[v3] GET /api/catalog (gezme) KALDIRILDI (frontend kullanmiyor).
+GET /api/catalog/:id            [U]
+   -> { "item":catalog, "entries":[ {entry ozet: id,user,status,current_page,
+        total_pages,percent,season,episode,end_date,rating} ] }   // kim okuyor/izledi
+POST   /api/admin/catalog       [A]  katalog elle ekle
+   JSON        : { "type","title","author_or_creator"?,"year"?,"pages"?,
+                   "description"?,"cover_url"? (http/https -> indirilir),"seasons"? }
+   multipart   : ayni alanlar + "cover" dosyasi (jpg/png/webp, <=5MB; [v2] tur DOSYA ICERIGINDEN
+                 (magic byte) dogrulanir, SVG vb. 400; cover_url icin ozel/yerel adresler
+                 (127.x, 10.x, 192.168.x, 169.254.x, ::1...), 80/443 disi port, >3 yonlendirme,
+                 >5MB reddedilir -> 400)
+   Cevap : 201 { "item": catalog }
+PATCH  /api/admin/catalog/:id   [A]  (JSON veya multipart) -> { "item": catalog }
+DELETE /api/admin/catalog/:id   [A]  -> { "ok":true } ; bu kayda bagli entry varsa 409
+POST   /api/admin/catalog/import [A] { "type":"book"|"movie"|"series", "query":"..." }
+   -> internetten arar, ilk eslesmeyi (limit param. ile birden cok) katalog'a ekler
+   -> { "items":[catalog] }   (admin "talebi arastirip ekle" akisi icin)
+
+=====================================================================
+3) TALEPLER (katalogda olmayan sey) & BILDIRIMLER
+=====================================================================
+request nesnesi:
+  { "id":3,"user_id":2,"type":"book","title":"..","note":"..",
+    "status":"acik"|"inceleniyor"|"tamamlandi"|"reddedildi",
+    "admin_note":null|"..", "resolved_catalog_id":null|12,
+    "resolved_catalog":null|catalog, "created_at":"..","updated_at":"..",
+    "user":{id,display_name,avatar,color} }
+POST /api/requests              [U]  { "type":"book|movie|series","title":"..","note"?:".." }
+                                      -> 201 { "request": request }
+GET  /api/requests              [U]  benim taleplerim -> { "requests":[...] }
+GET  /api/admin/requests?status=acik  [A]  gelen kutusu (status opsiyonel; en yeni ustte)
+   -> { "requests":[...], "counts":{"acik":2,"inceleniyor":0,"tamamlandi":5,"reddedildi":1} }
+PATCH /api/admin/requests/:id   [A]
+   { "status"?, "admin_note"?, "resolved_catalog_id"? }
+   Durum tamamlandi/reddedildi/inceleniyor olursa talep sahibine BILDIRIM duser.
+   resolved_catalog_id verilirse status otomatik "tamamlandi" olur (gonderilmediyse).
+   -> { "request": request }
+GET  /api/notifications         [U]  -> { "notifications":[ { id, kind, title, body,
+        link: {"type":"entry|request|catalog","id":N}|null, is_read, created_at } ],
+        "unread": 3 }
+   kind: "request_update" | "question_asked" | "question_answered" | "comment"
+POST /api/notifications/read    [U]  { "ids":[1,2] }  veya  { "all":true } -> { "ok":true }
+
+=====================================================================
+4) KAYITLAR (entries)
+=====================================================================
+GET  /api/entries?user_id=&type=&status=&limit=100&offset=0   [U]
+   -> { "entries":[entry], "total":n }   (en son guncellenen ustte)
+GET  /api/entries/:id           [U]  -> { "entry": entry,
+        "logs":[ {date,pages_read,page_from,page_to,estimated} ] (kitap, tarihe gore artan),
+        "comment_count":2, "question_count":1 }
+POST /api/entries               [U]  (kayit sahibi = giris yapan)
+   Istek : { "catalog_id":12,
+             "status"?: varsayilan: kitap/dizi "devam", film "bitti",
+             "start_date"?: varsayilan bugun (planlandi ise null),
+             "end_date"?: (film icin izlenme tarihi; varsayilan bugun),
+             "total_pages"?: varsayilan katalog.pages, elle degistirilebilir,
+             "current_page"?: 0, "season"?, "episode"?, "rating"?: 1-5 }
+   Cevap : 201 { "entry": entry }
+   [v2] status=bitti ve start_date verilmediyse: film -> start_date=end_date; kitap/dizi -> start_date NULL
+         (aralik bilinmedigi icin gunluk ortalamaya girmez, sadece "bitirilen kitap" sayisina girer).
+   [v4] status=devam + current_page>0 ile acilirsa o sayfalar "onceden okunmus" sayilir (base_page): ortalamaya
+         girmez, sadece sonraki ilerleme sayilir. "Tarih yok" durumlari (baslangic bilinmeyen bitti, tek gunluk
+         bitti + gercek log yok) avg_pages_per_day=null, avg_source="no_dates" doner ve ortalama/liderlige girmez.
+         Gercek tarih verilirse (baslangic+bitis) normal oranlanir.
+   Kural : ayni kullanici ayni katalog ogesini AYNI ANDA 'devam' iki kez ekleyemez (409).
+           Bitmis olani tekrar okuma icin yeniden ekleyebilir. Birden cok kitap
+           ayni anda 'devam' olabilir.
+   Kitap: total_pages yoksa (katalogda da yoksa) ilerleme girilemez -> 400 sayfa sayisi iste.
+   Film : status bitti, start_date=end_date=izlenme tarihi.
+   Dizi : season/episode opsiyonel; status bitti isaretlenebilir.
+PATCH /api/entries/:id          [SADECE sahibi]  ([v2] admin baskasinin kaydini duzenleyemez; DELETE
+                                   sahibi veya admin)
+   { status?, start_date?, end_date?, total_pages?, current_page?, season?,
+     episode?, rating? }  -> { "entry": entry }
+   - [v3] current_page PATCH ile GONDERILEMEZ (400): sayfa ilerlemesi tek yol POST /progress.
+   - status "bitti" yapilirsa end_date yoksa bugun; kitapta current_page=total_pages'a tamamlanir
+     (aradaki fark bugunun okumasina yazilir).
+   - "devam"a geri alinirsa end_date silinir.
+   - Not: kitapta sayfa guncellemek icin /progress ucunu kullan (gunluk log tutar).
+     PATCH ile current_page gonderirsen ayni /progress mantigi calisir.
+DELETE /api/entries/:id         [sahibi veya A] -> { "ok":true } (log/yorum/soru silinir)
+
+POST /api/entries/:id/progress  [sahibi]   *** GUNLUK OKUMA ***
+   Istek : { "current_page": 214 (>=1), "confirm"?: true, "date"?: "2026-10-23" (varsayilan bugun; gelecek olamaz;
+             start_date'ten once olamaz -> 400) }
+   KURALLAR (kesin):
+     1. delta = current_page - entry.current_page (kayitli son sayfaya gore).
+     2. delta > 0 : [v2 - ATLANAN GUNLER] Son log gununden (hic log yoksa start_date'ten)
+        'date' gunune kadar atlanan gun varsa (n>=2 gun, en fazla son 90 gun), delta o n gune
+        ESIT BOLUNUR (artan kismi son gunlere) ve o log satirlari estimated=true olur:
+        tahmini gunler ORTALAMAYA girer, REKOR ve SERI'ye GIRMEZ. Atlanan gun yoksa
+        (n=1: ardisik ya da ayni gun) delta o gunun satirina eklenir, gercek (estimated=false)
+        kalir; ayni gun birden cok guncelleme TEK satirda toplanir. Ornek: 20 Eki basladi,
+        23 Eki'de '150. sayfa' -> 20,21,22,23 Eki'ne 37/37/38/38 sayfa (hepsi tahmini).
+        PATCH ile status='bitti' yapildiginda kalan sayfalar da tahmini sayilir (800 sayfalik
+        kitabi 'bitti' isaretlemek rekor kirmaz).
+     3. delta < 0 : [v4] DUZELTME icin confirm:true ZORUNLU; yoksa 400 code="CONFIRM_REQUIRED" (arayuz
+        "214'ten 2'ye dusuyor, emin misin?" sorar). current_page<1 hep 400 (0/bos/gecersiz kabul edilmez).
+        Onayli geri alma gecmis log'lari SILMEZ: duzeltme gununun satirina negatif fark yazilir (net toplam
+        current_page ile tutarli kalir; yanlis yazip sonra duzeltmek sonucu bozmaz).
+     4. delta = 0 : islem yok, 200 doner (log eklenmez).
+     5. current_page > total_pages -> 400. current_page < 0 -> 400.
+     6. current_page == total_pages -> status 'bitti', end_date = date (varsayilan bugun).
+     6b. [v4] Ilk guncelleme (hic log yok) ve start_date yoksa (planlandi -> ilk ilerleme) onceki okuma bilinmez:
+        tahmini yazilir (rekora girmez).
+     7. status 'planlandi' ise ilk ilerlemede 'devam' olur, start_date = date.
+        'bitti'/'birakildi' kayda ilerleme girilirse 'devam'a doner (end_date silinir).
+   Cevap : 200 { "entry": entry,
+                 "delta": 14,                  // bu cagridaki fark (negatif olabilir)
+                 "pages_read_on_date": 31,     // o gunun bu kitap icin toplami
+                 "date":"2026-10-23",
+                 "finished": false,
+                 "spread_days": 1,           // [v2] delta kac gune bolundu (1 = bolunmedi)
+                 "estimated": false }       // [v2] bolundu/tahmini ise true -> arayuz 'X gune dagittik' diyebilir
+POST /api/entries/:id/series-progress [sahibi]  { "season":2, "episode":5 }
+   -> { "entry": entry }  (updated_at yenilenir; feed'de 'son guncelleme' olur)
+
+=====================================================================
+5) ISTATISTIK & ORTALAMA MANTIGI
+=====================================================================
+GET /api/users/:id/stats?period=all|year|month   [U]
+   -> { "user":{...},
+        "total_pages": 4210,          // periyottaki toplam okunan sayfa
+        "books_finished": 6, "movies_watched": 9, "series_active": 2,
+        "series_finished": 1,
+        "avg_pages_per_day": 23.4,    // asagidaki formul
+        "record": { "pages":112, "date":"2026-09-02", "books":["Suc ve Ceza"] }|null,
+        "current_streak": 4, "longest_streak": 12,   // ust uste gun (gercek log ile)
+        "active_days": 87 }
+GET /api/users/:id/heatmap?days=90  [U]
+   -> { "days":[ {"date":"2026-10-01","pages":12,"estimated":false} ] }   (log olan gunler; [v2] estimated=true
+      tahmini/dagitilmis gun, arayuz soluk gosterebilir)
+
+GUNLUK ORTALAMA FORMULU
+  Gun-bazli model kullanilir (her kitap icin):
+   - Gercek log varsa o gunlerin sayfasi aynen kullanilir ("real").
+   - Kitabin okunan toplam sayfasi (bitmisse total_pages, devam ise current_page)
+     log toplamindan fazlaysa (kullanici guncelleme yapmamis), FARK, kitabin
+     araligindaki (start_date..end_date, devam ise ..bugun) logsuz gunlere
+     esit bolunur ("estimated"). Hic logsuz gun yoksa son gune eklenir.
+   - Kitap bazinda  avg_pages_per_day = okunan_sayfa / (end_date|bugun - start_date + 1)
+        avg_source = "logs" (hic oranlama gerekmedi) | "estimated" (en az biraz oranlandi)
+        Hic log yoksa bitmis kitap: total_pages / (end-start+1) ; devam eden:
+        current_page / gecen gun (bugun dahil).
+   - Kullanici bazinda avg = (tum kitaplarin gun-bazli sayfa toplami) /
+        (kitap araliklarinin BIRLESIMINDEKI benzersiz gun sayisi). Ayni gunde iki
+        kitap okunduysa o gun bir kez sayilir; arada hic kitabi olmayan gunler
+        sayilmaz. period filtresi araliklari ve gunleri o doneme kirpar.
+   - REKOR ve SERI sadece GERCEK (estimated=false) log gunlerinden hesaplanir (tahmini gunler
+        rekor/seri olamaz).
+   - [v2] Liderlik "average" tablosuna girmek icin en az 3 gunluk veri araligi gerekir (1 gunluk
+        kitapla tablonun basina cikilmasin). /users/:id/stats avg_pages_per_day bu esigi uygulamaz.
+
+=====================================================================
+6) YORUM & SORU-CEVAP
+=====================================================================
+comment: { id, entry_id, user_id, body, created_at, user:{id,display_name,avatar,color} }
+GET    /api/entries/:id/comments     [U]  -> { "comments":[...] } (eskiden yeniye)
+POST   /api/entries/:id/comments     [U]  { "body":"1-2000 karakter" } -> 201 { "comment" }
+         (kayit sahibi baskasiysa ona bildirim duser)
+DELETE /api/comments/:id             [yorum sahibi veya A] -> { "ok":true }
+
+question: { id, entry_id, asker_id, question, answer:null|"..", answered_at, created_at,
+            asker:{id,display_name,avatar,color},
+            entry:{ id, user_id, catalog:{id,title,type,cover_url}, user:{...} } }
+GET    /api/entries/:id/questions    [U]  -> { "questions":[...] }
+POST   /api/entries/:id/questions    [U]  { "question":"1-1000 karakter" } -> 201 { "question" }
+         Kendi kaydina soru sorulamaz (400). Kayit sahibine bildirim duser.
+PATCH  /api/questions/:id            [kayit sahibi (veya A)]  { "answer":"1-2000" }
+         -> { "question" }  (soruyu soran bildirim alir). Cevap tekrar duzenlenebilir.
+DELETE /api/questions/:id            [soran veya A] -> { "ok":true }
+GET    /api/me/pending-questions     [U]  -> { "questions":[question...] }
+         (BANA sorulmus, henuz cevaplanmamis, en eski ustte)
+
+=====================================================================
+7) ANA EKRAN (feed) & LIDERLIK TABLOLARI
+=====================================================================
+GET /api/feed   [U]
+ -> { "generated_at":"...",
+      "cards":[ {                       // her AKTIF uye icin 1 kart (son hareket ustte)
+         "user":{id,display_name,avatar,color},
+         "last_activity":"ISO"|null,
+         "current_streak":4,           // [v5] ust uste gercek (tahmini olmayan) okuma gunu; bugun ya da dun okuduysa surer, yoksa 0
+         "items":[ {
+            "kind":"reading"|"watching_series"|"finished_book"|"finished_series"|"watched_movie",
+            "entry_id":7, "status":"devam",
+            "catalog":{id,type,title,author_or_creator,year,cover_url},
+            "current_page":214,"total_pages":550,"percent":38.9,   // kitap
+            "season":2,"episode":5,                                 // dizi
+            "start_date":"..","end_date":null|"..","rating":null|1..5,
+            "pages_today":14,                                       // kitap, bugun okunan (gercek)
+            "avg_pages_per_day":21.4|null,
+            "updated_at":"ISO" } ] } ],
+      "activity":[ {user, item...} ]    // duz liste, updated_at'e gore yeni->eski, en fazla 30
+    }
+ GORUNURLUK KURALLARI (kesin):
+   - Devam eden KITAP ve DIZI: sureleri yok, devam ettikce hep gorunur.
+   - FILM: [v3] kaydin EKLENME zamanindan (created_at) itibaren 48 saat gorunur; sonra feed'den kalkar
+     (kayit durur, profilde/listede kalir). Izlenme tarihi (end_date) kuralin parcasi DEGILDIR.
+   - Biten kitap/dizi: end_date son 7 gun icinde ise "finished_*" olarak gorunur.
+   - 'planlandi' ve 'birakildi' feed'e girmez.
+   - Hic ogesi olmayan uyenin karti items:[] ile yine de doner (arayuz "su an bir sey
+     okumuyor" der).
+
+Liderlik: hepsi  GET .../leaderboards/<ad>?period=all|year|month   [U]
+  Cevap: { "period":"all", "title":"Rekor", "entries":[
+            { "rank":1, "user":{id,display_name,avatar,color}, "value":112, "detail":{...} } ] }
+  Beraberlikte ayni rank verilir (1,1,3). Degeri 0/yok olan kullanici listeye girmez.
+  GET /api/leaderboards/record    value=bir gunde en cok sayfa (GERCEK log)
+        detail:{ "date":"2026-09-02","books":["Suc ve Ceza"] }
+  GET /api/leaderboards/average   value=gunluk ortalama sayfa (yukaridaki formul, 1 ondalik)
+        detail:{ "total_pages":420,"days":18 }
+  GET /api/leaderboards/finished  value=bitirilen kitap sayisi (end_date periyotta)
+        detail:{ "books":["Suc ve Ceza","Sefiller"] }
+
+=====================================================================
+8) DIGER
+=====================================================================
+[v4] GET /api/admin/catalog?type=&q=&limit=50&offset=0 [A] -> { items:[catalog + entry_count], total }  (admin katalog
+   liste/duzenle/sil ekrani icin). PATCH /api/admin/catalog/:id: type DEGISTIRILEMEZ (400); pages duzeltilirse eski
+   degeri aynen tasiyan (ya da bos) entries.total_pages ve current_page<=yeni pages olanlar senkronlanir.
+   PATCH /api/admin/requests/:id status=tamamlandi icin resolved_catalog_id ZORUNLU (yoksa 400).
+[v4] ARAYUZ SUNUMU: frontend/dist varsa backend ayni portta sunar (SPA yollari index.html'e duser, /api/* JSON 404).
+   CORS varsayilan kapali (ayni origin); baska origin icin CORS_ORIGIN. Cookie secure icin COOKIE_SECURE=1.
+[v4] FEED: her kartta en fazla 8 oge (items) + more_count; yonetici karti, kendi okumasi yoksa gizlenir.
+   Liderlik detail.books en fazla 5 + books_total.
+[v4] ISTEMCIYE HAZIR (E-17): GET /api/entries?user_id=X&type=&status= (baskasinin rafi) ve GET /api/catalog/:id
+   ("kim okudu/izledi": entries listesi) calisiyor; arayuz bunlari kullanabilir.
+[v4] Kaynaklar: Open Library (+Google Books yedek), TVMaze, Wikidata/Wikipedia. iTunes KULLANILMIYOR. Kiril yazar adlari
+   Latin'e cevrilir; ayni eserin baskilari tek sonuca indirilir.
+[v2] GET /api/admin/backup [A]  -> SQLite veritabaninin tutarli kopyasi (application/vnd.sqlite3,
+   Content-Disposition: attachment; filename="kutuphane-yedek-YYYY-AA-GG.db"). Arayuzde indirme dugmesi.
+GET /api/health  [-]  -> { "ok":true, "time":"..." }
+GET /api/covers/<dosya>  [-]  kapak resmi (statik, cache header'li)
+=====================================================================

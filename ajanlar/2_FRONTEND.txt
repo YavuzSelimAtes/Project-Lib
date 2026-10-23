@@ -1,0 +1,93 @@
+=====================================================================
+ AJAN 2: FRONTEND  (gorev dosyasi)
+=====================================================================
+Once ajanlar/0_ORTAK.txt dosyasini oku. Kurallar orada. Sen frontend/
+klasorunun sahibisin.
+
+GOREVIN
+-------
+React + Vite ile modern, SADE, mobilde de guzel calisan arayuzu yaz. Backend
+henuz hazir olmayabilir: ajanlar/API_SOZLESMESI.txt'yi takip et (backend
+yaziyor). Hazir degilse kendi icinde kucuk bir mock katmani (frontend/src/api/
+mock.js) kur, sozlesme gelince gercek API'ye gec. Mock'u gercek API calisinca
+kapatilabilir birakma, SIL.
+
+TASARIM ILKELERI
+----------------
+ - Modern: yumusak kose yaricaplari, bol bosluk, kart tabanli, hafif golge,
+   guzel tipografi (Google Fonts'tan bir font, ornegin Inter veya Nunito).
+ - Acik + koyu tema (sistem tercihine gore, ustte manuel anahtar).
+ - Sicak, aile hissi veren bir renk paleti; her kullanicinin kendi rengi/avatar
+   emojisi kartlarda ve tablolarda gorunur.
+ - SADE: ust menude en fazla 4 oge: Ana Sayfa, Liderlik, Benim Rafim, (admin ise) Yonetim.
+ - "Bir seyi guncellemek" en fazla 2 dokunus olmali. Ornek: ana ekrandaki
+   "Benim kitabim" kartinda yanda "Sayfa: [  ]  Kaydet" hizli alani.
+ - Bos durumlar (henuz kitap yok) guzel bir cizim/emoji ve yonlendirme ile.
+ - Yukleniyor iskeleti (skeleton), hata mesajlari anlasilir Turkce.
+ - Erisilebilirlik: klavye ile gezilebilir, kontrast yeterli.
+
+EKRANLAR
+--------
+1) GIRIS: kullanici adi + sifre. Kayit linki YOK ("Hesabin yoksa yoneticiye
+   yaz" notu).
+
+2) ANA SAYFA - "Son Guncellemeler"
+   - Aile uyelerinin KULLANICI KARTLARI: avatar, ad, "su an X kitabini
+     okuyor", kapak resmi, ilerleme cubugu (214/550, %39), "2 saat once".
+   - Dizi: "Y dizisini izliyor - S2 B5". Film: "Z filmini izledi".
+   - Film kartlari 48 saat sonra kalkar (backend feed zaten ayiracak; sen de
+     tarihe bak, gecenleri gosterme). Kitap ve devam eden diziler hep orada.
+   - Bir karta tiklayinca detay: yorumlar + soru-cevap + (kendi kaydiysa)
+     ilerleme guncelleme.
+   - Sagda/ustte "Yeni ekle" butonu (+): kitap/film/dizi arama -> sec ->
+     baslangic tarihi -> kaydet. Listede yoksa "Bulamadin mi? Yoneticiden iste"
+     butonu (talep gonderir).
+
+3) LIDERLIK (3 sekme/tablo, sik gorunum)
+   - Rekor: bir gunde en cok sayfa (podyum gorunumu: 1.-2.-3. buyuk,
+     sonrasi liste).
+   - Gunluk ortalama sayfa.
+   - En cok kitap bitiren.
+   - Donem filtresi: Tum zamanlar / Bu yil / Bu ay.
+   - Hafif animasyon (sayilar sayarak gelsin gibi), ama abartma.
+
+4) BENIM RAFIM: kullanicinin kitap/film/dizi gecmisi, istatistikleri
+   (toplam sayfa, ortalama, seri gunu, rekor), cevap bekleyen sorular.
+
+5) YONETIM (sadece admin):
+   - Kullanici ekle formu (kullanici adi, gorunen ad, sifre, avatar emoji, renk) +
+     kullanici listesi (sil, sifre sifirla).
+   - Gelen Kutusu: kullanici talepleri (tur, baslik, not, kim istedi), durum
+     degistirme, katalog kaydina baglama.
+   - Katalog ekleme formu (kapak URL/yukleme dahil).
+
+TEKNIK
+------
+ - Router: react-router. Veri: fetch (+ kucuk bir hook) yeter; agir state
+   kutuphanesi ekleme.
+ - Vite proxy: /api -> http://localhost:4000. API istekleri cookie/JWT'ye gore;
+   sozlesmeye uy.
+ - Kapak yoksa guzel bir yer tutucu (baslik bas harfli renkli kutu).
+ - Komutlar: cd frontend && npm install && npm run dev (5173).
+ - Production build'in (npm run build) hatasiz gecmeli.
+
+YAZMAN GEREKEN DOSYA
+--------------------
+ ajanlar/frontend.txt : yaptiklarin, kararlar, ekran listesi, bilinen eksikler,
+ calistirma komutu, backend'den istediklerin (API eksigi varsa backend.txt'ye
+ degil tartisma.txt'ye [FRONTEND -> BACKEND] diye yaz), diger ajanlara cevaplarin.
+
+ASAMA PLANI
+-----------
+ A) Vite iskeleti, tema, layout, router, giris ekrani (mock ile)
+ B) Ana sayfa kullanici kartlari + yeni ekle akisi
+ C) Liderlik ekranlari
+ D) Benim Rafim + detay (yorum, soru-cevap)
+ E) Yonetim paneli
+ F) Gercek API'ye gecis (API_SOZLESMESI.txt hazir olunca) ve mock silme
+ G) Dongu: tartisma.txt, elestiri.txt, test_raporu.txt oku; her maddeye
+    [KABUL]/[RED-neden] ile cevap yaz; kabul ettigini yap, [YAPILDI] yaz.
+    Elestirmen ve test ajani ikna olana kadar surdur.
+ Kodu yazdiktan sonra tarayicida (Vite dev) acip gozle kontrol et, mobil
+ genislikte de bak.
+=====================================================================

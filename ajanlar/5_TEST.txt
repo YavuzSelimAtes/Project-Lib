@@ -1,0 +1,96 @@
+=====================================================================
+ AJAN 5: TEST VE TEST VERISI  (gorev dosyasi)
+=====================================================================
+Once ajanlar/0_ORTAK.txt dosyasini oku. Sen uygulamayi SURALI olarak kirmaya
+calisan, gercekci veri giren test ajanisin. Uygulama kodunu (backend/,
+frontend/) DUZELTMEZSIN: hatayi bulur, raporlarsin. Yazdigin yerler:
+testler/** ve ajanlar/test_raporu.txt.
+
+ORTAM
+-----
+ - Kendi izole ortamini kullan, baskasinin DB'sini bozma:
+     backend :  DB_PATH=testler/data/test.db PORT=4100 (backend/'in baslatma
+                komutunu backend.txt'den oku)
+     frontend:  5273 portunda (vite --port 5273, API proxy hedefi 4100 olacak
+                sekilde; gerekirse ortam degiskeniyle; frontend.txt'ye bak).
+   Backend hazir degilse once testler/ altinda test betiklerini ve veri
+   uretecini yaz, sonra hazir olunca calistir.
+ - Tarayici testi icin Claude'un tarayici araclarini kullanabilirsin
+   (mcp__Claude_Browser__*, tercihen) ve API testi icin node betikleri/curl.
+
+GOREV 1 - TEST VERISI URET
+--------------------------
+ testler/seed-demo.js yaz (Node, backend API'sine istek atarak veya dogrudan
+ test DB'sine). Gercekci bir aile uret:
+   - admin + 6 kullanici (anne, baba, 2 cocuk, anneanne, dede) Turkce isimlerle,
+     avatar/renk dahil, API uzerinden (admin kullanici ekleme ucunu da test eder).
+   - Her kullanici icin 3-8 kitap (bitmis, devam eden, birakilmis, planlanmis),
+     gecmis tarihlerle; gunluk ilerleme kayitlari: 90 gunluk gecmise yayilmis,
+     bazi gunler hic okuma yok, bazi gunler rekor (ornegin 187 sayfa),
+     bazilari gunluk guncelleme hic yapmadan sadece baslangic/bitis tarihi ile.
+   - Filmler: bazilari bugun/dun (ana ekranda gorunmeli), bazilari 3+ gun once
+     (gorunmemeli). Diziler: devam eden, bitmis.
+   - Yorumlar, sorular (cevaplanmis ve cevaplanmamis), birkac tane katalogda
+     olmayan talep (gelen kutusu dolu olsun).
+   - Liderlik tablolarinda beraberlik ve sifir durumlari da olacak veri.
+ Bu betik tekrar calisinca veriyi cogaltmamali (sifirla veya idempotent ol).
+
+GOREV 2 - SUREKLI HATA AVI
+--------------------------
+ testler/ altinda otomatik testler (node:test veya sade betik) VE elle/tarayici
+ testleri. Mutlaka dene:
+  Hesaplama:
+   - Gunluk sayfa farki dogru mu? Ayni gun 3 guncelleme toplaniyor mu?
+   - current_page > total_pages, 0, negatif, ondalik, bos, "abc", cok buyuk sayi.
+   - Sayfayi geri alma. Kitap bitirme esiginde otomatik 'bitti'.
+   - end_date < start_date, gelecek tarih, bos tarih, gecersiz tarih.
+   - Gun sayisi 1 olan kitap (bolme), total_pages 0/null.
+   - Gunluk ortalama ve rekor liderlik tabloda elle hesapladigin ile ayni mi?
+  Feed kurallari:
+   - Film tam 47 saat / 49 saat once -> gorunur / gorunmez. Kitap ve devam
+     eden dizi 1 yil sonra bile gorunuyor mu?
+  Yetki:
+   - Giris yapmadan her uc. Member olarak /api/admin/*. Baska kullanicinin
+     kaydini PATCH/DELETE etme (IDOR). Silinmis kullanicinin oturumu.
+   - Yanlis sifre tekrar tekrar (rate limit). Sifre hash'te duz metin var mi?
+  Girdi:
+   - Cok uzun metin, emoji, Turkce karakterler (ı, İ, ş, ğ), HTML/script
+     (<script>alert(1)</script>) yorumda ve basliktaki XSS, SQL injection
+     denemeleri, bos govde, yanlis JSON, yanlis content-type.
+   - Ayni kullanici adi iki kez ekleme, buyuk/kucuk harf farki.
+  Katalog:
+   - Internetsiz durum (ag hatasi simule et), yavas yanit, olmayan kitap,
+     tuhaf karakterli arama, kapak URL'si bozuk.
+  Frontend:
+   - Mobil genislik (375px) ve masaustu. Bos durumlar, uzun baslik tasmasi,
+     yukleniyor/hata durumlari, geri/ileri tusu, sayfa yenileme sonrasi oturum,
+     cikis yapinca korumali sayfalara girme, koyu tema, konsol hatalari
+     (read_console_messages), basarisiz ag istekleri.
+   - Kullanim akisini bastan sona yap: admin girisi -> kullanici ekle -> o
+     kullanici ile giris -> kitap ara -> ekle -> sayfa guncelle -> yorum yaz
+     -> soru sor -> cevapla -> liderlik tablosuna bak -> katalogda olmayan
+     bir sey icin talep -> admin gelen kutusunda gor -> kataloga bagla.
+  Yuk:
+   - 500 kitap/binlerce log kaydi ile liderlik ve feed hizi.
+
+RAPORLAMA (ajanlar/test_raporu.txt)
+-----------------------------------
+ - En ustte: son calistirma zamani, gecen/kalan test sayilari, aktif hata sayisi.
+ - Her hata: ID (H-001...), baslik, onem (KRITIK/ONEMLI/KUCUK), tekrar adimlari
+   (curl veya tiklama adimlari), beklenen, gerceklesen, ilgili ajan
+   (BACKEND/FRONTEND), durum: [ACIK]. Ilgili ajan duzeltince [YAPILDI]
+   yazar; SEN tekrar test eder, gecerse [DOGRULANDI], degilse [ACIK] ve notla.
+ - Yeni hatalari ajanlara tartisma.txt'ye de KISA bir not ile haber ver
+   ("[TEST] -> [BACKEND] H-007 acildi, bak test_raporu.txt").
+ - "Hata yok" diye pes etme: yeni senaryolar bul, regresyon testi (onceki
+   hatalarin testlerini) her turda tekrar calistir.
+ - Memnun oldugunda (tum KRITIK/ONEMLI hatalar DOGRULANDI, tam akis sorunsuz,
+   regresyon temiz) en uste "TEST: IKNA OLDUM - gerekce" yaz. Yeni kod gelince
+   tekrar kontrol et, gerekirse notu geri al.
+
+DONGU
+-----
+ Backend/frontend hazir olana kadar test altyapisini ve veri uretecini
+ hazirla. Sonra yinele: calistir -> hata bul -> raporla -> duzeltilenleri
+ dogrula -> yeni senaryo. Komut bekleme.
+=====================================================================

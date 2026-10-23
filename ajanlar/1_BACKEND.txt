@@ -1,0 +1,122 @@
+=====================================================================
+ AJAN 1: BACKEND  (gorev dosyasi)
+=====================================================================
+Once ajanlar/0_ORTAK.txt dosyasini oku. Kurallar orada. Sen backend/ klasorunun
+sahibisin.
+
+GOREVIN
+-------
+Fastify + SQLite ile aile kutuphanesinin API'sini yaz. Calistir, curl ile dene.
+
+1) KULLANICI & YETKI
+   - users tablosu: id, username (unique), display_name, password_hash, role
+     ('admin'|'member'), avatar (emoji), color, created_at.
+   - POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me.
+   - Admin: POST/GET/DELETE /api/admin/users (kullanici olustur, listele, sil),
+     sifre sifirlama ucu. Signup YOK.
+   - Ilk calistirmada admin seed. Yetkisiz isteklerde 401/403.
+
+2) KATALOG (internetten cekilen kitap/film/dizi)
+   - catalog tablosu: id, type ('book'|'movie'|'series'), title, author_or_creator,
+     year, pages (kitap), description, cover_url, external_id, source.
+   - Arama: GET /api/catalog/search?q=...&type=... -> once yerel katalog,
+     sonra internetten (Open Library, TVMaze, film icin anahtarsiz kaynak).
+     Sonuclari yerel katalog'a cache'le (kapak URL'si dahil; mumkunse kapagi
+     backend/data/covers/ altina indirip kendi sunucundan sun - hiz ve
+     dayaniklilik icin). Timeout koy, ag hatasinda yerel sonucla devam et.
+   - Toplu doldurma betigi: backend/scripts/seed-catalog.js -> populer
+     kitap/film/dizi listesinden "cekebildigi kadarini" ceker (en az 100 kitap,
+     50 film, 50 dizi hedef; Turkce populerleri de dahil et). Nazik ol: istekler
+     arasi bekleme, hata olursa atla, devam et.
+   - Admin: POST /api/admin/catalog (elle ekle: baslik, tur, kapak yukleme
+     veya URL, sayfa sayisi vb.).
+
+3) TALEP / ADMIN GELEN KUTUSU
+   - Kullanici katalogda bulamazsa: POST /api/requests {type, title, note}.
+   - requests tablosu: id, user_id, type, title, note, status
+     ('acik'|'inceleniyor'|'tamamlandi'|'reddedildi'), admin_note,
+     resolved_catalog_id, created_at.
+   - Admin: GET /api/admin/requests, PATCH /api/admin/requests/:id
+     (durum degistir, katalogtan bir kayda bagla -> talep sahibine bildirim
+     icin GET /api/notifications basit bir yapi).
+
+4) KAYITLAR (kullanicinin kitap/film/dizi girdileri)
+   - entries tablosu: id, user_id, catalog_id, type, status
+     ('devam'|'bitti'|'birakildi'|'planlandi'), start_date, end_date,
+     total_pages (kitaplar icin; katalogtan gelir, elle degistirilebilir),
+     current_page, season, episode (dizi), rating (1-5 opsiyonel),
+     created_at, updated_at.
+   - Kitap: POST /api/entries (baslangic tarihi gir), PATCH /api/entries/:id.
+   - Film: tek seferlik izleme (izlenme tarihi). Dizi: sezon/bolum ilerlemesi,
+     bitti isaretlenebilir.
+   - Bir kullanici ayni anda birden cok kitap okuyabilir.
+
+5) GUNLUK OKUMA MANTIGI (EN ONEMLI KISIM)
+   - reading_logs tablosu: id, entry_id, user_id, date, page_from, page_to,
+     pages_read.
+   - POST /api/entries/:id/progress {current_page, date?}:
+       * Onceki kayitli sayfadan farki o gunun pages_read'ine ekler
+         (ayni gun birden cok guncelleme toplanir).
+       * current_page geri giderse (duzeltme) reddetme; farki negatif olarak
+         ele alma, tutarli bir kural sec ve belgele.
+       * current_page == total_pages ise kitabi otomatik 'bitti' yap, end_date
+         bugun olsun.
+   - Gunluk guncelleme yapilmamis kitaplar icin ortalama:
+       avg_pages_per_day = total_pages / (end_date - start_date + 1)
+       (bitmis kitaplarda). Devam edenlerde: current_page / gecen gun sayisi.
+   - Kullanici basina istatistik: GET /api/users/:id/stats ->
+       toplam okunan sayfa, bitirilen kitap sayisi, gunluk ortalama,
+       en yuksek tek gun rekoru (tarih ve kitap ile), seri (streak) gunleri.
+   - Gunluk ortalama formulunu API_SOZLESMESI.txt'de acikla (gercek gunluk
+     kayit varsa onu kullan, yoksa oranlama).
+
+6) YORUM & SORU-CEVAP
+   - comments: id, entry_id, user_id, body, created_at.
+     POST/GET /api/entries/:id/comments, DELETE (sahibi veya admin).
+   - questions: id, entry_id, asker_id, question, answer, answered_at,
+     created_at. Aileden biri bir kayit hakkinda soru sorar; o kaydin sahibi
+     cevaplar. POST /api/entries/:id/questions, PATCH /api/questions/:id (cevap).
+     Cevaplanmamis sorular icin GET /api/me/pending-questions.
+
+7) ANA EKRAN & LIDERLIK TABLOLARI
+   - GET /api/feed: son guncellemeler. Kullanici kartlari icin veri:
+       her uye icin "su an ne okuyor/izliyor" (kitap: baslik, kapak,
+       current_page/total_pages, yuzde; dizi: sezon/bolum), son 48 saatte
+       izlenen filmler. KURAL: film 48 saat sonra feed'den kalkar;
+       devam eden kitap ve dizi suresiz kalir. (Bitmis kitap/dizi: son 7 gun
+       "yeni bitirdi" olarak gosterilebilir, sonra kalkar - bunu belgele.)
+       Zaman damgasi (ne zaman guncellendi) da donsun.
+   - GET /api/leaderboards/record      (bir gunde en cok sayfa)
+   - GET /api/leaderboards/average     (gunluk ortalama sayfa)
+   - GET /api/leaderboards/finished    (en cok kitap bitiren)
+     Her biri: [{rank, user:{id,display_name,avatar,color}, value, detail}].
+     Zaman filtresi opsiyonel: ?period=all|year|month.
+
+8) KALITE
+   - Girdi dogrulama (JSON schema veya elle). Anlamli hata mesajlari (Turkce).
+   - CORS: dev icin 5173'e izin ver. Rate limit (login icin) basit olsun.
+   - backend/README degil; calistirma komutlarini ajanlar/backend.txt'ye yaz:
+       cd backend && npm install && npm run seed && npm run dev
+   - Gelistirme icin demo veri BETIGI YAZMA; test verisini TEST ajani uretiyor
+     (testler/ klasoru). Sen sadece admin seed + katalog seed yaz.
+
+TESLIM / YAZMAN GEREKEN DOSYALAR
+--------------------------------
+ - ajanlar/API_SOZLESMESI.txt : her endpoint, metod, yetki, istek JSON, cevap
+   JSON ornegi. Frontend bunu bekliyor, ILK IS olarak iskeleti yaz (kod
+   bitmeden da yayinla), sonra guncelle.
+ - ajanlar/backend.txt : yaptiklarin, aldigin kararlar, bilinen eksikler,
+   calistirma komutu, diger ajanlara cevaplarin.
+
+ASAMA PLANI
+-----------
+ A) 0_ORTAK.txt + API_SOZLESMESI.txt iskeleti (ilk 10 dakika icinde)
+ B) Iskelet sunucu + DB semasi + auth + admin kullanici ekleme
+ C) Katalog arama + cache + seed betigi
+ D) entries / progress / stats mantigi
+ E) feed + liderlik tablolari
+ F) yorum, soru-cevap, talep gelen kutusu
+ G) Dongu: tartisma.txt, elestiri.txt, test_raporu.txt oku; her maddeye
+    [KABUL]/[RED-neden] ile cevap yaz; kabul ettigini yap, [YAPILDI] yaz.
+    Elestirmen ve test ajani ikna olana kadar surdur.
+=====================================================================

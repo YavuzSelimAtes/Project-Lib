@@ -1,0 +1,289 @@
+import { useEffect, useState } from 'react';
+import { api } from './api.js';
+import { Cover, ErrorBox, Modal, TYPE_ICON, TYPE_LABEL, today } from './ui.jsx';
+
+const TYPES = [
+  ['book', '📖 Kitap'],
+  ['series', '📺 Dizi'],
+  ['movie', '🎬 Film'],
+];
+
+// 1) ara  2) sec + tarih  3) kaydet.  Bulunamazsa talep gonder.
+export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
+  const [type, setType] = useState(initialType);
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState(null); // {items, online}
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [requesting, setRequesting] = useState(false);
+
+  // yazarken gecikmeli ara
+  useEffect(() => {
+    if (q.trim().length < 2) {
+      setRes(null);
+      return;
+    }
+    let alive = true;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.search(q.trim(), type);
+        if (alive) {
+          setRes(r);
+          setError(null);
+        }
+      } catch (e) {
+        if (alive) setError(e);
+      } finally {
+        if (alive) setSearching(false);
+      }
+    }, 450);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [q, type]);
+
+  if (picked) return <PickedForm item={picked} onBack={() => setPicked(null)} onClose={onClose} onAdded={onAdded} />;
+  if (requesting) return <RequestForm type={type} title={q} onBack={() => setRequesting(false)} onClose={onClose} />;
+
+  return (
+    <Modal title="Yeni ekle" onClose={onClose}>
+      <div className="tabs" role="tablist">
+        {TYPES.map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={type === k} className="tab" onClick={() => setType(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <input
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={type === 'book' ? 'Kitap adı veya yazar…' : type === 'movie' ? 'Film adı…' : 'Dizi adı…'}
+        aria-label="Ara"
+        autoFocus
+      />
+      <ErrorBox error={error} />
+      {searching && <p className="muted">Kütüphanede ve internette aranıyor, birkaç saniye sürebilir…</p>}
+      {res && !searching && res.online && !res.online.ok && (
+        <p className="small muted">İnternet kaynaklarına ulaşılamadı; sadece kütüphanedeki kayıtlar gösteriliyor.</p>
+      )}
+      {res && !searching && res.items.length === 0 && <p className="muted">“{q}” için sonuç bulunamadı.</p>}
+      <div className="shelf-list" style={{ marginTop: 10 }}>
+        {res?.items.map((it) => (
+          <button key={it.id ?? it.key} className="item card" style={{ padding: 10 }} onClick={() => setPicked(it)}>
+            <Cover src={it.cover_url} title={it.title} />
+            <div className="meta">
+              <div className="t">{it.title}</div>
+              <div className="line">
+                {TYPE_LABEL[it.type]}
+                {it.author_or_creator ? ` · ${it.author_or_creator}` : ''}
+                {it.year ? ` · ${it.year}` : ''}
+                {it.pages ? ` · ${it.pages} sayfa` : ''}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {q.trim().length >= 2 && !searching && (
+        <div className="card" style={{ marginTop: 14, textAlign: 'center' }}>
+          Bulamadın mı?{' '}
+          <button className="btn small ghost" onClick={() => setRequesting(true)}>
+            Yöneticiden iste
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function PickedForm({ item, onBack, onClose, onAdded }) {
+  const isBook = item.type === 'book';
+  const isMovie = item.type === 'movie';
+  const [start, setStart] = useState(today());
+  const [pages, setPages] = useState(item.pages || '');
+  const [status, setStatus] = useState(isMovie ? 'bitti' : 'devam');
+  const [rating, setRating] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [end, setEnd] = useState(today());
+  const [unknownStart, setUnknownStart] = useState(false);
+  const [curPage, setCurPage] = useState('');
+  const finishedPast = !isMovie && status === 'bitti';
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (isBook && !pages) return setError(new Error('Bu kitabın sayfa sayısını yaz, ilerlemeni ona göre hesaplayacağız.'));
+    if (finishedPast && !unknownStart && start > end) return setError(new Error('Bitiş tarihi başlangıçtan önce olamaz.'));
+    if (isBook && status === 'devam' && curPage !== '' && (Number(curPage) < 0 || Number(curPage) > Number(pages))) {
+      return setError(new Error('Şu anki sayfa 0 ile toplam sayfa arasında olmalı.'));
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = item.id != null ? { catalog_id: item.id, status } : { catalog_key: item.key, status };
+      if (isMovie) body.end_date = start;
+      else if (finishedPast) {
+        if (!unknownStart) body.start_date = start;
+        body.end_date = end;
+      } else if (status !== 'planlandi') body.start_date = start;
+      if (isBook && status === 'devam' && Number(curPage) > 0) body.current_page = Number(curPage);
+      if (isBook) body.total_pages = Number(pages);
+      if (rating) body.rating = Number(rating);
+      await api.createEntry(body);
+      onAdded?.();
+      onClose();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={item.title} onClose={onClose}>
+      <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-start', marginBottom: 14 }}>
+        <Cover src={item.cover_url} title={item.title} large />
+        <div>
+          <div className="muted">
+            {TYPE_ICON[item.type]} {item.author_or_creator} {item.year && `· ${item.year}`}
+          </div>
+          {item.description && <p className="small muted" style={{ maxHeight: 80, overflow: 'hidden' }}>{item.description}</p>}
+        </div>
+      </div>
+      <form onSubmit={save}>
+        {!isMovie && (
+          <label className="field">
+            <span>Durum</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="devam">{isBook ? 'Şu an okuyorum' : 'Şu an izliyorum'}</option>
+              <option value="planlandi">Sonra {isBook ? 'okuyacağım' : 'izleyeceğim'}</option>
+              <option value="bitti">Zaten bitirdim</option>
+            </select>
+          </label>
+        )}
+        {(isMovie || status !== 'planlandi') && !(finishedPast && unknownStart) && (
+          <label className="field">
+            <span>{isMovie ? 'İzlediğin tarih' : 'Başlangıç tarihi'}</span>
+            <input type="date" value={start} max={today()} onChange={(e) => setStart(e.target.value)} required />
+          </label>
+        )}
+        {finishedPast && (
+          <>
+            <label className="small" style={{ display: 'block', marginBottom: 12 }}>
+              <input type="checkbox" checked={unknownStart} onChange={(e) => setUnknownStart(e.target.checked)} /> Ne zaman başladığımı bilmiyorum
+              <span className="muted"> (günlük ortalamana katılmaz)</span>
+            </label>
+            <label className="field">
+              <span>Bitiş tarihi</span>
+              <input type="date" value={end} min={unknownStart ? undefined : start} max={today()} onChange={(e) => setEnd(e.target.value)} required />
+            </label>
+          </>
+        )}
+        {isBook && status === 'devam' && (
+          <label className="field">
+            <span>Kaçıncı sayfadasın? (boşsa baştan başlıyorsun)</span>
+            <input type="number" min="0" max={pages || undefined} value={curPage} onChange={(e) => setCurPage(e.target.value)} placeholder="0" />
+          </label>
+        )}
+        {isBook && (
+          <label className="field">
+            <span>Toplam sayfa</span>
+            <input type="number" min="1" value={pages} onChange={(e) => setPages(e.target.value)} placeholder="örn. 320" />
+          </label>
+        )}
+        {(isMovie || status === 'bitti') && (
+          <label className="field">
+            <span>Puanın (isteğe bağlı)</span>
+            <select value={rating} onChange={(e) => setRating(e.target.value)}>
+              <option value="">Puan verme</option>
+              {[5, 4, 3, 2, 1].map((n) => (
+                <option key={n} value={n}>
+                  {'⭐'.repeat(n)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <ErrorBox error={error} />
+        <div className="row">
+          <button type="button" className="btn ghost" onClick={onBack}>
+            ← Geri
+          </button>
+          <button className="btn" disabled={busy}>
+            {busy ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RequestForm({ type, title: t0, onBack, onClose }) {
+  const [rtype, setRtype] = useState(type);
+  const [title, setTitle] = useState(t0);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [sent, setSent] = useState(false);
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createRequest({ type: rtype, title: title.trim(), note: note.trim() || undefined });
+      setSent(true);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (sent)
+    return (
+      <Modal title="Talebin gönderildi" onClose={onClose}>
+        <p>✅ Yönetici bakıp kütüphaneye ekleyince sana haber verilecek (üstteki 🔔).</p>
+        <button className="btn" onClick={onClose}>
+          Tamam
+        </button>
+      </Modal>
+    );
+
+  return (
+    <Modal title="Yöneticiden iste" onClose={onClose}>
+      <form onSubmit={send}>
+        <label className="field">
+          <span>Tür</span>
+          <select value={rtype} onChange={(e) => setRtype(e.target.value)}>
+            {TYPES.map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Adı</span>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+        </label>
+        <label className="field">
+          <span>Not (isteğe bağlı)</span>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Yazar, yıl, hangi baskı gibi ipuçları…" maxLength={1000} />
+        </label>
+        <ErrorBox error={error} />
+        <div className="row">
+          <button type="button" className="btn ghost" onClick={onBack}>
+            ← Geri
+          </button>
+          <button className="btn" disabled={busy || !title.trim()}>
+            Talep gönder
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

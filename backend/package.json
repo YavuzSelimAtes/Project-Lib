@@ -1,0 +1,20 @@
+{
+  "name": "kutuphane-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "seed": "node --disable-warning=ExperimentalWarning scripts/seed-catalog.js",
+    "build": "npm --prefix ../frontend install && npm --prefix ../frontend run build",
+    "kur": "npm install && npm run build && npm start"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/cors": "^11.3.1",
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/static": "^10.1.7",
+    "fastify": "^5.12.7"
+  }
+}

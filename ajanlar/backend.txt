@@ -1,0 +1,165 @@
+=====================================================================
+ BACKEND - backend.txt
+=====================================================================
+SON GUNCELLEME: 2026-10-23 (v4: E-15..E-26, H-001..H-007, aileye kurulum)
+
+DURUM OZETI
+-----------
+Fastify 5 + node:sqlite (Node 24, derleme gerektirmez; better-sqlite3 GEREKMEDI). Sozlesmedeki
+TUM uclar yazildi ve curl/node ile denendi (auth, admin kullanici, katalog arama+cache+kapak,
+talepler+bildirim, entries+progress+stats, yorum, soru-cevap, feed, 3 liderlik, yedek).
+Bilinen eksik/risk en altta. Test ajani: kendi DB'nizle 4100'de calistirin (start-backend.js
+`node src/server.js` diyor; calisir. Uyari mesajini susturmak icin `npm start` de kullanilabilir).
+
+CALISTIRMA
+----------
+  cd backend && npm install && npm run seed && npm run dev      (http://localhost:4000)
+  - npm run seed : katalogu internetten doldurur (kitap/dizi/film, Turkce populerler dahil).
+    ~10-15 dk surer (nazik bekleme), tekrar calistirmak guvenli, tek tur: `npm run seed -- book|series|movie`.
+    Seed'siz de uygulama calisir; katalog arama sirasinda zaten internetten dolar.
+  - npm start : izleme (watch) olmadan.
+Ortam degiskenleri:
+  PORT (4000) | DB_PATH (backend/data/kutuphane.db) | COVERS_DIR (DB'nin yanindaki covers/)
+  ADMIN_PASSWORD (yoksa "degistir-beni" + konsola uyari + user.must_change_pw=true)
+  TZ_NAME (Europe/Istanbul; "bugun" hesabi) | TRUST_PROXY=1 (ters vekil arkasinda) |
+  FETCH_TIMEOUT_MS (6000; dis kaynak zaman asimi)
+Ilk calistirmada admin olusur: kullanici adi "admin". Signup yok.
+
+DOSYALAR
+--------
+  src/app.js      uygulama kurulumu, hata isleyici, admin seed, temizlik
+  src/db.js       sema + kucuk migrasyon (eski DB'lere kolon ekler)
+  src/auth.js     scrypt hash, sunucu tarafli oturum (cookie kutuphane_sid, DB'de sha256'lanmis token)
+  src/routes/*    auth(+users, bildirim), catalog, requests, entries(+stats), social(yorum/soru), feed(+liderlik), admin(yedek)
+  src/services/*  sources (Open Library, Google Books, TVMaze, Wikidata/Wikipedia), catalog (cache, SSRF-korumali
+                  indirme), entries (progress/gun modeli), stats (ortalama/rekor/seri/liderlik)
+  scripts/seed-catalog.js
+
+KARARLAR
+--------
+ K1  Oturum: HttpOnly cookie + sunucuda oturum tablosu (JWT degil; cikis/sifre sifirlama aninda gecersiz kilar).
+ K2  Film kaynagi: iTunes aramasi bu aginda bos donuyor, Google Books kotasi doluydu -> film icin Wikidata
+     (P31=film sinifi filtresiyle) + Wikipedia ozeti + Commons poster (P18). Kitap: Open Library (Google Books yedek),
+     dizi: TVMaze. Yonetmen Wikidata P57'den.
+ K3  Geri sayfa (duzeltme): reddedilmez; en yeni loglardan geriye dogru dusulur (log toplami = current_page kalir).
+ K4  Atlanan gunler (E-01): bkz. asagidaki cevap. Tahmini gunler `estimated=1`, rekor/seriye girmez.
+ K5  [v3] Film feed suresi = EKLENME zamanindan 48 saat (yonetici karari).
+ K6  Biten kitap/dizi feed'de 7 gun (end_date >= bugun-6).
+ K7  Katalog onbellegi: internet aramasinda gelenler listed=0 kaydedilir; kimse secmezse 14 gunde silinir;
+     gezmede (GET /api/catalog) gorunmez. Secilince (entry/talep/admin import) listed=1.
+ K8  Tekillestirme: ayni (kaynak, external_id) ya da ayni tur + ayni sade baslik + ayni yazar/yonetmen = ayni kayit.
+ K9  Kapaklar arka planda yerel diske indirilir (/api/covers/...). O ana kadar cover_url uzak https adresidir.
+ K10 Kapak guvenligi: yalniz http/https, port 80/443, ozel/yerel IP reddi (DNS dahil), >3 yonlendirme yok,
+     5MB sinir (akis sirasinda), icerik magic byte ile jpg/png/webp (SVG reddi), dosya adi sunucuda hash'ten.
+ K11 Gunluk ortalama liderligi icin en az 3 gunluk aralik sarti (E-07).
+
+YONETICI KARARLARI v3 (hepsi uygulandi, 17/17 test gecti)
+ - E-02: ADMIN_PASSWORD yoksa RASTGELE sifre uretilip konsola yazilir, must_change_pw=true (K-eski "degistir-beni" kalkti).
+ - E-05: arama yan etkisiz (id:null+key), POST /api/catalog/pick; K7 (listed onbellegi) KALDIRILDI.
+ - E-06: PATCH current_page -> 400; sayfa tek yol /progress.
+ - E-08: kullanici silme = pasife alma (+activate, ?hard=1).
+ - E-09: GET /api/catalog ve GET /api/users kaldirildi.
+ - E-01 (kesin): atlanan gunler esit bolunur + tahmini, rekora girmez, ortalamaya girer; bitti isaretlemede de ayni.
+ - FILM: ana ekranda EKLENME zamanindan 48 saat (izlenme tarihi degil). K5 buna gore degisti.
+ - NOT (tartisma.txt icin): bu dosya fikir ajaninin; kural degisikligini frontend/test/elestirmen buradan
+   ve API_SOZLESMESI v3 basligindan okusun. Test: "film 47s gorunur/49s gorunmez" artik created_at'e bakar.
+
+CEVAPLAR (elestiri.txt)
+-----------------------
+[BACKEND -> ELESTIRMEN] E-01 [KABUL][YAPILDI]  Karar: son log gunu (log yoksa start_date) ile guncelleme gunu
+  arasindaki atlanan gunlere (en fazla 90) fark esit bolunur; bu satirlar estimated=1: ortalamaya girer,
+  rekor ve seriye GIRMEZ. (a) 3 gun atlayip tek guncelleme -> rekor bos kalir (denendi: 150 sayfa -> 37/37/38/38,
+  rekor tablosu bos). (b) kitaba gec eklenip "200. sayfadayim" -> start_date..bugun arasina dagilir. (c) PATCH
+  status=bitti -> kalan sayfalar tahmini (denendi: 800 sayfa, rekor yok). Ardisik gun ya da ayni gun guncelleme
+  gercek kalir. Yan etki: seri sadece her gun giris yapana artar (istenen bu).
+E-02 [KABUL-kismen][YAPILDI]  ORTAK kural varsayilan "degistir-beni" istiyor; ona uydum ama: konsola uyari her
+  acilista, user.must_change_pw=true doner (frontend giriste "sifreni degistir" uyarisi gosterebilir),
+  change-password bayragi temizler. Rastgele sifre uretmedim (proje sahibi kurali). ADMIN_PASSWORD ile bayrak yok.
+E-03 [KABUL][YAPILDI]  Anahtar IP+kullanici; sadece BASARISIZ denemeler sayilir, basarili giris sifirlar.
+  trustProxy artik VARSAYILAN KAPALI (TRUST_PROXY=1 ile acilir; yoksa X-Forwarded-For sahteciligiyle limit asilirdi).
+  Karsilastirma crypto.timingSafeEqual; kullanici yoksa da scrypt calisir (zamanlama farki yok).
+E-04 [KABUL][YAPILDI]  K10'daki liste; 127.0.0.1/localhost/169.254.x/::1/10.x/file:// ve SVG-png denemesi 400 (denendi).
+  /api/covers/..%2f yol gezinmesi 404 (@fastify/static). Bilinen sinir: DNS rebinding (TOCTOU) icin ayri onlem yok.
+E-05 [KABUL-farkli yolla][YAPILDI]  Sozlesmeyi bozmamak icin (frontend id ile calisiyor) "secince kaydet" yerine
+  K7: aramadan gelenler gizli onbellek, resmi katalog sismez; kullanici basina 30 arama/dk (429); sonuc basina
+  en fazla 40 kayit; tekillestirme K8. GET yine yan etkili ama sadece onbellege yazar, katalogu kirletmez.
+E-06 [KABUL][YAPILDI]  (a) PATCH current_page ve /progress ayni fonksiyon (applyProgress). (b) PATCH artik SADECE
+  sahibi; admin yalniz DELETE (moderasyon). (c) total_pages < current_page -> 400; start_date ilk logdan sonraya
+  alinamaz -> 400; end<start -> 400; gelecek tarih -> 400. (d) film kurali K5, gelecek tarih engelli.
+E-07 [KABUL][YAPILDI]  K11.
+E-08 [KABUL-kismen][YAPILDI]  color kesin #rrggbb, avatar <=3 grafem ve <>&"'` yasak, limit ust sinirlari (50-500).
+  Kullanici silme: [RED-simdilik] "pasife alma" eklemedim; silme CASCADE ve sozlesmede yazili, onay metnini
+  arayuz gostersin (frontend). Gerekirse tartismaya acin.
+E-09 [RED-neden]  Kullanilmayan uclar (change-password, /users, /catalog gezme, /catalog/:id) cok kucuk ve testli;
+  /catalog/:id fikir #9 ("listeme al"/kim okuyor) icin lazim; change-password must_change_pw akisi icin lazim.
+  heatmap/stats/bildirim frontend kullaniyor. Kaldirmiyorum; kullanilmayan kalirsa nihai turda silerim.
+[BACKEND -> FRONTEND]  (1) Arama yavasligi: yerel sonuc hizli; kapak indirme artik arka planda (arama internet
+  kaynak suresi kadar, ~2-6 sn). (2) Yeni: user.must_change_pw, progress cevabinda spread_days/estimated,
+  heatmap/logs'ta estimated, GET /api/admin/backup (yedek indir), cover_url uzak https olabilir.
+  (3) E-01'den sonra "dun guncelleyemedim" icin tarih alani GEREKMIYOR: sistem atlanan gunleri kendisi dagitiyor.
+[BACKEND -> FIKIR]  #18 yedek: [YAPILDI-backend] GET /api/admin/backup (VACUUM INTO). Dugme frontend'de.
+  #5/#9/#3/#2/#1: backend tarafinda ek is gerekmiyor (uclar var, calisiyor). #1 seri artik E-01'den sonra anlamli.
+
+BILINEN EKSIKLER / RISKLER
+--------------------------
+ - Kitap aciklamasi Open Library aramasinda gelmez; katalog detayina (GET /api/catalog/:id) bakilinca tembel cekilir.
+ - Open Library bazi Rus klasiklerini Kiril baslikla doner; seed Turkce (language=tur) once dener.
+ - Seed listesindeki bazi Turkce/niche kitaplar bulunamayabilir (log'da "bulunamadi"); admin elle ekler.
+ - Dis kaynaklar (Wikidata) arka arkaya cok istekte 429 verebilir; 1 kez yeniden deneriz, sonra online.ok=false doner.
+ - Oturum tablosu, kullanici silinince/sifre sifirlaninca temizlenir; sure dolanlar 12 saatte bir silinir.
+=====================================================================
+
+[NOT] Film seed'i Wikidata 429 (hiz siniri) yuzunden tamamlanamadi; sinir kalkinca 'cd backend && npm run seed -- movie' tekrar calistirilmali. Kitap 120 + dizi 60 yuklendi. Film aramasi calisma aninda yine de Wikidata'dan geliyor.
+
+=====================================================================
+ v4 TURU - YONETICI KARARLARIYLA E-15..E-26 / H-001..H-007  (hepsi [KABUL][YAPILDI], canli denendi)
+=====================================================================
+[BACKEND -> ELESTIRMEN]
+E-15 [YAPILDI] "Tarih yok" kurali: baslangici bilinmeyen 'bitti' ve tek gunluk 'bitti' (gercek log yok) ortalamaya
+  GIRMEZ (avg=null, avg_source="no_dates"). 'devam' + current_page>0 ile acilan kayitta o sayfalar onceden okunmus sayilir
+  (entries.base_page) -> 1 gunluk 500 sayfa olmaz. Tarih verilirse (baslangic+bitis) normal oranlanir. Ilk guncelleme (log yok,
+  baslangic yok) tahmini. FRONTEND'E: AddFlow "zaten bitirdim" ya hic tarih gondermesin ya da baslangic+bitis sorsun; tek tarih
+  (start=bugun) gonderirse backend start=bugun/end=bugun alip "tek gun" der ve ortalamaya almaz (no_dates).
+E-16 [YAPILDI] progress: current_page<1 -> 400; geri gidis confirm:true ister (yoksa 400 CONFIRM_REQUIRED); onayli geri alma
+  log SILMEZ (negatif fark satiri). Canli: 120 -> 12 (confirm) -> 120 yine net 70 sayfa, log duruyor.
+E-17 [YAPILDI-backend] GET /api/entries?user_id= ve GET /api/catalog/:id sozlesmede "istemciye hazir" olarak belirtildi.
+E-18 [YAPILDI] Tek komut: `cd backend && npm run kur` (= npm install + frontend build + start). Backend frontend/dist'i ayni portta
+  sunar, SPA fallback var, CORS varsayilan kapali (ayni origin), sunucu acilista LAN adreslerini loglar. Asagida "Aileye kurulum".
+E-19 [YAPILDI] Backend'de gun hesabi her yerde Europe/Istanbul (entryDayModel created_at dahil). (ui.jsx today() frontend'in.)
+E-20 [YAPILDI] GET /api/admin/catalog (liste), PATCH type degistiremez (400), pages duzeltilince entries.total_pages senkron
+  (kural: eski degeri aynen tasiyan/bos olanlar, current_page<=yeni pages), talep 'tamamlandi' baglanti olmadan 400.
+E-21 [YAPILDI] Yonetici, kendi okumasi yoksa feed kartlarindan gizli (liderlikte zaten 0 degerler yok).
+E-22 [YAPILDI-kismen] Kiril yazar -> Latin, ayni eserin baskilari tek sonuc (tur+baslik+yazar soyadi), findExisting soyad
+  eslesmesi, sozlesmeden iTunes cikarildi. Wikidata filmde ilk 20 aday sinirlamasi ve 'yesilcam' gibi genel aramalarda recall
+  dusuklugu KALDI (anahtarsiz kaynak siniri). Yonetmen adi Wikidata'daki gibi (Lana/Lilly Wachowski).
+E-24/H-004 [YAPILDI] trustProxy kapali (TRUST_PROXY=1 ile acilir); ek IP siniri: ayni IP'den 5 dk'da 40 basarisiz deneme -> 429
+  (kullanici adi degistirerek de asilamaz). Sifre degisince diger oturumlar kapanir.
+E-06 (a) [YAPILDI] PATCH current_page 400, sayfa tek yol /progress.  (c) [YAPILDI] total_pages<current_page 400; start_date ilk
+  logdan sonraya alinamaz 400; end<start 400.  (d) [YAPILDI-karar] film 48 saat EKLENME zamanindan (yonetici karari).
+  (e) [KABUL-belgeli] Geriye donuk tarihli progress: fark O TARIHIN satirina yazilir (sayfa sirasi dogrulanmaz, toplam current_page
+  ile tutarli kalir). Daha eski tarihe girerken kullanici mantikli girmekle yukumlu; arayuz varsayilan bugundur.
+E-08 [YAPILDI] 415 -> 415 JSON hata, ..%5c yolu 404, 413 "Istek cok buyuk".
+H-001 [YAPILDI] 404.  H-002 [YAPILDI] govde limiti artik "Istek cok buyuk (en fazla 1MB)" (413); dosya limiti ayri mesaj.
+H-003 [YAPILDI] end<start devam'da da 400 (create).  H-007 [YAPILDI] feed karti en fazla 8 oge + more_count; liderlik detail.books
+  en fazla 5 + books_total. H-005/H-006 frontend.
+E-07 [KABUL] 3 gun esigi var; "tarih yok" kitaplar da disarida, payda bozulmasi azaldi.
+Test notu: regresyon (35/36) gecer; kalan 1 test ("rekor = gercek log gunluk toplam maksimumu") tahmini (estimated) log
+  satirlarini da topluyor; karar geregi tahmini satirlar rekora girmez -> test estimated=false satirlarini toplamali.
+
+AILEYE KURULUM
+--------------
+ 1) Bilgisayara Node 24+ kur. Proje klasorunde:   cd backend && npm run kur
+    (ilk seferde ~1-2 dk: bagimliliklar + arayuz derlemesi). Sonraki acilislar: `npm start`.
+ 2) Sunucu 0.0.0.0:4000'de dinler ve acilista "Aile aginda: http://192.168.x.y:4000" satirlarini yazar.
+    Aile uyeleri AYNI Wi-Fi'da telefondan o adresi acar (ornegin http://192.168.1.20:4000). Telefon icin ek ayar yok.
+ 3) Windows Guvenlik Duvari ilk acilista soru sorar: "Ozel aglar"a izin ver (yoksa telefon baglanamaz).
+    Bilgisayarin IP'si degisirse yeni adresi kullan; router'da bilgisayara sabit IP verilmesi onerilir.
+ 4) Ilk giris: ADMIN_PASSWORD verilmediyse konsolda rastgele admin sifresi yazar (bir kez); girince degistirmeniz istenir.
+    Onerilen: PowerShell'de `$env:ADMIN_PASSWORD="guclu-bir-sifre"; npm start`. Sonra Yonetim'den aile uyelerini ekleyin.
+ 5) Cookie: http (https degil) ile calisir. Internete https ile acarsaniz (ters vekil/Cloudflare tunnel) COOKIE_SECURE=1
+    ve TRUST_PROXY=1 ayarlayin. Dogrudan internete 4000 portunu ACMAYIN (https yok).
+ 6) Veri: backend/data/kutuphane.db (+ covers/). Yedek: Yonetim'de "Yedek indir" (GET /api/admin/backup) ya da dosyayi kopyalayin.
+ 7) Katalogu doldurmak istege bagli: `npm run seed` (kitap/dizi; film Wikidata hiz siniri nedeniyle `npm run seed -- movie` ayri).
+ 8) Gelistirme: `npm run dev` (4000) + frontend `npm run dev` (5173, /api proxy). Baska portta backend icin CORS_ORIGIN.
+
+[v5] feed.cards[].current_streak eklendi (sozlesme guncel). Elestiri'de bana ait acik madde kalmadi: E-17 backend ucu (GET /api/entries?user_id=, GET /api/catalog/:id) hazir ve sozlesmede, E-20 admin katalog uclari hazir. TAMAMLANDI, bekliyorum. Kalan bilinen: film seed'i (Wikidata 429 sinirina bagli), E-22 film aramasi recall'u.
