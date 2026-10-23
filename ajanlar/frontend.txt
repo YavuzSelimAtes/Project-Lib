@@ -66,6 +66,10 @@ TUR 3 (elestiri/test_raporu frontend maddeleri):
    bos=0, "Bugun: kalan N") veya "Gunlere esit dagit" (uyari: rekora/seriye sayilmaz); backfill her zaman gonderilir.
    60 gunden uzun aralikta yalniz esit dagit. Canli: 30. sayfa, 3 gun once, 10/0/5 girildi -> loglar
    20.10:10, 21.10:0, 22.10:5, bugun:15 (gercek, estimated=false).
+  TUR 7 (mobil, gercek iPhone Safari bildirimi): detay penceresinde ✕ dugmesi ekran disina kayiyordu (100vh adres
+   cubugunu icerdigi icin). Cozum: overlay/modal 100dvh, modal basligi sticky (✕ her zaman gorunur, 44px), alt sayfa
+   (bottom sheet) gorunumu, safe-area, input 16px (iOS zoom yok), viewport-fit=cover. 360px ve 320px'te tum sayfalar
+   (ana, liderlik, rafim, uye, yonetim 4 sekme) yatay tasma OLCULDU: yok. Kaydirmada ✕ konumu sabit (67-111px).
   UCTAN UCA TARAYICI DOGRULAMASI (gercek backend, ekran goruntuleri alindi):
    - E-02 [DOGRULANDI] taze DB + rastgele admin sifresi -> giris -> kapatilamaz "Sifreni degistir" penceresi acildi;
      eski+yeni sifre arayuzden girildi -> pencere kapandi, uygulama acildi.

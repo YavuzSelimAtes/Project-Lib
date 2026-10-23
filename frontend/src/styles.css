@@ -28,7 +28,9 @@
   --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; max-width: 100%; overflow-x: hidden; }
+html { -webkit-text-size-adjust: 100%; }
+img, svg { max-width: 100%; }
 body {
   font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: var(--bg);
@@ -86,6 +88,7 @@ input[type='text'], input[type='password'], input[type='number'], input[type='da
   width: 100%; border: 1.5px solid var(--line); background: var(--surface); border-radius: 12px; padding: 10px 12px;
 }
 textarea { resize: vertical; min-height: 70px; }
+input[type='file'] { max-width: 100%; }
 label.field { display: block; font-weight: 700; font-size: 0.9rem; margin-bottom: 12px; }
 label.field > :not(span) { margin-top: 4px; font-weight: 400; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -144,13 +147,24 @@ label.field > :not(span) { margin-top: 4px; font-weight: 400; }
 }
 
 /* ---- modal ---- */
-.overlay { position: fixed; inset: 0; background: rgba(20, 14, 8, 0.55); z-index: 50; display: grid; place-items: center; padding: 12px; }
-.modal {
-  background: var(--bg); border-radius: 22px; width: min(640px, 100%); max-height: 92vh; overflow: auto;
-  padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+.overlay {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0; height: 100vh; height: 100dvh;
+  background: rgba(20, 14, 8, 0.55); z-index: 50; display: grid; place-items: center; padding: 12px;
 }
-.modal h2 { margin: 0 0 12px; font-size: 1.25rem; }
-.modal-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.modal {
+  background: var(--bg); border-radius: 22px; width: min(640px, 100%);
+  max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px);
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 0 20px 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.modal h2 { margin: 0; font-size: 1.25rem; min-width: 0; overflow-wrap: anywhere; }
+/* kapat dugmesi her zaman gorunur kalsin: baslik yapiskan */
+.modal-head {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 16px 0 10px; margin-bottom: 4px;
+}
+.modal-head .icon-btn { flex: none; width: 44px; height: 44px; }
 
 /* ---- tabs ---- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -204,5 +218,11 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
   .pod .val { font-size: 1.2rem; }
   .fab { right: 12px; bottom: 76px; }
   .overlay { padding: 0; align-items: end; }
-  .modal { border-radius: 22px 22px 0 0; max-height: 94vh; }
+  .modal { border-radius: 22px 22px 0 0; max-height: 92vh; max-height: 92dvh; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
+  input, select, textarea { font-size: 16px; } /* iOS odakta yakinlastirmasin */
+  input[type='date'] { min-width: 0; }
+  .row > input.grow, .row > .field.grow { min-width: 150px; }
+  .quick input[type='date'] { flex: 1 1 140px; }
+  .grid { grid-template-columns: 1fr; }
+  table.t { display: block; overflow-x: auto; }
 }
