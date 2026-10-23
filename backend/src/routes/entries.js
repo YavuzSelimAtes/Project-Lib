@@ -1,7 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, int, date as vdate, oneOf, todayStr, nowIso, addDays, diffDays } from '../util.js';
 import { tx } from '../db.js';
-import { getEntry, entryOut, applyProgress } from '../services/entries.js';
+import { getEntry, entryOut, applyProgress, openDays, setDayPages } from '../services/entries.js';
 import { pickByKey } from '../services/catalog.js';
 import { userStats } from '../services/stats.js';
 
@@ -179,6 +179,36 @@ export default async function routes(app) {
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
     return { entry: entryOut(db, entry), delta: r.delta, pages_read_on_date: r.pagesOnDate, date: d, finished: r.finished, spread_days: r.spread, estimated: r.estimated };
+  });
+
+  // Gun gun okuma: "kac sayfa okudun?" diye sorulacak acik gunler
+  app.get('/api/entries/:id/open-days', async (req) => {
+    const me = requireUser(req);
+    const e = getEntry(db, Number(req.params.id));
+    if (!e) throw err(404, 'Kayit bulunamadi');
+    if (e.user_id !== me.id) throw err(403, 'Sadece kendi kaydinizin gunlerini gorebilirsiniz');
+    const days = openDays(db, e);
+    return { days, count: days.length };
+  });
+
+  // Gun bazli sayfa girisi: { days:[{date, pages}], add?:true } ya da { skip_open:true } (acik gunlerin hepsi "okumadim")
+  app.put('/api/entries/:id/day-logs', async (req) => {
+    const me = requireUser(req);
+    const id = Number(req.params.id);
+    const e0 = getEntry(db, id);
+    if (!e0) throw err(404, 'Kayit bulunamadi');
+    if (e0.user_id !== me.id) throw err(403, 'Sadece kendi kaydinizin okumalarini girebilirsiniz');
+    const b = req.body || {};
+    let list = [];
+    if (b.skip_open === true) list = openDays(db, e0).filter((d) => d.state === 'open').map((d) => ({ date: d.date, pages: 0 }));
+    else {
+      if (!Array.isArray(b.days) || !b.days.length || b.days.length > 120) throw bad('days: 1-120 ogeli dizi ya da skip_open:true gonderin');
+      list = b.days.map((d) => ({ date: vdate(d?.date, { field: 'date', required: true }), pages: int(d?.pages, { min: 0, max: 20000, field: 'pages', required: true }) }));
+    }
+    list.sort((a, c) => a.date.localeCompare(c.date));
+    tx(db, () => { for (const d of list) setDayPages(db, getEntry(db, id), d.date, d.pages, { add: b.add === true }); });
+    const entry = entryOut(db, getEntry(db, id));
+    return { entry, applied: list.length, open_days: openDays(db, getEntry(db, id)) };
   });
 
   app.post('/api/entries/:id/series-progress', async (req) => {

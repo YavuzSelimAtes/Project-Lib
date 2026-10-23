@@ -147,3 +147,84 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
   const pagesOnDate = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE entry_id=? AND date=?').get(e.id, date).s;
   return { delta, pagesOnDate, finished, spread, estimated };
 }
+
+// ---------- gun gun okuma kaydi ----------
+const OPEN_WINDOW = 90;
+
+// Kullanicinin "kac sayfa okudun?" diye sorulabilecek gunleri: satiri hic olmayan ('open') ve
+// tahmini ('estimated') gunler. 'Okumadim' (0) ve gercek girilmis gunler listelenmez.
+export function openDays(db, e, today = todayStr()) {
+  if (e.type !== 'book' || e.status === 'planlandi') return [];
+  const rows = db.prepare('SELECT date,pages_read,estimated FROM reading_logs WHERE entry_id=?').all(e.id);
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+  const first = rows.length ? rows.map((r) => r.date).sort()[0] : null;
+  let from = e.start_date || first || today;
+  if (first && first < from) from = first;
+  const to = e.status === 'devam' ? today : (e.end_date || today);
+  if (diffDays(from, to) < 0) return [];
+  if (diffDays(from, to) + 1 > OPEN_WINDOW) from = addDays(to, -(OPEN_WINDOW - 1));
+  const out = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const r = byDate.get(d);
+    if (!r) out.push({ date: d, state: 'open', pages: 0 });
+    else if (r.estimated) out.push({ date: d, state: 'estimated', pages: r.pages_read });
+  }
+  return out;
+}
+
+// Tek gunun okunan sayfasini ayarla (pages>=0; 0 = okumadim). add=true ise mevcut gercek degere EKLER.
+// Gercek (estimated=0) satir yazilir. Tahmini bir satir degistiriliyorsa fark diger tahmini satirlara dagitilir
+// (kullanicinin "su an X. sayfadayim" bilgisi bozulmasin); dagitilacak satir yoksa current_page degisir.
+export function setDayPages(db, e, date, pages, { add = false } = {}) {
+  const today = todayStr();
+  if (e.type !== 'book') throw bad('Gunluk sayfa kaydi sadece kitaplar icindir');
+  if (!e.total_pages) throw bad('Once kitabin toplam sayfa sayisini girin', { total_pages: 'gerekli' });
+  if (date > today) throw bad('Gelecek bir gun icin kayit girilemez', { date: 'gelecek tarih' });
+  if (e.start_date && date < e.start_date) throw bad('Tarih baslangic tarihinden once olamaz', { date: 'baslangictan once' });
+  const row = db.prepare('SELECT * FROM reading_logs WHERE entry_id=? AND date=?').get(e.id, date);
+  const old = row ? row.pages_read : 0;
+  const wasEst = !!row?.estimated;
+  const next = add && row && !wasEst ? old + pages : pages;
+  if (next < 0) throw bad('Sayfa negatif olamaz', { pages: 'negatif' });
+  let diff = next - old;
+  let current = e.current_page;
+  if (wasEst && diff !== 0) {
+    const others = db.prepare('SELECT * FROM reading_logs WHERE entry_id=? AND estimated=1 AND date<>? AND pages_read>0').all(e.id, date);
+    if (others.length) {
+      // diff>0: gunun payi artti -> diger tahminlerden dus; diff<0: artir
+      let need = diff; // dusulecek miktar (negatifse eklenecek)
+      const cap = others.reduce((a, r) => a + r.pages_read, 0);
+      if (need > cap) throw bad(`Bu gun icin en fazla ${old + cap} sayfa girilebilir (kalan gunlerin tahmini sayfalari bu kadar)`, { pages: 'fazla' });
+      const n = others.length;
+      const order = [...others].sort((a, b) => b.date.localeCompare(a.date));
+      const base = Math.trunc(need / n);
+      let rest = need - base * n;
+      for (const r of order) {
+        let take = base + (rest > 0 ? 1 : rest < 0 ? -1 : 0);
+        if (rest > 0) rest--; else if (rest < 0) rest++;
+        take = Math.min(take, r.pages_read);
+        db.prepare('UPDATE reading_logs SET pages_read=?, page_to=page_from+? WHERE id=?').run(r.pages_read - take, r.pages_read - take, r.id);
+      }
+      diff = 0;
+    }
+  }
+  current += diff;
+  if (current < 0) throw bad('Sayfa sayisi 0\'in altina dusemez', { pages: 'cok dusuk' });
+  if (current > e.total_pages) throw bad(`Toplam sayfa sayisini (${e.total_pages}) asiyor`, { pages: 'toplamdan buyuk' });
+  if (row) db.prepare('UPDATE reading_logs SET pages_read=?, page_from=?, page_to=?, estimated=0 WHERE id=?').run(next, Math.max(0, current - next), current, row.id);
+  else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,0)').run(e.id, e.user_id, date, Math.max(0, current - next), current, next);
+  db.prepare('DELETE FROM reading_logs WHERE entry_id=? AND estimated=1 AND pages_read=0').run(e.id);
+  let status = e.status;
+  let start = e.start_date;
+  let end = e.end_date;
+  if (!start) start = date;
+  if (current === e.total_pages) {
+    status = 'bitti';
+    end = db.prepare('SELECT MAX(date) d FROM reading_logs WHERE entry_id=? AND pages_read>0').get(e.id).d || date;
+  } else if (status !== 'devam' && (next > 0 || diff !== 0)) {
+    status = 'devam';
+    end = null;
+  }
+  db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?').run(current, status, start, end, nowIso(), e.id);
+  return { pages: next, date };
+}

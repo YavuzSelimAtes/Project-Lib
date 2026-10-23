@@ -1,7 +1,7 @@
 =====================================================================
  API SOZLESMESI  (backend yazar, frontend + test bunu okur)
 =====================================================================
-SON DEGISIKLIK: 2026-10-23 v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
+SON DEGISIKLIK: 2026-10-23 v6 (bolum 9: open-days + day-logs) -- onceki: v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
    confirm:true, geri alma log SILMEZ, base_page/"tarih yok" (avg_source:no_dates), arayuz backend
    tarafindan sunulur (frontend/dist), GET/PATCH /api/admin/catalog, feed more_count, yonetici karti
    gizlenir) -- onceki: v3 (yonetici kararlari) [v3] ile isaretli:
@@ -349,3 +349,22 @@ Liderlik: hepsi  GET .../leaderboards/<ad>?period=all|year|month   [U]
 GET /api/health  [-]  -> { "ok":true, "time":"..." }
 GET /api/covers/<dosya>  [-]  kapak resmi (statik, cache header'li)
 =====================================================================
+
+=====================================================================
+9) [v6] GUN GUN OKUMA (gecmis gunleri doldurma / "okumadim")
+=====================================================================
+GET /api/entries/:id/open-days   [sahibi]   -> { "days":[ {"date":"2026-10-21","state":"open"|"estimated","pages":0} ], "count":3 }
+   Soru sorulacak gunler: baslangic tarihinden (en fazla son 90 gun) bugune kadar, hic kaydi OLMAYAN ("open") ve
+   tahmini ("estimated": kullanici atlayip toplu sayfa girince dagitilmis) gunler. Gercek girilmis ve "okumadim"
+   (0) isaretli gunler listelenmez.
+PUT /api/entries/:id/day-logs    [sahibi]
+   Istek : { "days":[ {"date":"2026-10-21","pages":30}, {"date":"2026-10-22","pages":0} ], "add"?:true }
+           ya da { "skip_open":true }   // acik ("open") gunlerin hepsi "okumadim" (0) olur
+   - pages = O GUN okunan sayfa (kumulatif sayfa NO degil). 0 = okumadim (gun kapanir, bir daha sorulmaz).
+   - add:true -> o gunun mevcut GERCEK degerine ekler (arayuzde "bugun +N ekle"); yoksa degeri degistirir.
+   - Satir gercek (estimated=false) olur: seriyi (streak) ve rekoru gunceller.
+   - current_page otomatik guncellenir (current_page = onceki + fark). Tahmini bir gunu degistirirken fark diger
+     tahmini gunlere dagitilir, "su an X. sayfadayim" degismez; dagitilacak tahmini gun kalmadiysa current_page degisir.
+   - Toplam sayfayi asarsa 400; son sayfaya ulasilirsa kitap "bitti" olur; gelecek tarih / baslangictan onceki tarih 400.
+   Cevap : 200 { "entry":entry, "applied":2, "open_days":[...kalan acik gunler...] }
+   Mevcut POST /progress (kumulatif sayfa + opsiyonel date) AYNEN calisir; geriye donuk tarih icin de kullanilabilir.

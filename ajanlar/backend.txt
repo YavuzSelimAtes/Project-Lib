@@ -163,3 +163,5 @@ AILEYE KURULUM
  8) Gelistirme: `npm run dev` (4000) + frontend `npm run dev` (5173, /api proxy). Baska portta backend icin CORS_ORIGIN.
 
 [v5] feed.cards[].current_streak eklendi (sozlesme guncel). Elestiri'de bana ait acik madde kalmadi: E-17 backend ucu (GET /api/entries?user_id=, GET /api/catalog/:id) hazir ve sozlesmede, E-20 admin katalog uclari hazir. TAMAMLANDI, bekliyorum. Kalan bilinen: film seed'i (Wikidata 429 sinirina bagli), E-22 film aramasi recall'u.
+
+[v6] Gun gun okuma uclari eklendi (API_SOZLESMESI bolum 9): GET /entries/:id/open-days, PUT /entries/:id/day-logs. Frontend UI bekleniyor.
