@@ -62,6 +62,10 @@ TUR 3 (elestiri/test_raporu frontend maddeleri):
    Acik gunler: kartta "📅 N gun bos - doldur", detayda gun gun liste (sayfa gir / "Okumadim" / "Girdiklerimi kaydet" /
    "Hepsini okumadim" -> skip_open). Sayfa NO duzeltme detayda "Sayfa numarasini duzelt" (progress + confirm).
    Canli denendi (ayse): +5 eklendi, "1 gun bos" paneli acildi, "Okumadim" ile kapandi.
+  TUR 6 (API v7): Kitap eklerken sayfa>0 + gecmis baslangic -> "Gun gun doldur" (start..dun her gun icin sayfa,
+   bos=0, "Bugun: kalan N") veya "Gunlere esit dagit" (uyari: rekora/seriye sayilmaz); backfill her zaman gonderilir.
+   60 gunden uzun aralikta yalniz esit dagit. Canli: 30. sayfa, 3 gun once, 10/0/5 girildi -> loglar
+   20.10:10, 21.10:0, 22.10:5, bugun:15 (gercek, estimated=false).
   UCTAN UCA TARAYICI DOGRULAMASI (gercek backend, ekran goruntuleri alindi):
    - E-02 [DOGRULANDI] taze DB + rastgele admin sifresi -> giris -> kapatilamaz "Sifreni degistir" penceresi acildi;
      eski+yeni sifre arayuzden girildi -> pencere kapandi, uygulama acildi.

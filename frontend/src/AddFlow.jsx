@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { Cover, ErrorBox, Modal, TYPE_ICON, TYPE_LABEL, today } from './ui.jsx';
+import { Cover, ErrorBox, Modal, TYPE_ICON, TYPE_LABEL, fmtDate, today, yesterday } from './ui.jsx';
+
+// "2026-10-20".."2026-10-22" -> ["2026-10-20","2026-10-21","2026-10-22"]
+function daysBetween(from, to) {
+  const out = [];
+  const d = new Date(from + 'T00:00:00Z');
+  const end = new Date(to + 'T00:00:00Z');
+  while (d <= end && out.length < 400) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
 
 const TYPES = [
   ['book', '📖 Kitap'],
@@ -112,6 +124,15 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
   const [unknownStart, setUnknownStart] = useState(false);
   const [curPage, setCurPage] = useState('');
   const finishedPast = !isMovie && status === 'bitti';
+  // gecmis baslangic + sayfa>0: gunleri doldurma secimi (v7)
+  const needsBackfill = isBook && status === 'devam' && Number(curPage) > 0 && start && start < today();
+  const pastDays = needsBackfill ? daysBetween(start, yesterday()) : [];
+  const manualOk = pastDays.length > 0 && pastDays.length <= 60;
+  const [mode, setMode] = useState('manual');
+  const [dayVals, setDayVals] = useState({});
+  const effMode = manualOk ? mode : 'spread';
+  const sumDays = pastDays.reduce((a, d) => a + (Number(dayVals[d]) || 0), 0);
+  const remainder = Number(curPage) - sumDays;
 
   const save = async (e) => {
     e.preventDefault();
@@ -130,6 +151,13 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
         body.end_date = end;
       } else if (status !== 'planlandi') body.start_date = start;
       if (isBook && status === 'devam' && Number(curPage) > 0) body.current_page = Number(curPage);
+      if (needsBackfill && pastDays.length > 0) {
+        if (effMode === 'manual') {
+          if (remainder < 0) throw new Error(`Girdiğin günlerin toplamı (${sumDays}) şu anki sayfadan (${curPage}) büyük olamaz.`);
+          body.backfill = 'manual';
+          body.days = pastDays.map((d) => ({ date: d, pages: Number(dayVals[d]) || 0 }));
+        } else body.backfill = 'spread';
+      }
       if (isBook) body.total_pages = Number(pages);
       if (rating) body.rating = Number(rating);
       await api.createEntry(body);
@@ -193,6 +221,34 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
             <span>Toplam sayfa</span>
             <input type="number" min="1" value={pages} onChange={(e) => setPages(e.target.value)} placeholder="örn. 320" />
           </label>
+        )}
+        {needsBackfill && pastDays.length > 0 && (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <b>Geçen günleri nasıl sayalım?</b>
+            <label style={{ display: 'block', margin: '8px 0 2px' }}>
+              <input type="radio" name="bf" checked={effMode === 'manual'} disabled={!manualOk} onChange={() => setMode('manual')} /> Gün gün doldur
+              {!manualOk && <span className="small muted"> (60 günden uzun aralıkta kapalı)</span>}
+            </label>
+            <label style={{ display: 'block' }}>
+              <input type="radio" name="bf" checked={effMode === 'spread'} onChange={() => setMode('spread')} /> Günlere eşit dağıt
+            </label>
+            {effMode === 'spread' ? (
+              <p className="small muted">Sayfalar günlere eşit dağıtılacak; bu günler rekora ve günlük seriye sayılmaz.</p>
+            ) : (
+              <>
+                <p className="small muted" style={{ margin: '8px 0' }}>Her gün kaç sayfa okudun? Boş bırakırsan “okumadım” sayılır.</p>
+                {pastDays.map((d) => (
+                  <div className="row" key={d} style={{ marginBottom: 4, flexWrap: 'nowrap' }}>
+                    <span style={{ width: 92 }}>{fmtDate(d)}</span>
+                    <input type="number" min="0" inputMode="numeric" className="grow" value={dayVals[d] ?? ''} onChange={(e) => setDayVals((v) => ({ ...v, [d]: e.target.value }))} aria-label={`${d} okunan sayfa`} />
+                  </div>
+                ))}
+                <p className={remainder < 0 ? 'small' : 'small muted'} style={remainder < 0 ? { color: 'var(--danger)' } : undefined}>
+                  {remainder < 0 ? `Toplam ${sumDays}, şu anki sayfadan fazla.` : `Bugün: kalan ${remainder} sayfa bugüne yazılacak.`}
+                </p>
+              </>
+            )}
+          </div>
         )}
         {(isMovie || status === 'bitti') && (
           <label className="field">
