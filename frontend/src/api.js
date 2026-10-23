@@ -70,6 +70,8 @@ export const api = {
   deleteEntry: (id) => request('DELETE', `/entries/${id}`),
   progress: (id, current_page, date, confirm) =>
     request('POST', `/entries/${id}/progress`, { current_page, ...(date ? { date } : {}), ...(confirm ? { confirm: true } : {}) }),
+  openDays: (id) => request('GET', `/entries/${id}/open-days`),
+  dayLogs: (id, body) => request('PUT', `/entries/${id}/day-logs`, body),
   adminCatalog: (params) => request('GET', '/admin/catalog' + qs(params)),
   adminUpdateCatalog: (id, data) => request('PATCH', `/admin/catalog/${id}`, data),
   adminDeleteCatalog: (id) => request('DELETE', `/admin/catalog/${id}`),

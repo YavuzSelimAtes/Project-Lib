@@ -57,6 +57,11 @@ TUR 3 (elestiri/test_raporu frontend maddeleri):
    penceresinde ✕ gizli. H-012 [YAPILDI] /uye/999 ve /uye/abc -> "Bu uye bulunamadi" + "Ana sayfaya don" (canli denendi).
    Fikir #9 "Listeme al" [YAPILDI]: baska uyenin kitap/dizi kaydi detayinda kucuk dugme -> POST /entries
    {catalog_id, status:'planlandi'}; canli: "Listene eklendi". Yeni ekran yok. Film icin gosterilmez.
+  TUR 5 (proje sahibi istegi, API v6): "+10" ve "dun icin" kaldirildi. Kitap kartinda "Kac sayfa? [tarih=bugun
+   (Istanbul)] Ekle" -> PUT /entries/:id/day-logs {days:[{date,pages}], add:true}; input = O GUN okunan sayfa.
+   Acik gunler: kartta "📅 N gun bos - doldur", detayda gun gun liste (sayfa gir / "Okumadim" / "Girdiklerimi kaydet" /
+   "Hepsini okumadim" -> skip_open). Sayfa NO duzeltme detayda "Sayfa numarasini duzelt" (progress + confirm).
+   Canli denendi (ayse): +5 eklendi, "1 gun bos" paneli acildi, "Okumadim" ile kapandi.
   UCTAN UCA TARAYICI DOGRULAMASI (gercek backend, ekran goruntuleri alindi):
    - E-02 [DOGRULANDI] taze DB + rastgele admin sifresi -> giris -> kapatilamaz "Sifreni degistir" penceresi acildi;
      eski+yeni sifre arayuzden girildi -> pencere kapandi, uygulama acildi.

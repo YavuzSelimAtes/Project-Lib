@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from './api.js';
 import { useAuth } from './auth.js';
 import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, timeAgo, useAsync } from './ui.jsx';
-import QuickUpdate from './QuickUpdate.jsx';
+import QuickUpdate, { OpenDays } from './QuickUpdate.jsx';
 
 const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı', planlandi: 'Planlandı' };
 
@@ -73,10 +73,12 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
                   onSaved={() => changed()}
                 />
               )}
+              {mine && e.type === 'book' && e.status === 'devam' && <PageFix e={e} onChanged={changed} />}
               {!mine && e.type !== 'movie' && <WishButton catalogId={cat.id} />}
               {mine && <OwnerActions e={e} onChanged={changed} onClose={onClose} />}
             </div>
           </div>
+          {mine && e.type === 'book' && e.status === 'devam' && <OpenDays key={'od' + version + e.updated_at} entryId={e.id} onChanged={changed} />}
           {cat.description && (
             <p className="small muted" style={{ maxHeight: 90, overflow: 'auto' }}>
               {cat.description}
@@ -92,6 +94,48 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
         </>
       )}
     </Modal>
+  );
+}
+
+// Sayfa numarasini duzelt ("su an X. sayfadayim")
+function PageFix({ e, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState(e.current_page ?? '');
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (!open) {
+    return (
+      <button className="btn small ghost" style={{ marginTop: 6 }} onClick={() => setOpen(true)}>
+        ✏️ Sayfa numarasını düzelt
+      </button>
+    );
+  }
+  const save = async (ev) => {
+    ev.preventDefault();
+    const n = Number(val);
+    if (!Number.isInteger(n) || n < 1 || (e.total_pages && n > e.total_pages)) return setErr(new Error('1 ile toplam sayfa arasında bir sayı yaz.'));
+    const back = n < (e.current_page || 0);
+    if (back && !window.confirm(`${e.current_page}. sayfadan ${n}. sayfaya düşüyorsun (düzeltme olarak kaydedilir). Emin misin?`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.progress(e.id, n, undefined, back);
+      setOpen(false);
+      onChanged();
+    } catch (x) {
+      setErr(x);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="quick" onSubmit={save}>
+      <label className="small muted">Şu an</label>
+      <input type="number" min="1" max={e.total_pages || undefined} value={val} onChange={(x) => setVal(x.target.value)} aria-label="Şu anki sayfa" />
+      <span className="small muted">. sayfadayım</span>
+      <button className="btn small" disabled={busy}>Kaydet</button>
+      <ErrorBox error={err} />
+    </form>
   );
 }
 

@@ -50,7 +50,7 @@ function FeedItem({ it, mine, color, onOpen, onSaved }) {
           {book && it.total_pages ? <Progress value={it.percent} color={color} /> : null}
         </div>
       </button>
-      {live && <div style={{ paddingLeft: 6 }}><QuickUpdate entry={entry} onSaved={onSaved} key={it.updated_at} /></div>}
+      {live && <div style={{ paddingLeft: 6 }}><QuickUpdate entry={entry} onSaved={onSaved} onOpen={() => onOpen(it.entry_id)} key={it.updated_at} /></div>}
     </div>
   );
 }
