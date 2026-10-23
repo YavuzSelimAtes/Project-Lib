@@ -228,3 +228,43 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
   db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?').run(current, status, start, end, nowIso(), e.id);
   return { pages: next, date };
 }
+
+// Kayit acilirken "su an X. sayfadayim" + gecmis baslangic: sayfalar gecmis gunlere yazilir.
+//  mode 'manual': days = baslangic..dun arasi gunler icin okunan sayfa (bos/0 = okumadim, GERCEK satir);
+//                 kalan (current_page - toplam) BUGUNE gercek yazilir. Toplam current_page'i asarsa 400.
+//  mode 'spread': current_page, baslangic..dun gunlerine esit bolunur (artan son gunlere), TAHMINI (rekor/seri yok).
+// Baslangic bugunse tek gercek satir bugune yazilir.
+export function backfillLogs(db, e, mode, days) {
+  const today = todayStr();
+  const cur = e.current_page;
+  if (!(cur > 0)) return { rows: 0 };
+  const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,?)');
+  const start = e.start_date;
+  const past = start && start < today ? diffDays(start, today) : 0; // baslangic..dun gun sayisi
+  let page = 0;
+  let rows = 0;
+  const put = (date, p, est) => { ins.run(e.id, e.user_id, date, page, page + p, p, est ? 1 : 0); page += p; rows++; };
+  if (past === 0) { put(today, cur, false); return { rows }; }
+  const dates = Array.from({ length: Math.min(past, 90) }, (_, i) => addDays(today, -(Math.min(past, 90) - i)));
+  if (mode === 'spread') {
+    const n = dates.length;
+    const base = Math.floor(cur / n);
+    const rest = cur % n;
+    dates.forEach((d, i) => { const p = base + (i >= n - rest ? 1 : 0); if (p > 0) put(d, p, true); });
+    return { rows };
+  }
+  const given = new Map();
+  for (const d of days || []) {
+    if (!dates.includes(d.date)) throw bad(`${d.date} gunu baslangic (${start}) ile dun arasinda olmali`, { days: 'gecersiz tarih' });
+    given.set(d.date, d.pages);
+  }
+  const sum = [...given.values()].reduce((a, b) => a + b, 0);
+  if (sum > cur) throw bad(`Girdiginiz gunluk sayfalarin toplami (${sum}), su an bulundugunuz sayfayi (${cur}) asiyor`, { days: 'toplam fazla' });
+  for (const d of dates) { // bos birakilan gun = okumadim (0, gercek satir)
+    const p = given.get(d) || 0;
+    if (p > 0) put(d, p, false);
+    else { ins.run(e.id, e.user_id, d, page, page, 0, 0); rows++; }
+  }
+  if (cur - sum > 0) put(today, cur - sum, false);
+  return { rows };
+}

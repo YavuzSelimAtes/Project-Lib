@@ -1,7 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, int, date as vdate, oneOf, todayStr, nowIso, addDays, diffDays } from '../util.js';
 import { tx } from '../db.js';
-import { getEntry, entryOut, applyProgress, openDays, setDayPages } from '../services/entries.js';
+import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs } from '../services/entries.js';
 import { pickByKey } from '../services/catalog.js';
 import { userStats } from '../services/stats.js';
 
@@ -90,9 +90,19 @@ export default async function routes(app) {
     if (start && start > today && status !== 'planlandi') throw bad('Baslangic tarihi gelecekte olamaz', { start_date: 'gelecek tarih' });
     if (end && end > today) throw bad('Bitis tarihi gelecekte olamaz', { end_date: 'gelecek tarih' });
     const rating = ratingOf(b.rating === undefined ? null : b.rating);
+    const backfill = oneOf(b.backfill, ['none', 'manual', 'spread'], { field: 'backfill' }) || 'none';
+    let backDays = [];
+    if (backfill === 'manual' && b.days !== undefined) {
+      if (!Array.isArray(b.days) || b.days.length > 120) throw bad('days dizi olmali (en fazla 120)', { days: 'gecersiz' });
+      backDays = b.days.map((d) => ({ date: vdate(d?.date, { field: 'date', required: true }), pages: int(d?.pages, { min: 0, max: 20000, field: 'pages' }) || 0 }));
+    }
+    if (backfill !== 'none' && !(type === 'book' && status === 'devam' && cur > 0)) throw bad('backfill sadece current_page>0 olan, devam eden kitaplar icindir', { backfill: 'gecersiz' });
     const now = nowIso();
     const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,season,episode,rating,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, status === 'bitti' ? 0 : cur, season, episode, rating, now, now);
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, season, episode, rating, now, now);
+    if (backfill !== 'none') {
+      try { backfillLogs(db, getEntry(db, info.lastInsertRowid), backfill, backDays); } catch (e) { db.prepare('DELETE FROM entries WHERE id=?').run(info.lastInsertRowid); throw e; }
+    }
     reply.code(201);
     return { entry: entryOut(db, getEntry(db, info.lastInsertRowid)) };
   });

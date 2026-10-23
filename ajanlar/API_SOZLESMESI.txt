@@ -1,7 +1,7 @@
 =====================================================================
  API SOZLESMESI  (backend yazar, frontend + test bunu okur)
 =====================================================================
-SON DEGISIKLIK: 2026-10-23 v6 (bolum 9: open-days + day-logs) -- onceki: v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
+SON DEGISIKLIK: 2026-10-23 v7 (POST /entries backfill: manual|spread) -- onceki: v6 (bolum 9: open-days + day-logs) -- onceki: v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
    confirm:true, geri alma log SILMEZ, base_page/"tarih yok" (avg_source:no_dates), arayuz backend
    tarafindan sunulur (frontend/dist), GET/PATCH /api/admin/catalog, feed more_count, yonetici karti
    gizlenir) -- onceki: v3 (yonetici kararlari) [v3] ile isaretli:
@@ -368,3 +368,18 @@ PUT /api/entries/:id/day-logs    [sahibi]
    - Toplam sayfayi asarsa 400; son sayfaya ulasilirsa kitap "bitti" olur; gelecek tarih / baslangictan onceki tarih 400.
    Cevap : 200 { "entry":entry, "applied":2, "open_days":[...kalan acik gunler...] }
    Mevcut POST /progress (kumulatif sayfa + opsiyonel date) AYNEN calisir; geriye donuk tarih icin de kullanilabilir.
+
+[v7] KAYIT ACARKEN GECMIS GUNLERI DOLDURMA  (POST /api/entries)
+   Kitap 'devam', current_page>0 ve start_date gecmisteyse arayuz KAYIT ACARKEN su secimi sormali ve gondermeli:
+     "backfill":"manual" + "days":[{"date":"2026-10-20","pages":20}, ...]   // GUN GUN DOLDUR
+         days = start_date..DUN arasi gunler icin o gun okunan sayfa. Bos birakilan/verilmeyen gun = 0 (okumadim,
+         gercek satir). GERCEK satirlar: rekora ve seriye islenir. Toplam < current_page ise kalan BUGUNE gercek yazilir
+         (arayuz "bugun: kalan N" gostersin). Toplam > current_page -> 400.
+     "backfill":"spread"                                                  // GUNLERE ESIT DAGIT
+         current_page, start_date..DUN gunlerine esit bolunur (38 / 3 gun -> 12,13,13), TAHMINI: rekora ve seriye
+         EKLENMEZ, ortalamaya girer. ARAYUZ UYARISI (kullaniciya goster): "Sayfalar gunlere esit dagitilacak; bu gunler
+         rekora ve gunluk seriye sayilmaz."
+     start_date bugunse (gecmis gun yoksa) iki secenek de tek gercek satir olarak bugune yazar.
+     backfill gonderilmezse (varsayilan "none") eski davranis: current_page "onceden okunmus" sayilir (base_page);
+     sonradan day-logs ile gun girilirse sayfa ONUN USTUNE eklenir (38 + 28 = 66 gibi). Bu yuzden current_page>0 ve
+     gecmis baslangicta backfill her zaman sorulmali. backfill yalniz kitap + devam + current_page>0 icin gecerli.
