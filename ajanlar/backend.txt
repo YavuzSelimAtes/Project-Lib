@@ -1,7 +1,7 @@
 =====================================================================
  BACKEND - backend.txt
 =====================================================================
-SON GUNCELLEME: 2026-10-23 (v4: E-15..E-26, H-001..H-007, aileye kurulum)
+SON GUNCELLEME: 2026-10-24 04:00 (v5.1 duzeltme turu TAMAM: en alttaki "v5.1" bolumu) -- onceki: 2026-10-24 (v5 YENI_ISTEKLER 1-7 TAMAM: "v5 TURU" bolumu) -- onceki: 2026-10-23 (v4: E-15..E-26, H-001..H-007, aileye kurulum)
 
 DURUM OZETI
 -----------
@@ -167,3 +167,117 @@ AILEYE KURULUM
 [v6] Gun gun okuma uclari eklendi (API_SOZLESMESI bolum 9): GET /entries/:id/open-days, PUT /entries/:id/day-logs. Frontend UI bekleniyor.
 
 [v7] POST /api/entries backfill=manual|spread (gecmis baslangicta gun gun doldur / esit dagit). Sozlesme sonunda.
+
+=====================================================================
+ v5 TURU - YENI_ISTEKLER.txt MADDE 1-7 (BACKEND)   2026-10-24   [YAPILDI, canli denendi]
+=====================================================================
+Sozlesme: ajanlar/API_SOZLESMESI.txt en ustteki "v5" bolumu (V5-1 .. V5-8).
+
+NE YAPILDI
+ 1) PROFIL: users.name_changed; GET /api/avatars (4 grup, 158 emoji; hayvanlar 58); PATCH /api/me/profile (avatar listede olmali,
+    color #rrggbb, display_name 2-30 + HTML temizligi + SADECE BIR KEZ -> 409 "Gorunen ad bir kez degistirilebilir.");
+    admin PATCH reset_name_change:true; admin kullanici ekleme/duzenleme ayni avatar dogrulamasi. name_changed tum user cevaplarinda.
+ 2) BASKI/DIL/YAYINEVI: editions tablosu (+ edition_fetches onbellegi), entries.edition_id; GET /catalog/:id (+editions),
+    GET /catalog/:id/editions?lang= (Open Library works/{id}/editions.json tum sayfalar paralel + Google Books; 7 gun onbellek),
+    search?lang= + kitaplarda languages/editions_count/publisher(s); POST/PATCH entries edition_id (sayfa kurali 400 Turkce);
+    admin POST /catalog/:id/editions, DELETE /admin/editions/:id; entry/feed'de edition{id,language,publisher,pages}.
+ 3) ARAMA: "Baslik / Yazar" | "Baslik - Yazar" | "Baslik, Yazar" | "Baslik | Yazar" ayristirma (OL title=&author= + GB intitle:/inauthor:),
+    Turkce kaynaklar (OL language=tur, GB langRestrict=tr), yerel arama yayinevini de kapsar, kitap sonuclari sorgu kelimelerini
+    (baslik+yazar+yayinevi) kapsama sirasina gore dizilir. Kiril basliklar artik aranabilir (norm Kiril->Latin; eski DB'de norm bir kez yeniden hesaplanir).
+    Google Books devre kesici: 429/403 alinca 10 dk hic denenmez (arama yavaslamaz).
+ 4) DIZI: series_seasons tablosu, TVMaze /shows/:id?embed=episodes (tek istek), yayinlanmis bolum sayisi, GET /catalog/:id/seasons (lazy-fill,
+    devam eden dizide 24 saatten eskiyse yenilenir), pick/entries/import sirasinda otomatik cekim, POST/PATCH/series-progress dogrulamasi
+    (Turkce 400), bilgi yoksa serbest + seasons_unknown, entry/feed'de season_count/episode_count.
+ 5) GET /api/leaderboards/streak ({longest,last_date}, value>0, beraberlikte longest).
+ 6) GET /users/:id/stats?type=: episodes_watched, series_minutes, movie_minutes, episodes_unknown, movie_runtime_unknown (+ type/period echo).
+    Film suresi Wikidata P2047 (birim: dakika/saniye/saat -> dakika); aramada ve secimde gelir, eski filmler stats cagrisinda ARKA PLANDA doldurulur
+    (basarisizsa 30 dk, bulunamayansa 7 gun sonra tekrar). Dizi sezon bilgisi olmayan eski kayitlar da stats'ta arka planda doldurulur.
+ 7) Gun serisi zaten sadece kitap reading_logs'tan (estimated=0); degisiklik yok.
+ DB: tumu migrate()/CREATE IF NOT EXISTS ile (eski semali bir DB ile acilis denendi: kullanici/entry/katalog bozulmadi, yeni tablo-kolonlar eklendi).
+
+KARARLAR / SAPMALAR (YENI_ISTEKLER'e gore)
+ - K12 Stats: "type" sadece dogrulanir ve echo edilir; TUM alanlar hep doner (spec'teki "hepsi her zaman donsun").
+ - K13 Dizi stats period: bitti -> end_date; devam/birakildi -> updated_at gunu (bitis tarihi olmadigi icin). planlandi sayilmaz.
+ - K14 GET /catalog/:id: editions hem item.editions hem ust seviye editions (ikisi de var). Sadece yerel baskilar; internet icin /editions.
+ - K15 Baski secilip pages bilinmiyorsa total_pages NULL (baska baskinin sayfasi varsayilmaz); arayuz sayfa sormali (PATCH total_pages).
+ - K16 Biten kitapta baski degisimi: current_page yeni toplama esitlenir, gunluk okuma logu URETILMEZ (100% kalir).
+ - K17 Dili bos gelen Open Library baskisi: yayinevi adinda "Yayinlari/Yayincilik/Yayinevi/Basimevi/Kitabevi" gecerse dil='tr' tahmin
+    edilir ve language_guessed=true isaretlenir (Is Bankasi baskilarinin cogunda OL dil alani bos).
+ - K18 Sezon listesi sadece izlenebilir (episodes>=1) sezonlari icerir; total_seasons buna gore. Tarihi bos bolum yalnizca dizi "Ended" ise yayinlanmis sayilir.
+ - K19 Ayni dil+sayfa ve birbirini iceren yayinevi adlari ("Is Bankasi Kultur Yayinlari" / "Turkiye Is Bankasi Kultur Yayinlari") tek baski sayilir.
+ - K20 avatar karsilastirmasinda U+FE0F farki yok sayilir; kullanicinin eski (listede olmayan) avatari PATCH'te aynen kalabilir.
+
+ARANAN 5 KITAP (gercek arama, 2026-10-24; Turkce/karaktersiz yazimlar: "Hayvanlardan Tanrilara", "Hayvanlardan Tanrılara" + yazar, vb.)
+ Kaynak durumu: Open Library CALISIYOR. Google Books anahtarsiz kota GUNLUK DOLU ("Queries per day" 429, tum aramalar) -> GB sonucu ALINAMADI,
+ kod hazir ama dogrulanamadi (sahte yanitla birim testi yapildi); Wikidata'da bu 5 eser icin kayit yok (Sapiens Q12411055 haric).
+ a) Hayvanlardan Tanrilara - Harari : BULUNDU (Open Library). Arama eser "Sapiens" (OL17075811W, 86 baski) doner; TR baski OL35319565M =
+      Kolektif Kitap, 2015, 412 sayfa, ISBN 9786055029357. Ayrica seed-extra Turkce adli kayit acar (412 sayfa, TR baski + kapak OL'den baglandi).
+ b) Anna Karenina - Is Bankasi Kultur Yayinlari : BULUNDU (Open Library, baski duzeyinde). Eser OL267096W ("Анна Каренина", 1316 baski).
+      Is Bankasi baskilari: OL35383312M (2018, 1062 sayfa; dil alani bos -> yayinevinden tr tahmini) ve OL35383322M (2015, sayfa yok);
+      /catalog/:id/editions ile gelir. seed-extra kataloga "Turkiye Is Bankasi Kultur Yayinlari, 1062 sayfa" baskisini + OL baglantisini ekler.
+ c) Dikkat Kaygan Zemin - Kral Sakir : BULUNAMADI. OL'de ayni adli kitap Melissa Ayca Yildiran (Ceres, 264 s.) = FARKLI kitap; "Kral Sakir"
+      serisinin 30+ baska kitabi var (Eksik Parca Yayinlari) ama bu baslik yok. -> seed-extra kaydi (yazar "Kral Sakir"; yayinevi/sayfa BOS).
+ d) Dunyayi Okuyan Cocuk - Mert Arik : BULUNAMADI. OL'de Mert Arik'in 3 baska kitabi var, bu yok. -> seed-extra kaydi (yayinevi/sayfa BOS).
+ e) Hayta - Anil Basili : BULUNAMADI. OL'de Anil Basili'nin 8 baska kitabi var (Balino, Melodi, ...), "Hayta" yok ("Hayta" arayinca baska
+      yazarlarin ayni adli kitaplari cikiyor). -> seed-extra kaydi (yayinevi/sayfa BOS).
+ seed-extra: backend/src/services/seedExtra.js (+ scripts/seed-extra.js, `npm run seed:extra`). Uygulama acilisinda otomatik (SEED_EXTRA=0 kapatir;
+ kapaklar 3 sn sonra arka planda, SEED_EXTRA_COVERS=0 kapatir). Idempotent: meta tablosunda "seed_extra:<anahtar>" bayragi; bir kez islenen kayda bir daha
+ DOKUNULMAZ (admin silse bile geri gelmez); katalogda zaten varsa yeni kayit acilmaz, sadece eksik baski eklenir. c/d/e icin yalnizca dil=tr bilgisi
+ (bos baski karti) eklendi; yayinevi/sayfa admin tarafindan "Baski ekle" ile tamamlanabilir (POST /api/admin/catalog/:id/editions).
+ Kullanici arama sonucunda c/d/e'yi bulur (yerel kayit en ustte) ve kitap eklerken sayfa sayisini elle girer (total_pages null -> arayuz sormali).
+
+CALISTIRMA NOTU (bu makine)
+ Bu bilgisayarda yalniz Node 20 var (node:sqlite YOK). Denemeler Cursor'un Node 22.22.1'i ile yapildi (node:sqlite calisiyor);
+ asil hedef Node 24 (package.json degismedi). `cd backend && npm install` yapildi (backend/node_modules).
+ Yeni env: SEED_EXTRA=0 (kurator listesini kapat), SEED_EXTRA_COVERS=0 (kapak aramasini kapat). Kendi sunucum: PORT=4010, DB scratchpad'de.
+ Test ajanina: mevcut testler/ (api 17/17, scenarios 7/7, verify-calc 5/5, regression 18/19) taze DB + `node testler/seed-demo.js` sonrasi gecer;
+ regression (g) filmi testler/data/test.db dosyasina dogrudan yazdigi icin baska bir DB_PATH ile calisan sunucuda "unable to open database file"
+ verir (ortam; kod hatasi degil).
+
+BILINEN EKSIKLER (v5)
+ - Google Books yolu canli dogrulanamadi (global gunluk kota dolu); OL tek kaynak. Kota acilinca langRestrict=tr ve intitle/inauthor devreye girer.
+ - Turkce bir kitabin baskilari yalnizca Open Library'de kayitliysa gorunur; OL'de dili/yayinevi bos baski atlanir (cok eksik kayit var).
+ - Arama sonucu id:null iken baski listesi yok (once POST /catalog/pick); search sonuclarindaki publisher(s) yalnizca <=3 baskili OL eserlerinde ve GB'de dolu.
+ - Film suresi yalniz Wikidata'dan; P2047'si olmayan filmler 0 dakika sayilir (movie_runtime_unknown ile bildirilir). Manuel eklenen film/dizi
+   icin sure/sezon yok (admin PATCH ile sure girisi YOK; istenirse eklenir).
+ - TVMaze'de sezon verisi olmayan/eski diziler seasons_unknown kalir; stats'ta episodes_unknown=true ve 0 sayilir (tahmin yok).
+ - Devam eden dizide sezon/bolum sayisi 24 saatten eskiyse bir sonraki sezon/entry erisiminde yenilenir; stats yenilemeyi yapmaz (sadece hic cekilmemisleri doldurur).
+
+=====================================================================
+ v5.1 TURU - ELESTIRI E-28..E-46 / TEST H-024..H-026 / FRONTEND notu (movie_minutes)   2026-10-24
+=====================================================================
+Sozlesme: API_SOZLESMESI.txt en ustte "v5.1". Test: taze DB + seed-demo, tum dosyalar gecti (api 17, scenarios 7, verify-calc 5, regression 18+1 atlanan SPRAY,
+v5 9, v5-baski 9, v5-seri 4, v5-dizi-stats 9, v5-arama 18, YENI testler/v5-1.test.js 9). testler/v5.test.js'te tek assertion guncellendi (asagi E-35).
+[E-28 YAPILDI] bitti kalan kitapta edition_id / total_pages her yone degisir; current_page=total, durum bitti kalir. Devam edende kural duruyor.
+[E-46 YAPILDI] Gecmis istatistik oynamaz: entries.finished_pages (dahili) okunan toplami ESKI degerde sabitler, gunluk log uretilmez; progress/day-logs bu alani
+   sifirlar (kitap yeniden okunursa dogal hesap). Not: biten kitapta acik total_pages artirma da artik log uretmiyor (eskiden tahmini log ekliyordu).
+[E-29 YAPILDI] ensureForPosition: kayit/PATCH/series-progress oncesi 24 saat eskiyse ya da istenen sezon/bolum bilinenden buyukse (dizi "Ended" degilse) TVMaze'den
+   4 sn zaman asimiyla tazeler, hata olursa eski bilgi; GET /catalog/:id/seasons?refresh=1 (30 sn'de bir). E-45 bununla: zaman asimi 12 sn -> 4-5 sn.
+[E-30 YAPILDI] KURAL: period=all konuma gore (eskisi). period!=all: devam/birakildi dizi icin YALNIZ o donemde kaydedilen bolum ilerlemesi (yeni series_progress gunlugu:
+   series-progress ve PATCH season/episode konum farki; kayit ACILIS konumu ve sezon bilgisi olmayan dizi yazilmaz). Gerekce: konum toplami "bu ay 120 bolum" gibi yaniltici.
+   Gunluk tutulmadan once ilerleyen eski kayitlar donemli sayimda 0 sayilir (tahmin yok).
+[E-31 YAPILDI] bitti dizinin bolum/dakikasi bitis aninda entry'ye sabitlenir (finished_episodes/minutes); sabitlenmemis eski kayit ilk istatistik hesabinda (bilgi varsa)
+   sabitlenir. Bitti olan donemli sayimda bitis tarihine yazilir, ilerleme gunlugu yok sayilir. Bitti -> devam'a donunce sabitleme silinir.
+[E-32 YAPILDI] pick -> listed=0 (aramada ve varsayilan admin listesinde yok); POST /entries, talebe baglama, admin import/PATCH markListed ile kalici; 14 gunde (12 saatlik
+   temizlikte) entry/talebi olmayan onizleme kayitlari + kapak dosyasi silinir; pickByKey 10 dk TTL kontrol eder (404). Cevap alanlari ayni; admin listesine ?unlisted=1 + listed alani.
+   Not: online arama sonucu zaten yerelde (listed=0 dahil) varsa id'li gorunur (ayni eser tekrar kayit olmaz).
+[E-33 YAPILDI] gercek baski eklenince ayni dilin bos yer tutucusu silinir (entry'ler yeni baskiya baglanir); /editions bos kartlari dilin sonuna koyar.
+   c/d/e icin OL'de yeniden arandi (title/author/publisher/yazar adi varyantlari: Eksik Parca, Timas, Varol Yasaroglu...): ONCEKI SONUC DEGISMEDI, bulunamadi;
+   Google Books hala "Queries per day" 429. Wikidata'da "Kral Sakir" bir TV dizisi/film serisi (Q24238429) - yani yazar alani aslinda seri adi; kitabi yok. UYDURMA YOK.
+[E-35 YAPILDI] util.normalizeDisplayName tek fonksiyon (NFC, \p{Cc}\p{Cf}\p{Zl}\p{Zp} reddi, < > reddi, bosluk daraltma, trim, 2-30); profil + admin POST/PATCH kullanir.
+   Admin yolunda min=1 (mevcut api.test 'A' adini kabul ediyor). Kayitli adla birebir ayni gonderilirse (duzensiz eski kayit dahil) hak harcanmaz. v5.test.js'te '<b>..</b>'
+   beklentisi 400'e cevrildi (yonetici karari).
+[E-36 YAPILDI] 7 gunden eski gunlere sonradan girilen satirlar (backfill=manual, PUT day-logs) + backfill "kalan sayfa bugune" satiri reading_logs.no_streak=1: ortalamaya/toplama girer,
+   seri ve rekora girmez. Normal /progress degismedi.
+[E-37 YAPILDI] /editions: dis istek yapilacaksa dakikada 30 arama sinirina sayilir; eksik OL sayfasi varsa 7 gun onbellege alinmaz; kaynak basina 60 sn tekrar-deneme kilidi; Google dilleri sirayla.
+[E-43 KISMEN] seed-extra: belirsiz "Kral Sakir cizgi film kitabi" aciklamasi kaldirildi; seed eslesmesi siki (birebir baslik + yazar soyadi, ikisi de dolu); findExisting artik yazari
+   yalniz birinde bos olan kitaplari ESLESTIRMEZ. YAPILMADI: "Hayvanlardan Tanrilara" Sapiens'ten ayri kayit olarak kaliyor - arama sonucunda Turkce adli kaydin gorunmesi (test v5-arama bunu bekliyor)
+   icin; havuz bolunmesi bilinen kucuk risk.
+[E-44 KISMEN] baskasinin rafinda arka plan doldurma tetiklenmez; stats `type` etkisiz kalmaya devam (sozlesme: tum alanlar hep doner), istemci onbellekleyebilir.
+[E-34/E-38/E-39/E-40/E-41/E-42] FRONTEND ya da atanmamis; E-42 (ASCII Turkce mesajlar) YAPILMADI - tum hata metinlerinin yeniden yazimi kapsam disi, istenirse ayri tur.
+[H-024 YAPILDI] sessiz sinir 10 -> 40 (dilsiz 10) ve sozlesmeye yazildi; googlebooks 429 tekrar etmez/gosterilmez; "pan" ve 20+ dil etiketi eklendi.
+[H-025 YAPILDI] kitap aramasinda hicbir sorgu kelimesi eslesmeyen tek baskili sonuclar elenir (Kuran-i Kerim gurultusu).
+[H-026 YAPILDI] heatmap: pages=gercek, estimated:false + estimated_pages; yalniz tahmini gun estimated:true.
+[Film suresi / "Inception 11 dk" YAPILDI] P2047 parse DOGRU (canli Q25188=148 dk). 11 dk veren, Wikidata'daki AYRI "Inception" kaydi (Q85520081, 2014 kisa film, +11 dakika).
+   Sanity: 20-600 dk disi sure supheli -> null (bilinmiyor). Onceden kayitli sureler db migrate ile bir kez sifirlanir, stats cagrisinda arka planda yeniden hesaplanir. Test: v5-1 "film suresi".
+Yeni DB: entries.finished_pages/finished_episodes/finished_minutes, reading_logs.no_streak, series_progress tablosu (migrate ile; eski DB'ler korunur).

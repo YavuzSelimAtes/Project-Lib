@@ -1,6 +1,21 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { Cover, ErrorBox, Modal, TYPE_ICON, TYPE_LABEL, fmtDate, today, yesterday } from './ui.jsx';
+import { Cover, ErrorBox, Modal, SearchMeta, TYPE_ICON, TYPE_LABEL, fmtDate, today, yesterday } from './ui.jsx';
+import EditionPicker from './Editions.jsx';
+import SeasonPicker from './Seasons.jsx';
+
+// ayni arama anahtari icin tek kalici kayit (cift cagriyi onler)
+const pickCache = new Map();
+function pickOnce(key) {
+  if (!pickCache.has(key)) pickCache.set(key, api.pickCatalog(key).catch((e) => { pickCache.delete(key); throw e; }));
+  return pickCache.get(key);
+}
+
+const LANGS = [
+  ['', 'Hepsi'],
+  ['tr', 'TR'],
+  ['en', 'EN'],
+];
 
 // "2026-10-20".."2026-10-22" -> ["2026-10-20","2026-10-21","2026-10-22"]
 function daysBetween(from, to) {
@@ -24,6 +39,7 @@ const TYPES = [
 export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
   const [type, setType] = useState(initialType);
   const [q, setQ] = useState('');
+  const [lang, setLang] = useState('');
   const [res, setRes] = useState(null); // {items, online}
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(null);
@@ -40,7 +56,7 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const r = await api.search(q.trim(), type);
+        const r = await api.search(q.trim(), type, type === 'book' ? lang : '');
         if (alive) {
           setRes(r);
           setError(null);
@@ -55,7 +71,7 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
       alive = false;
       clearTimeout(t);
     };
-  }, [q, type]);
+  }, [q, type, lang]);
 
   if (picked) return <PickedForm item={picked} onBack={() => setPicked(null)} onClose={onClose} onAdded={onAdded} />;
   if (requesting) return <RequestForm type={type} title={q} onBack={() => setRequesting(false)} onClose={onClose} />;
@@ -77,6 +93,15 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
         aria-label="Ara"
         autoFocus
       />
+      {type === 'book' && (
+        <div className="tabs" role="group" aria-label="Dil filtresi" style={{ marginTop: 8, marginBottom: 0 }}>
+          {LANGS.map(([k, l]) => (
+            <button key={k} type="button" aria-pressed={lang === k} className="tab sm" onClick={() => setLang(k)}>
+              {k ? l : '🌐 ' + l}
+            </button>
+          ))}
+        </div>
+      )}
       <ErrorBox error={error} />
       {searching && <p className="muted">Kütüphanede ve internette aranıyor, birkaç saniye sürebilir…</p>}
       {res && !searching && res.online && !res.online.ok && (
@@ -95,6 +120,7 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
                 {it.year ? ` · ${it.year}` : ''}
                 {it.pages ? ` · ${it.pages} sayfa` : ''}
               </div>
+              <SearchMeta it={it} />
             </div>
           </button>
         ))}
@@ -114,6 +140,26 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
 function PickedForm({ item, onBack, onClose, onAdded }) {
   const isBook = item.type === 'book';
   const isMovie = item.type === 'movie';
+  const isSeries = item.type === 'series';
+  // baski / sezon bilgisi icin katalog kimligi lazim; internet sonucuysa simdi kalici kaydedilir
+  const [catId, setCatId] = useState(item.id ?? null);
+  const [pickErr, setPickErr] = useState(null);
+  const [pickTry, setPickTry] = useState(0);
+  useEffect(() => {
+    if (isMovie || catId != null || !item.key) return;
+    let alive = true;
+    setPickErr(null);
+    pickOnce(item.key).then(
+      (r) => alive && setCatId(r.item.id),
+      (e) => alive && setPickErr(e),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [isMovie, catId, item.key, pickTry]);
+  const [edition, setEdition] = useState(null);
+  const [season, setSeason] = useState('');
+  const [episode, setEpisode] = useState('');
   const [start, setStart] = useState(today());
   const [pages, setPages] = useState(item.pages || '');
   const [status, setStatus] = useState(isMovie ? 'bitti' : 'devam');
@@ -144,7 +190,13 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
     setBusy(true);
     setError(null);
     try {
-      const body = item.id != null ? { catalog_id: item.id, status } : { catalog_key: item.key, status };
+      const cid = item.id ?? catId;
+      const body = cid != null ? { catalog_id: cid, status } : { catalog_key: item.key, status };
+      if (isBook && edition) body.edition_id = edition.id;
+      if (isSeries && status === 'devam' && season && episode) {
+        body.season = Number(season);
+        body.episode = Number(episode);
+      }
       if (isMovie) body.end_date = start;
       else if (finishedPast) {
         if (!unknownStart) body.start_date = start;
@@ -210,6 +262,39 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
             </label>
           </>
         )}
+        {pickErr && !isMovie && (
+          <div className="err" role="alert">
+            {isBook ? 'Baskı ve dil bilgisi alınamadı' : 'Sezon bilgisi alınamadı'}: {pickErr.message}{' '}
+            <button type="button" className="btn small ghost" onClick={() => setPickTry((n) => n + 1)}>
+              Yeniden dene
+            </button>
+            <div className="small" style={{ fontWeight: 400 }}>İstersen bu bilgi olmadan da kaydedebilirsin.</div>
+          </div>
+        )}
+        {isBook && catId != null && (
+          <div className="field">
+            <span>Baskı / dil</span>
+            <div style={{ marginTop: 6 }}>
+              <EditionPicker
+                catalogId={catId}
+                selectedId={edition?.id ?? null}
+                onSelect={(ed) => {
+                  setEdition(ed);
+                  setPages(ed ? ed.pages || '' : item.pages || '');
+                  if (ed && !ed.pages) setTimeout(() => document.getElementById('total-pages')?.focus(), 0);
+                }}
+              />
+            </div>
+          </div>
+        )}
+        {isSeries && status === 'devam' && catId != null && (
+          <div className="field">
+            <span>Kaçıncı bölümdesin? (isteğe bağlı)</span>
+            <div className="quick" style={{ marginTop: 6 }}>
+              <SeasonPicker catalogId={catId} refresh allowNone season={season} episode={episode} onChange={(sn, ep) => { setSeason(sn); setEpisode(ep); }} />
+            </div>
+          </div>
+        )}
         {isBook && status === 'devam' && (
           <label className="field">
             <span>Kaçıncı sayfadasın? (boşsa baştan başlıyorsun)</span>
@@ -219,7 +304,8 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
         {isBook && (
           <label className="field">
             <span>Toplam sayfa</span>
-            <input type="number" min="1" value={pages} onChange={(e) => setPages(e.target.value)} placeholder="örn. 320" />
+            <input id="total-pages" type="number" min="1" value={pages} onChange={(e) => setPages(e.target.value)} placeholder="örn. 320" />
+            {edition && !edition.pages && <span className="small muted">Bu baskının sayfa sayısı bilinmiyor; elindeki kitaba bakıp yaz.</span>}
           </label>
         )}
         {needsBackfill && pastDays.length > 0 && (

@@ -1,9 +1,20 @@
 import fs from 'node:fs';
 import { requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, int, oneOf, publicUser } from '../util.js';
-import { catalogOut, searchLocal, onlineSearch, persistOnline, pickByKey, findExisting, insertCatalog, downloadCover, saveUploadedCover, coverFileFromUrl, normOf } from '../services/catalog.js';
+import { markListed, catalogOut, searchLocal, onlineSearch, persistOnline, pickByKey, findExisting, insertCatalog, downloadCover, saveUploadedCover, coverFileFromUrl, normOf, finishPick } from '../services/catalog.js';
 import { bookWorkDescription } from '../services/sources.js';
 import { entryOut } from '../services/entries.js';
+import { bookExtras, editionOut, ensureEditions, listEditions, insertEdition, findEdition } from '../services/editions.js';
+import { ensureSeasons, seasonInfo } from '../services/seasons.js';
+import { validIso } from '../langs.js';
+
+function langParam(v) {
+  const s = str(v, { field: 'lang', max: 3 });
+  if (!s) return null;
+  const l = s.toLowerCase();
+  if (!validIso(l)) throw bad('lang iki harfli dil kodu olmali (ornek: tr, en)', { lang: 'gecersiz' });
+  return l;
+}
 
 const TYPES = ['book', 'movie', 'series'];
 
@@ -73,21 +84,39 @@ export default async function routes(app) {
     if (q.length < 2) throw bad('Arama icin en az 2 karakter girin', { q: 'en az 2 karakter' });
     const type = oneOf(req.query.type, TYPES, { field: 'type' });
     const limit = Math.min(int(req.query.limit, { min: 1, max: 50, field: 'limit' }) || 20, 50);
+    const lang = langParam(req.query.lang);
     // Yan etkisiz: veritabanina YAZMAZ. Internet sonuclari id:null + key ile doner.
-    const local = searchLocal(db, q, type, 50);
+    // lang: bilinen dilleri olup lang'i icermeyen kitaplar elenir; dili bilinmeyenler kalir.
+    const langOk = (languages) => !lang || !languages.length || languages.includes(lang);
+    const bookOut = (r) => ({ ...catalogOut(r), key: null, ...(r.type === 'book' ? bookExtras(db, r) : {}) });
+    const local = searchLocal(db, q, type, 50, 0, { listedOnly: true }).map(bookOut).filter((o) => o.type !== 'book' || langOk(o.languages));
     searchLimit(me.id);
-    const online = await onlineSearch(q, type);
-    const items = local.map((r) => ({ ...catalogOut(r), key: null }));
+    const online = await onlineSearch(q, type, { lang });
+    const items = [...local];
     const seen = new Set(local.map((r) => r.id));
     for (const it of online.items) {
       const ex = findExisting(db, it);
       if (ex) {
-        if (!seen.has(ex.id)) { seen.add(ex.id); items.push({ ...catalogOut(ex), key: null }); }
+        if (!seen.has(ex.id)) {
+          const o = bookOut(ex);
+          if (ex.type === 'book') {
+            o.languages = [...new Set([...o.languages, ...(it.languages || [])])];
+            o.editions_count = Math.max(o.editions_count, it.edition_count || 0);
+            if (!langOk(o.languages)) continue;
+          }
+          seen.add(ex.id);
+          items.push(o);
+        }
         continue;
       }
       items.push({
         id: null, key: it.key, type: it.type, title: it.title, author_or_creator: it.author_or_creator, year: it.year, pages: it.pages,
-        description: it.description, cover_url: it.cover_remote, external_id: it.external_id, source: it.source, seasons: it.seasons, created_at: null,
+        description: it.description, cover_url: it.cover_remote, external_id: it.external_id, source: it.source, seasons: it.seasons,
+        runtime: it.runtime ?? null, created_at: null,
+        ...(it.type === 'book' ? {
+          languages: it.languages || [], editions_count: it.edition_count || (it.edition ? 1 : 0),
+          publisher: it.publisher || null, publishers: it.publishers || [],
+        } : {}),
       });
     }
     return {
@@ -97,13 +126,14 @@ export default async function routes(app) {
     };
   });
 
-  // Internet sonucunu sec -> kalici katalog kaydi
+  // Internet sonucunu sec -> kalici katalog kaydi (dizi ise sezon/bolum bilgisi de cekilir)
   app.post('/api/catalog/pick', async (req, reply) => {
     requireUser(req);
-    const row = pickByKey(db, (req.body || {}).key);
+    const row = pickByKey(db, (req.body || {}).key, { listed: 0 }); // onizleme: kullanilana (entry/talep/import) kadar aramada gorunmez
     if (!row) throw err(404, 'Bu sonucun suresi dolmus, aramayi tekrarlayin');
+    await finishPick(db, row);
     reply.code(201);
-    return { item: catalogOut(row) };
+    return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(row.id)) };
   });
 
   app.get('/api/catalog/:id', async (req) => {
@@ -117,7 +147,39 @@ export default async function routes(app) {
       } catch { /* aciklama yoksa sorun degil */ }
     }
     const entries = db.prepare('SELECT * FROM entries WHERE catalog_id=? ORDER BY updated_at DESC').all(row.id);
-    return { item: catalogOut(row), entries: entries.map((e) => entryOut(db, e, { withCatalog: false })) };
+    const editions = row.type === 'book' ? listEditions(db, row.id).editions : [];
+    return { item: { ...catalogOut(row), editions }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false })), editions };
+  });
+
+  // Baskilar: yerelde yoksa/eskiyse Open Library + Google Books'tan doldurulur (7 gun onbellek)
+  app.get('/api/catalog/:id/editions', async (req) => {
+    const me = requireUser(req);
+    const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(Number(req.params.id));
+    if (!cat) throw err(404, 'Katalog kaydi bulunamadi');
+    if (cat.type !== 'book') throw bad('Baski bilgisi sadece kitaplar icindir');
+    const lang = langParam(req.query.lang);
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const online = await ensureEditions(db, cat, { lang, refresh, beforeFetch: () => searchLimit(me.id) }); // dis istek yapilacaksa dakikada 30 sinirina sayilir
+    const list = listEditions(db, cat.id, lang);
+    return { catalog_id: cat.id, lang, editions: list.editions, groups: list.groups, languages: list.languages, online: { ok: online.ok, errors: online.errors, fetched: online.fetched } };
+  });
+
+  // Dizi sezon/bolum sayilari (lazy-fill: TVMaze)
+  app.get('/api/catalog/:id/seasons', async (req) => {
+    requireUser(req);
+    let cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(Number(req.params.id));
+    if (!cat) throw err(404, 'Katalog kaydi bulunamadi');
+    if (cat.type !== 'series') throw bad('Sezon bilgisi sadece diziler icindir');
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true'; // zorla TVMaze'den tazele (30 sn'de bir)
+    const online = await ensureSeasons(db, cat, refresh ? { force: true, timeout: 8000 } : { timeout: 5000 });
+    cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(cat.id);
+    const info = seasonInfo(db, cat);
+    return {
+      catalog_id: cat.id, known: info.known,
+      seasons: info.seasons.map((s) => ({ season: s.season, episodes: s.episodes, total_episodes: s.total_episodes, runtime: s.runtime })),
+      total_seasons: info.total_seasons, total_episodes: info.total_episodes, runtime: info.runtime,
+      online: { ok: online.ok, errors: online.errors },
+    };
   });
 
   // ---- admin ----
@@ -128,15 +190,21 @@ export default async function routes(app) {
     const limit = Math.min(int(req.query.limit, { min: 1, max: 200, field: 'limit' }) || 50, 200);
     const offset = int(req.query.offset, { min: 0, field: 'offset' }) || 0;
     const use = (id) => db.prepare('SELECT COUNT(*) c FROM entries WHERE catalog_id=?').get(id).c;
+    // varsayilan: yalniz kalici (listed=1) kayitlar; ?unlisted=1 -> kullanilmamis onizleme (pick) kayitlari da (listed alani doner)
+    const unlisted = req.query.unlisted === '1';
+    const out = (r) => ({ ...catalogOut(r), entry_count: use(r.id), listed: !!r.listed });
     if (q) {
-      const all = searchLocal(db, q, type, 10000);
-      return { items: all.slice(offset, offset + limit).map((r) => ({ ...catalogOut(r), entry_count: use(r.id) })), total: all.length };
+      const all = searchLocal(db, q, type, 10000, 0, { listedOnly: !unlisted });
+      return { items: all.slice(offset, offset + limit).map(out), total: all.length };
     }
-    const where = type ? 'WHERE type=?' : '';
-    const args = type ? [type] : [];
+    const conds = [];
+    const args = [];
+    if (type) { conds.push('type=?'); args.push(type); }
+    if (!unlisted) conds.push('listed=1');
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const total = db.prepare(`SELECT COUNT(*) c FROM catalog ${where}`).get(...args).c;
     const rows = db.prepare(`SELECT * FROM catalog ${where} ORDER BY title COLLATE NOCASE LIMIT ? OFFSET ?`).all(...args, limit, offset);
-    return { items: rows.map((r) => ({ ...catalogOut(r), entry_count: use(r.id) })), total };
+    return { items: rows.map(out), total };
   });
 
   app.post('/api/admin/catalog', async (req, reply) => {
@@ -164,10 +232,11 @@ export default async function routes(app) {
     const next = { ...cur, ...data, ...(cover !== undefined ? { cover_url: cover } : {}) };
     db.prepare(`UPDATE catalog SET type=?,title=?,author_or_creator=?,year=?,pages=?,description=?,cover_url=?,seasons=?,norm=? WHERE id=?`)
       .run(next.type, next.title, next.author_or_creator, next.year, next.pages, next.description, next.cover_url, next.seasons, normOf(next.title, next.author_or_creator), id);
+    markListed(db, id); // admin duzenlediyse kalici
     // Tutarlilik: sayfa sayisi duzeltilirse eski degeri aynen kopyalamis kayitlarin total_pages'i de guncellenir
     // (elle degistirilmis olanlara ve yeni degerin altina dusen current_page'e dokunulmaz).
     if (cur.type === 'book' && next.pages && next.pages !== cur.pages) {
-      db.prepare('UPDATE entries SET total_pages=? WHERE catalog_id=? AND (total_pages IS NULL OR total_pages=?) AND current_page<=?').run(next.pages, id, cur.pages ?? -1, next.pages);
+      db.prepare('UPDATE entries SET total_pages=? WHERE catalog_id=? AND edition_id IS NULL AND (total_pages IS NULL OR total_pages=?) AND current_page<=?').run(next.pages, id, cur.pages ?? -1, next.pages);
     }
     return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(id)) };
   });
@@ -201,7 +270,41 @@ export default async function routes(app) {
       const r = persistOnline(db, it);
       if (!seen.has(r.id)) { seen.add(r.id); items.push(r); }
     }
+    for (const r of items) await finishPick(db, r);
     reply.code(items.length ? 201 : 200);
-    return { items: items.map(catalogOut), online: { ok: online.errors.length === 0, errors: online.errors } };
+    return { items: items.map((r) => catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(r.id))), online: { ok: online.errors.length === 0, errors: online.errors } };
+  });
+
+  // ---- admin: baskilar ----
+  app.post('/api/admin/catalog/:id/editions', async (req, reply) => {
+    requireAdmin(req);
+    const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(Number(req.params.id));
+    if (!cat) throw err(404, 'Katalog kaydi bulunamadi');
+    if (cat.type !== 'book') throw bad('Baski sadece kitaplara eklenir');
+    const b = req.body || {};
+    const language = langParam(b.language);
+    const publisher = str(b.publisher, { field: 'publisher', max: 120 });
+    const pages = int(b.pages, { field: 'pages', min: 1, max: 20000 });
+    const year = int(b.year, { field: 'year', min: 1000, max: 2200 });
+    const isbn = str(b.isbn, { field: 'isbn', max: 20 });
+    if (!language && !publisher && !pages) throw bad('Dil, yayinevi veya sayfa sayisindan en az biri gerekli');
+    let cover_url = null;
+    if (b.cover_url) cover_url = await resolveCover({ cover_url: b.cover_url }, null);
+    const probe = { language, publisher, pages, source: 'manual', external_id: null };
+    if (findEdition(db, cat.id, probe)) throw err(409, 'Bu dil, yayinevi ve sayfa sayisiyla bir baski zaten var');
+    const { row } = insertEdition(db, cat.id, { language, publisher, pages, year, isbn, cover_url, source: 'manual', external_id: null });
+    reply.code(201);
+    return { edition: editionOut(row) };
+  });
+
+  app.delete('/api/admin/editions/:id', async (req) => {
+    requireAdmin(req);
+    const id = Number(req.params.id);
+    const ed = db.prepare('SELECT * FROM editions WHERE id=?').get(id);
+    if (!ed) throw err(404, 'Baski bulunamadi');
+    const detached = db.prepare('SELECT COUNT(*) c FROM entries WHERE edition_id=?').get(id).c;
+    db.prepare('UPDATE entries SET edition_id=NULL WHERE edition_id=?').run(id);
+    db.prepare('DELETE FROM editions WHERE id=?').run(id);
+    return { ok: true, detached_entries: detached };
   });
 }

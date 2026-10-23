@@ -1,7 +1,87 @@
 =====================================================================
  TEST RAPORU  (TEST ajani yazar)
 =====================================================================
-TEST: IKNA OLDUM (2026-10-23) - Gerekce: tum KRITIK/ONEMLI hatalar (H-005, H-008, H-009, H-010) ve butun KUCUK hatalar
+#####################################################################
+# v5 TURU (YENI_ISTEKLER 1-8)  2026-10-24   GERCEK backend + GERCEK frontend
+#####################################################################
+SON CALISTIRMA: 2026-10-24 | GECEN: 96/97 (1 atlandi: SPRAY, ayri surecte) | KALAN: 0 | AKTIF HATA: 6 (1 ONEMLI, 5 KUCUK)
+ Dagilim: eski 48 test (api, verify-calc, regression, scenarios) 47 gecti + 1 atlandi; YENI 49 v5 testi 49/49 gecti
+ (testler/v5.test.js profil 9, v5-baski 9, v5-seri 4, v5-dizi-stats 9, v5-arama 18). Taze DB + seed-demo sonrasi, --test-concurrency=1.
+ TEST: v5 icin HENUZ IKNA OLMADIM (H-021 ONEMLI frontend acik). Backend v5: KRITIK/ONEMLI hata bulunmadi.
+
+ORTAM / CALISTIRMA (bu makine: sistem Node 20, node:sqlite yok)
+ Node 24.15 = Cursor'un Electron'u: ELECTRON_RUN_AS_NODE=1 "C:\Users\yavuz\AppData\Local\Programs\cursor\Cursor.exe" <betik>
+ Backend : PORT=4100 DB_PATH=testler\data\test.db ADMIN_PASSWORD=test-admin-123 (yukaridaki exe ile backend\src\server.js; testler/data tamamen silinip taze DB)
+ Frontend: API_TARGET=http://127.0.0.1:4100 PORT=5273 npx vite --port 5273 --strictPort (vite.config.js DEGISTIRILMEDI)
+ Testler : (exe) --test --test-concurrency=1 testler/*.test.js   (regression.test.js node:sqlite ister -> Node 20 ile calismaz; v5-* testleri Node 20 ile de calisir)
+ NOT: testler/lib/client.js daysAgo() artik Europe/Istanbul gunu (UTC 21:00-24:00 arasi backend "bugun"u ile 1 gun kayiyordu; seed-demo seri verisi
+   yuzunden bos cikiyordu). Uygulama hatasi degil, test verisi duzeltmesi.
+
+MADDE MADDE SONUC
+ 1 PROFIL        [GECTI] avatar listede yoksa/abc/<script>/bos/null/sayi/ZWJ/iki emoji -> 400; FE0F farki yok sayilir; renk 11 gecersiz bicim 400, #FFAA00 -> #ffaa00;
+                 gorunen ad: ilk 200 + name_changed, 2. 409 (avatar/renk ayni istekte olsa da hicbiri kaydedilmez), ayni ad (bosluklu) hak harcamaz,
+                 3 paralel istek -> tam [200,409,409]; admin reset_name_change (uye 403); admin avatar dogrulamasi; HTML temizligi ("<b>Ali</b>" -> Ali).
+                 Tarayici: avatar ikonu -> modal, gruplu izgara, canli onizleme, onay kutusu olmadan Kaydet engelli, kaydet -> ad kilitli (kilit aciklamasi),
+                 admin "Ad hakkini sifirla" calisti, 375px'te alt sayfa (bottom sheet). Kusur: H-022.
+ 2 BASKI         [GECTI] /catalog/:id/editions (+lang, gruplar, languages filtreden bagimsiz), baski secerek entry (total_pages baskidan; istek total_pages kazanir;
+                 sayfasiz baski -> null), baski degistirme (sayfa < current_page -> 400 + degismez; esit sinir 200; biten kitapta kucuk baskiya 400), IDOR (403/404),
+                 admin baski ekle/sil (detached_entries, total_pages korunur), feed/raf edition. Tarayici: dil sekmeleri, baski karti, "Baskiyi degistir" ->
+                 backend 400 mesaji aynen gosteriliyor. Kusur: H-024.
+ 3 ARAMA         tablo asagida. 8 sorgunun hepsi sonuc verdi, hepsinde dogru kitap 1. sirada (yerel/kurator kaydi). Kusur: H-025 (alakasiz ek sonuc).
+ 4 DIZI          [GECTI] Breaking Bad (7/13/13/13/16), Dark (10/8/8), Muhtesem Yuzyil (24/39/40/36): /seasons TVMaze ile BIREBIR ayni, sureler (60/50-57-64/90) ayni.
+                 Olmayan sezon/bolum (POST, PATCH, series-progress) 400 + Turkce mesaj; son bolum (S5B16) kabul, B17 red; sezon degisince mevcut bolum sinira uymazsa red.
+                 Manuel dizi: serbest + seasons_unknown. Arayuz: hizli guncelleme + ekleme akisi + detay SELECT ile kisitli (1..N, bolum 1..o sezon),
+                 sezon degisince bolum kirpiliyor (13 -> 7); bilgi yoksa serbest giris + "Sezon bilgisi alinamadi" notu.
+ 5 SERI LIDERLIGI[GECTI] bugun/dun/atlanan gun/0 sayfa/tahmini(spread) elle hesapla ayni (A: 3/en uzun 4, B: dunden 3/3, C: bugun-dun yok -> listede yok, D: 1/1, F: tahmini -> yok);
+                 beraberlik ayni rank, longest ile siralama, period yok sayilir, stats.current/longest_streak ile ayni. seed-demo verisiyle elle hesap (heatmap gercek gunleri) API ile ayni.
+ 6 STATS         [GECTI] episodes_watched = 25+26+10 (BB S3B5, Dark bitti, MY S1B10); series_minutes = 1500+1468(sezon sureleri)+900; bilinmeyen dizi 0 + episodes_unknown;
+                 movie_minutes (Baslangic 148 + Titanik 194), suresiz manuel film 0 + movie_runtime_unknown=1, period=month/year; type echo + gecersiz 400.
+                 Rafim kartlari tarayicida: Hepsi 5 kart (kitap bitti/sayfa/dizi bitti/bolum/film), Kitap 5 kart (film YOK; seri 3, en uzun 4 dogru), Dizi 3 kart (34 sa 28 dk = 2068 dk),
+                 Film 2 kart. Kusur: H-023.
+ 7 SERI SADECE KITAP [GECTI] dizi/film kayitlari seriyi, active_days'i, feed current_streak'i etkilemiyor; arayuzde seri yalniz Kitap filtresinde.
+ 8 ISI HARITASI  [GECTI] masaustu hover "2 Eylul Car - 37 sayfa" (elle: 52 gun once -> 37), ilk hucre "26 Temmuz Paz - Okunmadi", son "24 Ekim Cmt - 12 sayfa",
+                 ay gecisi (30 Eylul/1 Ekim, 31 Agustos/1 Eylul, 31 Temmuz/1 Agustos) dogru; ~ tahmini; 375px'te hucreye tiklayinca balon (sinira sigiyor), disari tiklayinca kapaniyor;
+                 klavye (tek tab duragi, oklar, Home/End) calisti. Gercek dokunma (touch) araci olmadigi icin mobilde mouse tiklamasi ile denendi.
+ REGRESYON       mevcut 48 test gecti; 375px yatay tasma YOK (/, /liderlik (4 sekme), /rafim, /uye/:id: scrollWidth=375); koyu+acik tema tamam; cikis -> /api/* 401, /rafim /yonetim /uye/5 giris ekrani;
+                 konsol: yalniz beklenen ilk 401 ve bilerek tetiklenen 400 (baski sayfa yetersiz); kirik ag istegi yok.
+
+ARANAN 5 KITAP - ARAMA TABLOSU (canli Open Library; ayni sonuc 4 farkli yazimla: Turkce karakterli/karaktersiz)
+ Sorgu                                  | Sonuc? | 1. sonuc                                         | Dogru mu / not
+ "Hayvanlardan Tanrilara / Yuval Noah"   | EVET   | Hayvanlardan Tanrilara - Yuval Noah Harari (yerel kurator, TR, Kolektif Kitap, 412 s) | dogru; 2. Sapiens (OL, 86 baski, 13 dil)
+ "Hayvanlardan Tanrilara"                | EVET   | ayni                                              | dogru; 3. sonuc "Kuran-i Kerim" alakasiz (H-025)
+ "hayvanlardan tanrilara harari"         | EVET   | ayni                                              | dogru
+ "Anna Karenina is bankasi"              | EVET   | Anna Karenina - Tolstoy, yayinevi Turkiye Is Bankasi Kultur Yayinlari, 21 dil, 110 baski | dogru; /editions?lang=tr icinde Is Bankasi 1062 s. var (sayfa alani katalogda bos)
+ "Dikkat Kaygan Zemin"                   | EVET   | Dikkat Kaygan Zemin - Kral Sakir (yerel kurator, sayfa/yayinevi bos) | dogru; 2. sonuc ayni adli BASKA kitap (Melissa Ayca Yildiran) - karisabilir ama yazar gorunuyor
+ "Dunyayi Okuyan Cocuk"                  | EVET   | Dunyayi Okuyan Cocuk - Mert Arik (yerel kurator)  | dogru; 2. sonuc "Kuran-i Kerim" alakasiz (H-025)
+ "Dunyayi Okuyan Cocuk Mert Arik"        | EVET   | ayni (tek sonuc)                                  | dogru
+ "Hayta Anil Basili"                     | EVET   | Hayta - Anil Basili (yerel kurator, yazar "Anıl Başılı") | dogru (sorgu yazimi "Basili"; "Basli" yazimi bulunamaz); "Hayta" tek basina 18 sonuc, kurator 1.
+ Not: c, d, e dis kaynaklarda YOK; yalniz backend'in acilista eklediği kurator listesi (seed-extra) ile bulunuyor. Taze DB'de calisiyor (5 yeni katalog kaydi).
+
+AKTIF HATALAR (v5 turu)
+H-021  [ACIK] ONEMLI FRONTEND  /rafim 375px'te baslik/alt yazi 33px'lik sutuna sikisiyor ve "Profili duzenle" dugmesinin altinda kaliyor
+  Tekrar : giris yap, tarayici 375px, /rafim. h1 "Benim rafim" (rect x16..49) + alt yazi "Okuduklarim..." dar sutunda alt alta; "Profili duzenle"/"+ Yeni ekle" dugmeleri
+           (x59..) yazinin ustune biniyor ("Okudu..." kesik). Yatay tasma yok ama okunamiyor. Masaustunde sorun yok.
+  Beklenen: baslik ustte tam genislikte, dugmeler altinda (flex-wrap / kolon). Gerceklesen: yazi ile dugmeler ust uste. (v5'te eklenen "Profili duzenle" dugmesinin getirdigi gerileme)
+H-022  [ACIK] KUCUK FRONTEND  Profil kaydedince ana sayfadaki "Sen" karti eski avatari/adi gosteriyor (feed yenilenmiyor)
+  Tekrar : ana sayfa -> ust cubuktaki avatar -> baska avatar sec -> Kaydet. Ust cubuktaki avatar guncellenir, ana sayfa kartinda eski emoji kalir (sayfa yenileyince dogru).
+H-023  [ACIK] KUCUK FRONTEND  Rafim > Filmler: suresi bilinmeyen filmlerde "0 dk izlenen sure" gorunuyor
+  Tekrar : manuel/Wikidata'da suresi olmayan bitmis film olan kullanici, Rafim > Filmler. API movie_runtime_unknown>0 doner ama arayuz 0 dk yaziyor; "sure bilinmiyor"
+           notu (dizideki episodes_unknown notu gibi) beklenir.
+H-024  [ACIK] KUCUK BACKEND  /catalog/:id/editions her dil icin sessizce 10 baskiyla sinirli; ayrica online.errors'ta googlebooks 429 iki kez tekrar ediyor
+  Tekrar : GET /api/catalog/<Anna Karenina id>/editions -> her dilde count=10 (DB'de de 10). Sozlesmede sinir belirtilmemis (ve 1316 baski var); Is Bankasi 2015 gibi baskilar kesilebilir.
+           Sozlesme "Google Books kotasi doluyken hata gosterilmez" diyor, ama ilk cagrida errors:["googlebooks: HTTP 429","googlebooks: HTTP 429"] geliyor. Dil etiketi "pan" -> "PAN" (3 harfli kod).
+H-025  [ACIK] KUCUK BACKEND  Arama alakasiz sonuc: "Hayvanlardan Tanrilara" ve "Dunyayi Okuyan Cocuk" ... 2./3. sirada "Kuran-i Kerim (Diyanet Vakfi)" donuyor
+  Tekrar : GET /api/catalog/search?type=book&q=Dunyayi%20Okuyan%20Cocuk (Open Library language=tur sorgusu kaynakli). Dogru kitap 1. sirada, bu yuzden sadece gurultu.
+H-026  [ACIK] KUCUK BACKEND  Isi haritasi: ayni gunde gercek + tahmini (spread) sayfa varsa pages=toplam, estimated=false -> balon "25 sayfa" diyor (gercek 15 + tahmini 10)
+  Tekrar : kitap A gun-gun gercek log (22 Ekim: 15), kitap B backfill=spread (22 Ekim'e 10 tahmini); GET /api/users/:id/heatmap -> {"date":"2026-10-22","pages":25,"estimated":false}.
+  Beklenen: ya yalniz gercek (15) ya da estimated:true / ayri alan. Seri/rekor zaten yalniz gercek sayiyor; sadece gosterim.
+NOT (tasarim/bilgi, hata degil): (a) frontend Ana sayfa ayni /entries/:id/open-days isteklerini kayit basina 3 kez atiyor (Rafim'da stats/entries cift cekim) - hiz sorunu yok.
+ (b) Ilk calistirmada arka plan sureci Windows'ta kendiliginden oldu (log temiz, uygulama hatasi degil); kalici baslatma icin Start-Process kullanildi.
+ (c) display_name benzersiz degil (iki uye ayni adi alabilir) - sozlesmede yok. (d) film/kitap kaydina season gonderilirse sessizce yok sayiliyor (201).
+ (e) Google Books yolu canli test EDILEMEDI (anahtarsiz kota dolu, 429): backend.txt'deki ayni uyari gecerli.
+#####################################################################
+
+TEST: IKNA OLDUM (2026-10-23) [v4 TURU icin; v5 icin yukaridaki durum gecerli] - Gerekce: tum KRITIK/ONEMLI hatalar (H-005, H-008, H-009, H-010) ve butun KUCUK hatalar
  (H-001..H-004, H-006, H-007, H-011, H-012) DOGRULANDI; temiz DB + backend v5 ile 47 otomatik test (api, verify-calc [estimated=false rekor],
  regression, scenarios) seri kosuda gecti, IP limiti (spray) testi ayri surecte gecti; tarayici akisi (375px + masaustu, zorunlu sifre,
  gecmis kitap, hizli guncelleme onayi, soru-cevap, uye rafi, admin sekmeleri, feed current_streak = stats, kartta 🔥N) sorunsuz.

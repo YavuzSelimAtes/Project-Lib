@@ -44,6 +44,7 @@ async function waitForServer(base = BASE, ms = 60000) {
 }
 
 const ymd = (d) => d.toISOString().slice(0, 10);
-const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+// Backend "bugun"u Europe/Istanbul gunudur; UTC kullanmak 21:00-24:00 UTC arasinda 1 gun kayar (seri/ay gecisi testlerini bozar).
+const daysAgo = (n) => new Intl.DateTimeFormat('sv', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - n * 86400e3));
 
 module.exports = { Client, BASE, waitForServer, ymd, daysAgo };

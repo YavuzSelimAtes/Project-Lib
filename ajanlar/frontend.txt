@@ -1,5 +1,71 @@
 FRONTEND - frontend.txt
-SON GUNCELLEME: 2026-10-23 (gercek backend ile gorsel kontrol yapildi: masaustu + mobil 375px)
+SON GUNCELLEME: 2026-10-24 (v5.1 duzeltme turu TUR 9; build hatasiz)
+
+TUR 8 - YENI_ISTEKLER v5 (API_SOZLESMESI "v5" bolumune gore)  [YAPILDI]
+  1 Profil: ust cubukta avatar -> "Profili duzenle" modali (Rafim'da da dugme). Gruplu avatar izgarasi (GET /avatars,
+    liste yoksa kucuk yedek), "Rastgele", renk paleti + ozel renk, gorunen ad (bir kez: onay kutusu "Bir kere
+    degistirebilecegimi biliyorum"; user.name_changed ise kilitli + aciklama), canli onizleme karti. PATCH /me/profile,
+    sonra /auth/me yenilenir. Admin "Kullanici ekle" ayni AvatarPicker/ColorPicker; kullanici listesinde name_changed
+    ise "Ad hakkini sifirla" (PATCH /admin/users/:id {reset_name_change:true}).  Dosya: src/Profile.jsx
+  2 Baski/dil: ekleme akisinda kitap secilince "Baski / dil" (dil sekmeleri TR(3)/EN(2), yayinevi+sayfa kartlari, "Baski
+    belirtmeden devam"); secilen baskinin sayfasi "Toplam sayfa"ya yazilir (elle degisir; pages=null ise bos + not);
+    POST /entries edition_id. Detayda "Baski: Turkce . Yayinevi . N sayfa" + sahibine "Baskiyi degistir/Baski sec"
+    (PATCH edition_id; backend 400 mesaji aynen gosterilir). Arama kutusu altinda Hepsi/TR/EN (yalniz kitap) -> ?lang=.
+    Dosya: src/Editions.jsx (flattenEditions groups/languages/editions bicimlerine dayanikli).
+  3 Arama sonucu: ikinci satirda yayinevi . diller . "N baski" (ui.jsx SearchMeta; admin talep aramasinda da).
+  4 Dizi: src/Seasons.jsx SeasonPicker (GET /catalog/:id/seasons): sezon select (N. sezon (bolum sayisi)), bolum select
+    (1..o sezonun bolumu), sezon degisince bolum kirpilir. Hizli guncelleme (ana sayfa + detay) ve ekleme akisi
+    (devam, istege bagli, "Secme"). Sezon bilgisi yoksa eski serbest sayi girisi + "Sezon bilgisi alinamadi" notu.
+  5 Liderlik: 4. sekme "🔥 Seri" (/leaderboards/streak, donem filtresi bu sekmede gizli, detay "en uzun N gun . son okuma").
+  6 Rafim: tur filtresi (Hepsi/Kitap/Dizi/Film) artik donem sekmesinin USTUNDE; stats ?type= ile cekilir, kart seti
+    filtreye gore (Hepsi: kitap bitti, sayfa, dizi bitti, bolum, film | Kitap: sayfa, kitap, sayfa/gun, rekor, seri |
+    Dizi: sure, dizi bitti, bolum | Film: sure, film), key={filtre} ile fade-in + sayarak gelen sayilar; sure
+    "12 sa 40 dk"; alan yoksa kart gizlenir; episodes_unknown notu.
+  7 Seri yalniz Kitap kartinda (Hepsi/Dizi/Film'de yok); isi haritasi yalniz Hepsi/Kitap'ta.
+  8 Isi haritasi (src/Heatmap.jsx): hover/odak/dokunma -> balon "12 Mart Sal - 37 sayfa" / "Okunmadi" / "~37 sayfa"
+    (tahmini). Dokununca sabitlenir, tekrar dokun/disari dokun/Esc kapatir. Klavye: tek tab duragi, oklar (yukari/asagi=gun,
+    sag/sol=hafta), Home/End; hucreler button + aria-label. Mobilde hucre 19px.
+  Ek: ekleme akisinda internet sonucu (id:null) kitap/dizi secilince baski/sezon icin POST /catalog/pick ARKA PLANDA
+    cagrilir (kalici kayit olusur) ve sonrasinda catalog_id ile POST /entries yapilir.
+  DOGRULAMA: build hatasiz. Gercek backend CALISTIRILAMADI (bu makinede Node 20, backend node:sqlite/Node 24 ister ve
+    backend/node_modules yok). Bunun yerine sozlesme v5'e gore yazilmis GECICI sahte sunucuyla (proje DISINDA, silindi)
+    tarayicida 375px ve masaustunde denendi: profil modali (onay kutusu, 409 degil kilit gorunumu), arama lang parametresi,
+    baski secimi, dizi sezon/bolum kisiti + POST govdesi, Seri sekmesi, Dizi filtresi kartlari, isi haritasi hover/dokunma/ok.
+    375px'te yatay tasma yok (scrollWidth=375: /, /rafim, /liderlik). Gercek backend ile entegrasyon DENENMEDI.
+  VARSAYIMLAR: editions cevabi "editions" duz liste + "groups" (sozlesmedeki gibi); dil gruplama frontend'de yapilir.
+    Seri liderlik dili "gun". Admin ekraninin yeni kisimlari (AvatarPicker, ad hakki sifirlama) calisan backend yok
+    diye canli denenmedi.
+  BILINEN EKSIK: admin elle baski ekleme/silme arayuzu yok (istenmedi); entry'den baski kaldirma (edition_id:null) yok.
+
+
+TUR 9 - v5.1 DUZELTME (elestiri E-28..E-46, test H-021..H-026)  2026-10-24
+  H-021 [YAPILDI] /rafim baslik tam genislik, dugmeler altta tam satir (375 ve 320'de olculdu: h1 genisligi 288/320, scrollWidth=viewport).
+  E-34/H-023 [YAPILDI] movie_runtime_unknown>0: kart "11 dk+ / en az izlenen sure" + "N filmin suresi bilinmiyor"; 0 dk ise "–".
+    episodes_unknown: "N+ bolum", "en az" etiketi, "–" (sure 0 ise) + not. Gercek backend ile denendi.
+  E-29/E-40 [YAPILDI] SeasonPicker: dizi secilince ?refresh=1 (AddFlow), hizli guncellemede 400 gelirse bir kez refresh edip OTOMATIK tekrar
+    dener + liste yenilenir; kayitli sezon/bolum listede yoksa SESSIZCE 1. sezona CEKILMEZ (kayitli deger secenek olarak korunur,
+    "Listeyi yenile" butonu); hata/bilgi yok ayrimi notta, "Tekrar dene".  (backend ?refresh=1 henuz dokumanda yoksa 4010'da calisti/yoksayildi.)
+  E-33 [YAPILDI] Yonetim > Katalog listesi > kitapta "📘 Baskilar": liste + silme + "Baski ekle" (dil, yayinevi, sayfa, yil, isbn). Canli
+    eklendi. Bos baski kartinda "sayfa sayisini sen gir"; secilince Toplam sayfa alanina odak (canli dogrulandi).
+  E-35 [YAPILDI] validateName (Profile.jsx): '<' '>' ve gorunmez/kontrol karakter yasak (anlik mesaj, Kaydet kapali), bosluk daraltma gosterilir
+    ("Kaydedilecek ad: ..."), onay kutusu yalniz normalize ad gercekten degisirse; yalniz avatar/renk -> onay yok; onay metni adi tekrar eder.
+    Admin kullanici-ekle formunda ayni dogrulama. Canli denendi.
+  E-32 [YAPILDI] pick hatasi artik gorunur: "Baski ve dil bilgisi alinamadi: <mesaj> [Yeniden dene]"; bilgisiz de kaydedilebilir.
+  H-022 [YAPILDI] profil kaydedince Ana sayfa "Sen" karti ve ust cubuk avatar aninda guncellenir (kendi karti AuthCtx kullanicisindan cizilir + feed yenilenir).
+  E-39 [KISMEN] isi haritasi: yukleme iskeleti + hata/Tekrar dene, gunler Istanbul takvimiyle uretilir, balon scroll/resize'da yeniden olculur,
+    renk lejanti, mobilde hucre 20px (375'te; 3 ay tasmadan sigmasi icin 24px olamaz; boslukla 22px hedef).
+  E-40(dil) [YAPILDI] language_guessed baskida "dil tahmini" rozeti, sekmede "~" (grubun hepsi tahminiyse), baslikta "(dil tahmini)".
+  E-41 [YAPILDI] profil modali: Esc/arka plan kaydedilmemis degisiklikte onay ister, role=status/aria-live (Kaydedildi, ad notu), ozel renk odak halkasi,
+    gruplar role=group + etiket; odak tuzagi/aria-modal Modal'da zaten vardi. (Avatar alani ic kaydirma: kaldirmadim, 230px.)
+  E-44 [YAPILDI] stats donem basina BIR kez cekilir (filtre degisince tekrar istek yok); filtre degisince sayilar yeniden saymaz (animate=false).
+    ASCII hata metni: api.js fixTr bilinen sozcukleri duzgun Turkceye cevirir (Gorunen->Görünen, bolumden, olusuyor, baskida...). Sozluk disi
+    mesajlar oldugu gibi; kalici cozum backend'de (E-42).
+  DOGRULAMA: build hatasiz; GERCEK backend (Cursor Node 24, PORT=4010, gecici DB, kapatildi) + vite 5174 ile tarayicida denendi:
+    /rafim 375+320, Filmler/Diziler kartlari, profil dogrulama/avatar kaydi, AddFlow baski secimi, admin baski ekleme, dizi secici, isi haritasi.
+  GOZLEM (backend): ayni DB'de "Inception" (TVMaze/Wikidata) icin movie_minutes=11 geldi (148 beklenir) - tartisma.txt'ye yazildi.
+  YAPILMADI: E-38 (dil filtresi backend'e ait), E-36/E-45/E-46 backend.
+
+ONCEKI GUNCELLEME: 2026-10-23 (gercek backend ile gorsel kontrol yapildi: masaustu + mobil 375px)
 DURUM OZETI: Tum ekranlar calisiyor (giris, ana sayfa, liderlik, rafim, yonetim, yeni ekle, detay).
  Mock KULLANILMADI (sozlesme tam oldugu icin dogrudan gercek API). npm run build hatasiz.
  Test: kendi backend'imi 4200'de (DB: gecici), test ajaninin seed-demo.js verisiyle calistirdim;

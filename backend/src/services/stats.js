@@ -1,5 +1,7 @@
 import { addDays, diffDays, round1, todayStr, publicUser } from '../util.js';
 import { entryDayModel } from './entries.js';
+import { seasonRows, watchedOf, ensureSeasons } from './seasons.js';
+import { queueMovieRuntimes } from './catalog.js';
 
 export const MIN_AVG_DAYS = 3;
 
@@ -57,7 +59,7 @@ export function recordOf(model) {
 }
 
 export function streaksOf(db, userId, today = todayStr()) {
-  const rows = db.prepare('SELECT DISTINCT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 ORDER BY date').all(userId).map((r) => r.date);
+  const rows = db.prepare('SELECT DISTINCT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 AND no_streak=0 ORDER BY date').all(userId).map((r) => r.date);
   let longest = 0;
   let run = 0;
   let prev = null;
@@ -68,7 +70,64 @@ export function streaksOf(db, userId, today = todayStr()) {
   }
   let current = 0;
   if (prev && diffDays(prev, today) <= 1) current = run;
-  return { current, longest, active: rows.length };
+  return { current, longest, active: rows.length, last_date: prev };
+}
+
+// Dizi/film istatistikleri (period: bitis tarihi periyotta olan kayitlar; devam/birakildi dizilerde son guncelleme gunu)
+export function mediaStats(db, userId, period, today = todayStr()) {
+  const range = periodRange(period, today);
+  const inP = (d) => period === 'all' || (!!d && inRange(d, range));
+  const dayOf = (iso) => (iso ? todayStr(new Date(iso)) : null);
+  let episodes = 0;
+  let minutes = 0;
+  let unknown = false;
+  const series = db.prepare("SELECT e.*, c.runtime AS crt FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='series' AND e.status<>'planlandi'").all(userId);
+  const rowsCache = new Map();
+  const progSum = db.prepare('SELECT COALESCE(SUM(episodes),0) ep, COALESCE(SUM(minutes),0) mn FROM series_progress WHERE entry_id=? AND (? IS NULL OR date>=?) AND (? IS NULL OR date<=?)');
+  for (const e of series) {
+    if (!rowsCache.has(e.catalog_id)) rowsCache.set(e.catalog_id, seasonRows(db, e.catalog_id));
+    const rows = rowsCache.get(e.catalog_id);
+    if (e.status === 'bitti') {
+      // bitis aninda sabitlenen toplam (yeni sezon sonradan sisirmesin); sabitlenmemis eski kayit ilk hesapta sabitlenir
+      let eps = e.finished_episodes;
+      let mins = e.finished_minutes;
+      if (eps == null) {
+        const w = watchedOf(rows, e, e.crt);
+        if (w.unknown) { if (inP(e.end_date)) unknown = true; continue; }
+        eps = w.episodes; mins = w.minutes;
+        db.prepare('UPDATE entries SET finished_episodes=?, finished_minutes=? WHERE id=?').run(eps, mins, e.id);
+      }
+      if (inP(e.end_date)) { episodes += eps; minutes += mins; }
+    } else if (period === 'all') {
+      const w = watchedOf(rows, e, e.crt);
+      if (w.unknown) unknown = true;
+      episodes += w.episodes;
+      minutes += w.minutes;
+    } else {
+      // devam/birakildi + donem filtresi: yalniz O DONEMDE kaydedilen bolum ilerlemesi (series_progress); ilerleme gunlugu olmayan eski kayitlar sayilmaz
+      const p = progSum.get(e.id, range.from, range.from, range.to, range.to);
+      episodes += Math.max(0, p.ep);
+      minutes += Math.max(0, p.mn);
+    }
+  }
+  const movies = db.prepare("SELECT e.end_date, c.runtime FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='movie' AND e.status='bitti'").all(userId).filter((m) => inP(m.end_date));
+  let movieMinutes = 0;
+  let movieUnknown = 0;
+  for (const m of movies) {
+    if (m.runtime > 0) movieMinutes += m.runtime;
+    else movieUnknown++;
+  }
+  return { episodes_watched: episodes, series_minutes: Math.round(minutes), movie_minutes: movieMinutes, episodes_unknown: unknown, movie_runtime_unknown: movieUnknown };
+}
+
+// Arka planda eksik dizi sezon bilgisi / film suresi doldurur (istatistik cagrisini bekletmez)
+export function backfillMediaInfo(db, userId) {
+  try {
+    const sers = db.prepare("SELECT DISTINCT c.* FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='series' AND c.source='tvmaze' AND c.seasons_fetched_at IS NULL").all(userId);
+    const movs = db.prepare("SELECT DISTINCT c.id FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='movie' AND e.status='bitti' AND c.runtime IS NULL").all(userId).map((r) => r.id);
+    if (movs.length) queueMovieRuntimes(db, movs);
+    if (sers.length) (async () => { for (const c of sers) { try { await ensureSeasons(db, c); } catch { /* onemsiz */ } } })();
+  } catch { /* veritabani kapanmis olabilir */ }
 }
 
 export function userStats(db, user, period = 'all') {
@@ -92,11 +151,28 @@ export function userStats(db, user, period = 'all') {
     current_streak: st.current,
     longest_streak: st.longest,
     active_days: st.active,
+    ...mediaStats(db, user.id, period, today),
   };
+}
+
+// Gunluk seri liderligi: value = guncel seri (gun), detail = {longest, last_date}. period yok sayilir.
+function streakBoard(db, users) {
+  const rows = [];
+  for (const u of users) {
+    const s = streaksOf(db, u.id);
+    if (s.current > 0) rows.push({ user: publicUser(u), value: s.current, detail: { longest: s.longest, last_date: s.last_date } });
+  }
+  rows.sort((a, b) => b.value - a.value || b.detail.longest - a.detail.longest || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
+  let rank = 0;
+  return rows.map((r, i) => {
+    if (i === 0 || r.value !== rows[i - 1].value || r.detail.longest !== rows[i - 1].detail.longest) rank = i + 1;
+    return { rank, ...r };
+  });
 }
 
 export function leaderboard(db, kind, period = 'all') {
   const users = db.prepare('SELECT * FROM users WHERE active=1').all();
+  if (kind === 'streak') return streakBoard(db, users);
   const rows = [];
   for (const u of users) {
     const m = userModel(db, u.id, period);

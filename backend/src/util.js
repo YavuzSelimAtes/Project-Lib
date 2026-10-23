@@ -62,4 +62,17 @@ export function oneOf(v, list, { field = 'alan', required = false } = {}) {
   if (!list.includes(v)) throw bad(`${field} su degerlerden biri olmali: ${list.join(', ')}`, { [field]: 'gecersiz deger' });
   return v;
 }
-export const publicUser = (u) => u && ({ id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color });
+// Gorunen ad icin TEK ortak normalize fonksiyonu (profil + admin kullanici ekleme/duzenleme):
+// NFC, bosluk benzerleri tek bosluga, trim; kontrol/gorunmez/biçim (zero-width, RTL override, BOM...) karakterler ve < > REDDEDILIR
+// (sessizce silinmez). Uzunluk karakter (kod noktasi) olarak min-30.
+export function normalizeDisplayName(v, { min = 2, max = 30, field = 'display_name' } = {}) {
+  if (typeof v !== 'string') throw bad('Gorunen ad metin olmali', { [field]: 'metin olmali' });
+  const s = v.normalize('NFC');
+  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}]/u.test(s.replace(/[\t\n\r]/g, ' '))) throw bad('Gorunen ad gorunmez ya da kontrol karakterleri iceremez', { [field]: 'gecersiz karakter' });
+  if (/[<>]/.test(s)) throw bad('Gorunen ad < ve > karakterlerini iceremez', { [field]: 'gecersiz karakter' });
+  const t = s.replace(/\s+/gu, ' ').trim();
+  const n = [...t].length;
+  if (n < min || n > max) throw bad(min > 1 ? `Gorunen ad ${min}-${max} karakter olmali` : `Gorunen ad en fazla ${max} karakter olabilir`, { [field]: `${min}-${max} karakter` });
+  return t;
+}
+export const publicUser =(u) => u && ({ id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color });

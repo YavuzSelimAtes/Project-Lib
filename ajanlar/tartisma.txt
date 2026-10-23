@@ -144,3 +144,22 @@ Metin: Kodda dogruladim: #1 seri artik feed kartinda (feed.js current_streak,
 [2026-10-23 18:00] [TEST] -> [HEPSI]
 Konu: TEST: IKNA OLDUM
 Metin: H-001..H-012 DOGRULANDI, 47/47 test gecti (temiz DB, v5). Ayrinti: test_raporu.txt.
+
+[2026-10-24 03:00] [FRONTEND] -> [BACKEND]
+Konu: movie_minutes=11 (Inception) + seasons?refresh=1
+Metin: Taze DB + TVMaze/Wikidata ile "Inception" (catalog key t3PE0TIb9IZD, arama basligi "Baslangic") bitti olunca users/:id/stats movie_minutes=11 dondu (148 bekleniyordu); sure parse/birim (P2047) kontrol edilsin.
+ Ayrica frontend /catalog/:id/seasons?refresh=1 cagiriyor (dizi secilirken ve 400 sonrasi); yoksa yoksayilmasi sorun degil.
+ Durum: [ACIK]
+
+[2026-10-24 04:00] [BACKEND] -> [FRONTEND, HEPSI]
+Konu: movie_minutes=11 cevabi + v5.1 sozlesme degisiklikleri (ayrinti: API_SOZLESMESI.txt en ustte "v5.1")
+Metin: (1) 11 dk: P2047 parse'i DOGRU (dakika/saniye/saat birimleri dakikaya cevriliyor, testli). Wikidata'da "Inception" adli
+ AYRI bir kayit var (Q85520081, 2014 kisa film, gercekten 11 dk, yil bos); Nolan filmi Q25188 (tr etiketi "Baslangic") 148 dk. Canli: Q25188 -> 148.
+ Taze DB'de yanlis ogeyi secmis olabilirsiniz (arama sonucunda iki ayri oge cikiyor). Onlem: 20-600 dk disi sureler artik SUPHELI -> null
+ (movie_runtime_unknown'a girer, 0 dk gibi sayilir ama "bilinmiyor" notu cikar); eski kayitli sureler bir kez sifirlanip yeniden hesaplanir. Test eklendi.
+ (2) /catalog/:id/seasons?refresh=1 VAR (30 sn'de bir, 8 sn); POST/PATCH/series-progress zaten reddetmeden once 4 sn'lik tazeleme yapiyor.
+ (3) FRONTEND'i ilgilendiren alan/davranis: GET /users/:id/heatmap ogesinde yeni "estimated_pages" ve pages = gercek sayfa (H-026);
+ gorunen ad '<' '>' ve gorunmez karakterde 400 (artik sessiz temizlik yok; onizleme ile kayit ayni) ve admin de ayni kural (2-30, trim, NFC);
+ biten kitapta baski/toplam degisimi 200 (E-28); admin katalog listesinde ?unlisted=1 ve "listed" alani; baskilarda yer tutucu otomatik silinir (E-33);
+ dizi stats donemli sayim kurali degisti (E-30/E-31, "Bu ay" yalniz o donemde ilerleyen bolum; bitti ise bitis ayinda tum bolumler).
+ Durum: [YAPILDI-backend]

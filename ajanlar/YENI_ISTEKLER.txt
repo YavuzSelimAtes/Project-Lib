@@ -1,0 +1,172 @@
+=====================================================================
+ YENI ISTEKLER (v5) - YONETICI (ana oturum) TARAFINDAN YAZILDI
+=====================================================================
+Proje klasoru: C:\Users\yavuz\Desktop\Proje\kutuphanem  (0_ORTAK.txt'deki eski yol gecersiz)
+Kurallar: 0_ORTAK.txt gecerli (dosya sahipligi, git commit/push YOK, kendi portun).
+Mevcut kod calisiyor; BUNLAR MEVCUT UZERINE EKLEME. Mevcut davranisi bozma.
+Backend sadece backend/** + ajanlar/backend.txt + ajanlar/API_SOZLESMESI.txt yazar.
+Frontend sadece frontend/** + ajanlar/frontend.txt yazar.
+
+Bu dosya iki ajan arasindaki SOZLESMEDIR. Isimler birebir uyulacak. Backend bunu
+kodlarken ayrintiyi API_SOZLESMESI.txt'ye ("v5" basligi) yazar; ayrinti degisirse
+ajanlar/tartisma.txt'ye [BACKEND -> FRONTEND] notu birakir.
+
+---------------------------------------------------------------------
+1) PROFIL OZELLESTIRME
+---------------------------------------------------------------------
+ - users tablosuna: name_changed INTEGER DEFAULT 0 (migrate ile).
+ - GET /api/avatars -> { groups:[{id,label,items:["🦊","🐼",...]}] }
+   Gruplar: Hayvanlar (en az 40 hayvan), Doga/Sirin, Fantastik, Meslekler/Insanlar.
+   Avatar degeri bu listede olmak ZORUNDA (mevcut kullanicilarin eski avatari
+   korunur ama yeniden secimde liste kullanilir). Admin kullanici ekleme formu da
+   ayni listeyi/dogrulamayi kullanir.
+ - PATCH /api/me/profile { avatar?, color?, display_name? } -> guncel kullanici.
+     * avatar/color serbestce, istenildigi kadar degisir (color: #rrggbb dogrulanir).
+     * display_name SADECE BIR KEZ: ilk basarili degisiklikte name_changed=1.
+       Sonrasi 409 {error:"Gorunen ad bir kez degistirilebilir."}. Ayni isim
+       (degismemis) gonderilirse sayilmaz. Uzunluk 2-30, trim, bosluk/HTML temizle.
+ - /api/auth/me ve publicUser cevabinda name_changed (bool) gorunsun.
+ - Admin kullanici ismi degistirme hakkini sifirlayabilir: PATCH /api/admin/users/:id
+   { reset_name_change:true } (opsiyonel, kucuk is).
+ FRONTEND: ust menude avatara tiklayinca / Benim Rafim ustunde "Profili duzenle"
+   modali: avatar secici (gruplu izgara, "rastgele" butonu), renk secici (hazir
+   palet + ozel), ad degistirme (UYARI: "Bir kere degistirebilirsin" onay kutusu,
+   hak bittiyse alan kilitli). Onizleme canli olsun.
+
+---------------------------------------------------------------------
+2) DIL / YAYINEVI / BASKI (EDITION)
+---------------------------------------------------------------------
+ Ayni eserin farkli baskilari farkli sayfa sayisina sahip olabilir (TR 700, EN 600).
+ - Yeni tablo editions: id, catalog_id (FK), language (iso: 'tr','en',...; null olabilir),
+   publisher, pages, year, isbn, cover_url, source, external_id, created_at.
+   Katalogtaki "eser" (catalog) aynen kalir; baski eserin altinda yasar.
+ - entries tablosuna edition_id (nullable, FK editions). Kitap kaydinda total_pages
+   baski secilirse baskinin sayfasindan gelir, elle degistirilebilir (mevcut kural).
+ - GET /api/catalog/:id -> catalog alanlari + editions:[{id,language,publisher,pages,year,isbn,cover_url}]
+ - GET /api/catalog/:id/editions?lang=tr -> baskilari doner; yerelde yoksa/eksikse
+   Open Library (works/{id}/editions.json: publishers, number_of_pages, languages, isbn)
+   ve Google Books (langRestrict, publisher, pageCount) ile doldurup kaydeder (cache,
+   nazik, zaman asimi, hata olursa yerelle devam). Dil gruplayarak dondur.
+ - GET /api/catalog/search?q=&type=&lang=tr|en|... (lang opsiyonel; verilmezse hepsi).
+   Kitap sonucuna languages:[...] ve editions_count eklenir.
+ - POST /api/entries { catalog_id|catalog_key, edition_id? , ... } ; PATCH /api/entries/:id
+   { edition_id } baski degistirir. Tutarli kural: yeni sayfa sayisi current_page'den
+   kucukse 400 Turkce hata; degilse total_pages guncellenir.
+ - Entry ve feed/shelf cevaplarinda edition:{id,language,publisher,pages} bulunsun
+   (baski yoksa null).
+ - Admin: POST /api/admin/catalog/:id/editions { language, publisher, pages, year?, isbn?, cover_url? }
+   ve DELETE /api/admin/editions/:id (elle baski ekleme/silme).
+ FRONTEND: Ekleme akisinda kitap secilince "Baski/Dil" adimi: dil sekmeleri (TR / EN / ...),
+   altinda yayinevi + sayfa sayisi kartlari (secili baski vurgulu); "Baski belirtmeden devam"
+   da mumkun. Kayit detayinda secili baski gorunur ve degistirilebilir. Arama kutusunun
+   yaninda dil filtresi (Hepsi/TR/EN).
+
+---------------------------------------------------------------------
+3) KATALOGDA OLMAYAN KITAPLAR (aramayi guclendir)
+---------------------------------------------------------------------
+ Aile su kitaplari bulamadi, ARAMA SONUCUNDA CIKMALI (kullanici hangi bicimde yazsa):
+   a) "Hayvanlardan Tanrilara" - Yuval Noah Harari (TURKCE baski de listede olsun)
+   b) "Anna Karenina" - Turkiye Is Bankasi Kultur Yayinlari baskisi
+   c) "Dikkat Kaygan Zemin" - Kral Sakir (cizgi film kitabi)
+   d) "Dunyayi Okuyan Cocuk" - Mert Arik
+   e) "Hayta" - Anil Basili
+ BACKEND gorevi:
+   - Arama sorgusunu akilli coz: "Baslik / Yazar", "Baslik - Yazar", "yazar baslik" gibi
+     girdilerde "/" "-" ayirip baslik ve yazari ayri aramaya ver; yerel norm aramasi yazar
+     alanini da kapsasin (zaten norm baslik+yazar).
+   - Turkce kaynaklari etkinlestir: Google Books langRestrict=tr (+ inauthor:/intitle:),
+     Open Library language=tur ve publisher aramasi. Her biri icin GERCEK arama yapip
+     (Turkce karakterli ve karaktersiz: "Hayvanlardan Tanrilara", "hayvanlardan tanrilara")
+     hangi kaynak ne donuyor test et; sonucu backend.txt'ye "Aranan 5 kitap: bulundu/bulunamadi
+     (kaynak)" tablosu olarak yaz.
+   - Hala bulunamayan kitaplar icin ELLE KURATOR LISTESI: backend/scripts/seed-extra.js
+     (idempotent) -> bu 5 kitabi (+ yayinevi/sayfa bilgisi bildigin ve dogrulayabildigin
+     kadariyla; bilmedigin sayfa sayisini UYDURMA, bos birak) kataloga baski olarak ekler ve
+     uygulama acilisinda otomatik calisir (kayit varsa dokunmaz). Kapagi dis kaynaktan bulunursa bagla.
+   - "Bulunamadi -> Talep et" akisi zaten var; sonuc listesinde yazar/yayinevi ayirt edici
+     gorunsun (frontend yayinevini gostersin).
+
+---------------------------------------------------------------------
+4) DIZI: GERCEK SEZON / BOLUM SAYILARI
+---------------------------------------------------------------------
+ - TVMaze GET /shows/:id/episodes ile bolumler cekilir.
+ - Yeni tablo series_seasons: catalog_id, season, episodes (yayinlanmis bolum sayisi),
+   total_episodes (duyurulanlar dahil, bilgi), runtime (dk, ort) ; UNIQUE(catalog_id,season).
+   Ozel bolumler (number null) haric. Gelecek tarihli bolumler "izlenebilir" sayilmaz
+   (airdate > bugun ise episodes'a katma).
+ - catalog'a: runtime (INTEGER dk) ve seasons (zaten var) doldurulur. Dizi kataloga
+   girerken/secilirken sezon bilgisi cekilir ve kaydedilir; eski kayitlar icin
+   GET /api/catalog/:id/seasons lazy-fill yapar.
+ - GET /api/catalog/:id/seasons -> { seasons:[{season, episodes, runtime}], total_seasons, total_episodes }
+ - POST/PATCH entries (dizi): season > total_seasons veya episode > o sezonun bolum sayisi
+   ise 400 "Bu dizide 3. sezon 10 bolumden olusuyor." Sezon bilgisi hic cekilemediyse
+   (TVMaze erisilemiyor) eski serbest davranis + uyari alani (seasons_unknown:true).
+ - Entry/feed cevabina dizi icin season_count ve episode_count (secili sezon) eklenebilir.
+ FRONTEND: Dizi ekleme/guncelleme ekraninda sezon ve bolum SERBEST SAYI girisi degil,
+   KISITLI secici: sezon dropdown/stepper (1..N), bolum dropdown/stepper (1..o sezonun bolumu).
+   Sezon degisince bolum sinirlari degisir. Bilgi yoksa eski girise dus + "sezon bilgisi
+   alinamadi" notu.
+
+---------------------------------------------------------------------
+5) LIDERLIK: GUNLUK SERI
+---------------------------------------------------------------------
+ - GET /api/leaderboards/streak -> mevcut tablolarla ayni bicim:
+   [{rank,user,value,detail}] value = GUNCEL seri (gun), detail = {longest, last_date}.
+   Sadece KITAP okuma gunleri (reading_logs, estimated=0). Seri 0 ise listeye girmez.
+   Beraberlikte longest buyuk olan ustte. period parametresi yok sayilir.
+ FRONTEND: Liderlik sayfasina 4. sekme "Seri" (🔥). Mevcut period filtresi bu sekmede gizli.
+
+---------------------------------------------------------------------
+6) BENIM RAFIM: TUR BAZLI ISTATISTIK KARTLARI
+---------------------------------------------------------------------
+ Rafim'da tur filtresi (Hepsi / Kitap / Dizi / Film) VAR. Kartlar filtreye gore:
+  * HEPSI: Bitirilen kitap | Okunan sayfa | Bitirilen dizi | Izlenen bolum | Izlenen film
+  * KITAP: simdiki kartlar (okunan sayfa, bitirilen kitap, gunluk ort, rekor, gun serisi...)
+           ama FILM IZLENDI karti YOK (ve dizi/film kartlari yok).
+  * DIZI : Izlenen dakika | Bitirilen dizi | Izlenen bolum  (gun serisi YOK, bkz 7)
+  * FILM : Izlenen dakika | Izlenen film
+ Backend: GET /api/users/:id/stats?type=all|book|series|movie
+   (type verilmezse eski cevap + yeni alanlar da eklenir; geriye uyumlu)
+   Yeni alanlar (hepsi her zaman donsun, frontend filtreye gore gosterir):
+     books_finished, total_pages, series_finished, episodes_watched,
+     series_minutes, movies_watched, movie_minutes
+   Hesap:
+     episodes_watched = dizi kaydinin geldigi (sezon,bolum) konumuna kadar olan yayinlanmis
+       bolum sayisi (series_seasons uzerinden); bitti ise dizinin tum bolumleri.
+       Sezon bilgisi yoksa: tahmin yapma, 0 say (episodes_unknown:true ekle).
+     series_minutes = izlenen bolumler * sezon runtime (yoksa katalog runtime; yoksa 0).
+     movie_minutes = bitmis (status=bitti) filmlerin catalog.runtime toplami. Film runtime'i:
+       Wikidata P2047 (sure, saniye/dakika birimine dikkat!) ile cekilir, cekilemeyenler null (0 sayilir).
+       Eski film kayitlari lazy-fill (stats cagrisinda veya arkaplanda).
+   period filtresi (all|year|month) bu alanlar icin de gecerli: bitis tarihi periyotta olan
+   kayitlar sayilir.
+ FRONTEND: kart seti yukaridaki gibi, filtre degisince animasyonlu gecis, bos durumda 0.
+   Dakika buyukse "12 sa 40 dk" formati.
+
+---------------------------------------------------------------------
+7) GUN SERISI SADECE KITAP
+---------------------------------------------------------------------
+ Gun serisi (streak) yalnizca kitap okumaya bagli. Dizi/film icin seri hesaplama ve gosterme.
+ current_streak / longest_streak zaten sadece reading_logs'tan hesaplanir; bunu koru,
+ frontend sadece KITAP filtresinde ve ana sayfa/liderlikte kitap baglaminda gostersin
+ (HEPSI/DIZI/FILM kartlarinda seri yok). Yeni bir dizi/film serisi EKLEME.
+ (Not: istekteki "dizi icin gun gun seri" ifadesi 7. madde ile cakisiyor; karar: dizi/filmde seri yok.)
+
+---------------------------------------------------------------------
+8) SON 3 AY ISI HARITASI: GUNUN SAYFASI
+---------------------------------------------------------------------
+ Frontend (backend'de veri zaten var; yetmiyorsa tartisma.txt'ye yaz). Renkli kutunun
+ ustune gelince (masaustu hover/odak) VE dokununca (mobil) o gunun bilgisi:
+ "12 Mart Sal - 37 sayfa" (okunmayan gun: "Okunmadi"). Mobilde dokununca kutunun
+ ustunde kucuk bir balon (ya da grafik altinda sabit bilgi satiri); baska yere dokununca
+ kapanir. Klavyeyle gezilebilir (tabindex, aria-label, ok tuslari opsiyonel).
+ Tahmini (estimated) gunler "~" ile belirtilir.
+
+=====================================================================
+KABUL KRITERLERI (herkes icin)
+=====================================================================
+ - Calisan kod: backend'de node testleri/curl, frontend'de `npm run build` hatasiz.
+ - Turkce hata mesajlari, ham hata yok.
+ - DB degisiklikleri migrate() ile mevcut DB'leri bozmadan eklenir (ALTER/CREATE IF NOT EXISTS).
+ - Disa istek atan her yer zaman asimli ve nazik; ag yoksa uygulama calismaya devam eder.
+=====================================================================

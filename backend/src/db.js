@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { norm } from './services/sources.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -120,6 +121,50 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, is_read);
+CREATE TABLE IF NOT EXISTS editions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  language TEXT,
+  publisher TEXT,
+  pub_norm TEXT NOT NULL DEFAULT '',
+  pages INTEGER,
+  year INTEGER,
+  isbn TEXT,
+  cover_url TEXT,
+  source TEXT NOT NULL DEFAULT 'manual',
+  external_id TEXT,
+  language_guessed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_editions_catalog ON editions(catalog_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_ext ON editions(source, external_id) WHERE external_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS edition_fetches (
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  src TEXT NOT NULL,
+  fetched_at INTEGER NOT NULL,
+  PRIMARY KEY (catalog_id, src)
+);
+CREATE TABLE IF NOT EXISTS series_seasons (
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  season INTEGER NOT NULL,
+  episodes INTEGER NOT NULL,
+  total_episodes INTEGER NOT NULL,
+  runtime INTEGER,
+  UNIQUE (catalog_id, season)
+);
+CREATE TABLE IF NOT EXISTS series_progress (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  episodes INTEGER NOT NULL,
+  minutes INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_series_progress_user ON series_progress(user_id, date);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 `;
 
 // Eski veritabanlarina sonradan eklenen kolonlar
@@ -130,11 +175,36 @@ const COLUMNS = [
   ['catalog', 'listed', 'INTEGER NOT NULL DEFAULT 1'],
   ['catalog', 'norm', "TEXT NOT NULL DEFAULT ''"],
   ['reading_logs', 'estimated', 'INTEGER NOT NULL DEFAULT 0'],
+  // v5 (YENI_ISTEKLER)
+  ['users', 'name_changed', 'INTEGER NOT NULL DEFAULT 0'],
+  ['entries', 'edition_id', 'INTEGER REFERENCES editions(id) ON DELETE SET NULL'],
+  ['catalog', 'runtime', 'INTEGER'],
+  ['catalog', 'show_status', 'TEXT'],
+  ['catalog', 'seasons_fetched_at', 'INTEGER'],
+  ['catalog', 'languages', 'TEXT'],
+  ['catalog', 'edition_count', 'INTEGER'],
+  ['catalog', 'runtime_checked', 'INTEGER'],
+  // v5.1
+  ['entries', 'finished_pages', 'INTEGER'], // bitti kitapta bitis aninda sabitlenen okunan toplam (baski degisince gecmis istatistik oynamaz)
+  ['entries', 'finished_episodes', 'INTEGER'], // bitti dizide bitis aninda sabitlenen bolum / dakika
+  ['entries', 'finished_minutes', 'INTEGER'],
+  ['reading_logs', 'no_streak', 'INTEGER NOT NULL DEFAULT 0'], // gecmise dolgu satiri: ortalamaya girer, seri/rekora girmez
 ];
 function migrate(db) {
   for (const [table, col, def] of COLUMNS) {
     const have = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
     if (!have) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  }
+  // Film sureleri bir kez sifirlanir ve Wikidata'dan yeniden hesaplanir (hatali/supheli degerler duzelsin; arka planda lazy-fill)
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='runtime_v2'").get()) {
+    db.exec("UPDATE catalog SET runtime=NULL, runtime_checked=NULL WHERE type='movie' AND source='wikipedia'");
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('runtime_v2', ?)").run(new Date().toISOString());
+  }
+  // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {
+    const upd = db.prepare('UPDATE catalog SET norm=? WHERE id=?');
+    for (const r of db.prepare('SELECT id,title,author_or_creator FROM catalog').all()) upd.run(norm(`${r.title} ${r.author_or_creator || ''}`), r.id);
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('norm_v2', ?)").run(new Date().toISOString());
   }
 }
 

@@ -1,6 +1,6 @@
 import { requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, int, oneOf, nowIso, publicUser } from '../util.js';
-import { catalogOut } from '../services/catalog.js';
+import { catalogOut, markListed } from '../services/catalog.js';
 import { notify } from '../services/notify.js';
 
 const STATUSES = ['acik', 'inceleniyor', 'tamamlandi', 'reddedildi'];
@@ -65,6 +65,7 @@ export default async function routes(app) {
     }
     if (status === 'tamamlandi' && !resolved) throw bad('Talebi tamamlamak icin once katalogdan bir kayit baglayin (resolved_catalog_id)', { resolved_catalog_id: 'gerekli' });
     db.prepare('UPDATE requests SET status=?, admin_note=?, resolved_catalog_id=?, updated_at=? WHERE id=?').run(status, admin_note, resolved, nowIso(), id);
+    if (resolved) markListed(db, resolved); // taleple baglanan katalog kaydi kalici olur
     const changed = status !== r.status || resolved !== r.resolved_catalog_id || admin_note !== r.admin_note;
     if (changed && status !== 'acik') {
       const cat = resolved ? db.prepare('SELECT title FROM catalog WHERE id=?').get(resolved) : null;

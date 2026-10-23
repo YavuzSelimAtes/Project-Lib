@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
@@ -62,7 +62,17 @@ export default function Home() {
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [showQ, setShowQ] = useState(false);
-  const cards = feed.data?.cards || [];
+  // profil degisince (avatar/renk/ad) feed'i tazele; o ana kadar kendi kartini guncel profille ciz
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    feed.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.avatar, me.color, me.display_name]);
+  const cards = (feed.data?.cards || []).map((c) => (c.user.id === me.id ? { ...c, user: { ...c.user, avatar: me.avatar, color: me.color, display_name: me.display_name } } : c));
   const reload = () => {
     feed.reload();
     pending.reload();

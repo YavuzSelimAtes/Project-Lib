@@ -1,7 +1,8 @@
 =====================================================================
  API SOZLESMESI  (backend yazar, frontend + test bunu okur)
 =====================================================================
-SON DEGISIKLIK: 2026-10-23 v7 (POST /entries backfill: manual|spread) -- onceki: v6 (bolum 9: open-days + day-logs) -- onceki: v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
+SON DEGISIKLIK: 2026-10-24 v5-YENI_ISTEKLER (profil, baski/dil/yayinevi, akilli arama, dizi sezon/bolum, seri liderligi, tur bazli stats; EN USTTEKI "v5" BASLIGINA BAK)
+   -- onceki: 2026-10-23 v7 (POST /entries backfill: manual|spread) -- onceki: v6 (bolum 9: open-days + day-logs) -- onceki: v5 (feed.cards[].current_streak eklendi) -- onceki: v4 (E-15..E-22 + H-001..H-007; [v4] ile isaretli: progress current_page>=1 ve geri gidis icin
    confirm:true, geri alma log SILMEZ, base_page/"tarih yok" (avg_source:no_dates), arayuz backend
    tarafindan sunulur (frontend/dist), GET/PATCH /api/admin/catalog, feed more_count, yonetici karti
    gizlenir) -- onceki: v3 (yonetici kararlari) [v3] ile isaretli:
@@ -13,6 +14,211 @@ SON DEGISIKLIK: 2026-10-23 v7 (POST /entries backfill: manual|spread) -- onceki:
    - film ana ekranda EKLENME zamanindan 48 saat
    - ADMIN_PASSWORD yoksa rastgele sifre (konsola yazilir) + must_change_pw
    (v2 isaretleri: atlanan gun dagitimi, estimated, backup, kapak guvenligi)
+
+#####################################################################
+# v5.1 (2026-10-24, elestiri E-28..E-46 / test H-024..H-026 duzeltmeleri) -- v5 bolumunun USTUNE yazar; celisirse BU gecerlidir
+#####################################################################
+- GORUNEN AD (E-35): tek ortak kural (profil + admin kullanici ekleme/duzenleme): NFC, ardisik bosluk tek bosluk, trim, 2-30 karakter
+  (admin yolunda en az 1). Gorunmez/kontrol/bicim karakterleri (zero-width, RTL override, BOM, kontrol) ve '<' '>' iceren ad
+  SESSIZCE TEMIZLENMEZ, 400 ile REDDEDILIR (hak harcanmaz). Kaydedilen = gonderilenin normalize hali. Gonderilen ad kayitli adla
+  birebir ayniysa (ya da normalize hali ayniysa) degisiklik sayilmaz. (v5'teki "HTML temizligi" artik YOK.)
+- BITEN KITAPTA BASKI/TOPLAM (E-28/E-46): status=bitti kalacaksa edition_id ya da total_pages HER YONE degisebilir; total_pages=yeni
+  deger, current_page=total_pages (kitap bitmis kalir, 100%). Gunluk okuma logu URETILMEZ; okunan sayfa toplami (istatistik/ortalama)
+  eski degerde SABITLENIR (yeni alan yok, dahili finished_pages). Devam eden kitapta eski kural: pages < current_page -> 400.
+- DIZI SEZON TAZELEME (E-29/E-45): POST/PATCH entries ve series-progress, bilgi 24 saatten eskiyse ya da istenen sezon/bolum bilinenden
+  buyukse reddetmeden once TVMaze'den 4 sn zaman asimiyla tazeler (hata olursa eski bilgiyle devam). Yeni:
+  GET /api/catalog/:id/seasons?refresh=1 -> zorla tazele (ayni dizi icin 30 sn'de bir; 8 sn zaman asimi).
+- DIZI STATS (E-30/E-31): period=all: konuma kadar bolum (eskisi gibi). period=month|year: BITTI -> bitis tarihi donemdeyse dizinin
+  TUM bolum/dakikasi (bitis aninda SABITLENIR, sonra yayinlanan sezon sisirmez); DEVAM/BIRAKILDI -> yalniz o donemde kaydedilen ilerleme
+  (series-progress / PATCH season-episode ile konum degisince fark gunluge yazilir; kayit ACILIS konumu sayilmaz; gunluk tutulmadan once
+  ilerleyen eski kayitlar donemli sayimda 0). Alan adlari ayni.
+- PICK / LISTED (E-32): POST /catalog/pick artik kaydi onizleme (listed=0) olusturur: aramada (yerel), GET /admin/catalog'ta gorunmez.
+  Kullanilinca (POST /entries, talebe baglanma, admin import/duzenleme) kalici olur. Kullanilmayan onizleme 14 gunde silinir.
+  Cevap alanlari AYNI. Admin: GET /api/admin/catalog?unlisted=1 -> onizleme kayitlari da gelir; her ogede "listed":true|false.
+  pick anahtari 10 dk gecerli (sonra 404).
+- BASKILAR (E-33/H-024/E-37): gercek baski (yayinevi ya da sayfa) eklenince AYNI dilin bos yer tutucu baskisi silinir ve ona bagli
+  kayitlar yeni baskiya baglanir; bos kartlar listede her dilin sonunda. Dil basina saklanan baski siniri 10 -> 40 (dilsiz 10).
+  GET /catalog/:id/editions dis istek yapacaksa dakikada 30 sinirina sayilir (429). Google 429 hatasi online.errors'ta artik gosterilmez.
+  OL sayfalarindan bazilari dusuyse sonuc 7 gun onbellege ALINMAZ (tekrar dener; 60 sn icinde ayni kaynak tekrar denenmez).
+  Yeni dil etiketleri (pan, mal, tam ... "PAN" gorunmez).
+- ARAMA (H-025): kitap sonuclarinda baslik/yazar/yayinevinde sorgu kelimelerinden HICBIRI gecmeyen ve tek baskili sonuclar elenir
+  (orn. "Kuran-i Kerim" gurultusu). Cok baskili eserler (Sapiens) kalir.
+- ISI HARITASI (H-026): GET /users/:id/heatmap gun ogesine "estimated_pages" eklendi. Ayni gunde gercek + tahmini varsa
+  pages = GERCEK sayfa, estimated:false, estimated_pages = tahmini kisim; yalniz tahmini varsa pages = tahmini, estimated:true.
+- SERI/REKOR (E-36): 7 gunden eski gunlere SONRADAN girilen sayfalar (POST /entries backfill=manual ve PUT /day-logs) ve backfill'in
+  "kalan sayfalar bugune" satiri ortalamaya/toplama girer ama SERI ve REKORA girmez. (v7 notundaki "gercek satirlar seriye islenir"
+  son 7 gun icin gecerli.) Normal gunluk /progress etkilenmez.
+- FILM SURESI: Wikidata P2047 birimleri (dakika Q7727 / saniye Q11574 / saat Q25235) dakikaya cevrilir; 20-600 dk disi SUPHELI -> null
+  (bilinmiyor, movie_runtime_unknown'a girer). Onceden kaydedilmis sureler bir kez sifirlanip yeniden hesaplanir.
+- stats: baskasinin rafi acilinca dis istek (arka plan doldurma) tetiklenmez; yalniz kendi rafi.
+
+#####################################################################
+# v5 (YENI_ISTEKLER.txt) -- BU BOLUM EN GUNCEL; asagidaki eski metinle
+# celisirse BU gecerlidir. (Eski metindeki "[v5]" etiketi baska/eski bir
+# turdu: feed.current_streak.)  Isimler YENI_ISTEKLER.txt ile birebir.
+# Sapma/ek alanlar "EK:" ile isaretli. Hepsi geriye uyumlu (alan eklenir, silinmez).
+#####################################################################
+
+V5-1) PROFIL OZELLESTIRME
+-------------------------
+user nesnesine yeni alan:  "name_changed": false|true   (login, /auth/me, admin listeleri, PATCH cevaplari)
+  {"id":2,"username":"ayse","display_name":"Ayse","role":"member","avatar":"🦊","color":"#f97316",
+   "must_change_pw":false,"active":true,"name_changed":false,"created_at":"..."}
+  Not: feed/liderlik/yorum gibi yerlerdeki kisa kullanici nesnesi (id,display_name,avatar,color) AYNI kalir.
+
+GET /api/avatars   [U]   -> 200
+  { "groups":[ {"id":"animals","label":"Hayvanlar","items":["🦊","🐼",...  (en az 40)]},
+               {"id":"nature","label":"Doğa / Şirin","items":[...]},
+               {"id":"fantasy","label":"Fantastik","items":[...]},
+               {"id":"people","label":"Meslekler / İnsanlar","items":[...]} ] }
+  EK: avatar degeri bu listede olmak ZORUNDA (tum gruplarin birlesimi). Uyumluluk icin liste eski
+  kullanicilarin kullandigi emojileri (👩👨👧🧒👵👴👑🙂) de "people" grubunda tutar. Backend, secimde U+FE0F
+  (emoji varyasyon isareti) farkini yok sayar ve listedeki halini saklar. Listede olmayan -> 400.
+
+PATCH /api/me/profile   [U]    { "avatar"?:"🐼", "color"?:"#10b981", "display_name"?:"Ayse Yilmaz" }
+  -> 200 { "user": user }
+  - En az bir alan gonderilmeli (yoksa 400). null/bos avatar-color-display_name -> 400.
+  - avatar: listede olmali (yukaridaki kural); kullanicinin MEVCUT (eski) avatari ayni haliyle gonderilirse kabul.
+    Istenildigi kadar degisir. color: kesin #rrggbb (buyuk/kucuk harf fark etmez, kucuk harfe cevrilir).
+  - display_name SADECE BIR KEZ: trim + <html etiketleri/<> temizlenir + ic bosluklar tek bosluk; uzunluk 2-30
+    (yoksa 400). Temizlenmis hali MEVCUTLA AYNIYSA hak harcanmaz (degisiklik sayilmaz, 200). Farkliysa ve
+    name_changed=0 ise guncellenir ve name_changed=1 olur. name_changed=1 iken farkli isim -> 409
+    {"error":"Gorunen ad bir kez degistirilebilir.","code":"CONFLICT"}  (avatar/color ayni istekte gelse bile
+    istek TUMUYLE reddedilir, hicbir sey kaydedilmez).
+PATCH /api/admin/users/:id  [A]   EK alanlar: { "reset_name_change":true } -> name_changed=0 (diger alanlarla birlikte
+  gonderilebilir). Admin PATCH'te avatar da ayni liste dogrulamasindan gecer (kullanicinin mevcut avatari serbest).
+POST /api/admin/users  [A]  avatar verilirse listede olmali (yoksa 400); verilmezse eskisi gibi otomatik secilir.
+
+V5-2) DIL / YAYINEVI / BASKI (EDITIONS)
+---------------------------------------
+edition nesnesi:
+  { "id":5, "catalog_id":12, "language":"tr"|null, "language_label":"Türkçe"|null, "publisher":"Kolektif Kitap"|null,
+    "pages":464|null, "year":2015|null, "isbn":"978..."|null, "cover_url":"/api/covers/x.jpg"|"https://..."|null,
+    "source":"openlibrary|googlebooks|manual|seed", "language_guessed":false }
+  language = ISO 639-1 kucuk harf ("tr","en","de","fr","es","ru","it",...); bilinmiyorsa null.
+  EK: language_guessed=true -> kaynak dil vermemis, yayinevi adindan ("... Yayinlari/Yayincilik/Yayinevi") Turkce
+  tahmin edildi; arayuz istenirse "~" ya da soluk gosterebilir.
+  pages bilinmiyorsa null (UYDURMA YOK; arayuz "sayfa sayisi bilinmiyor" desin, kullanici elle girer).
+catalog nesnesine EK: "runtime": null|int (dk; dizi ve film icin, bkz V5-4/V5-6).
+edition ozeti (entry/feed/raf icinde): "edition": { "id":5, "language":"tr", "publisher":"Kolektif Kitap", "pages":464 } | null
+  entry nesnesine ayrica "edition_id": 5|null.
+
+GET /api/catalog/:id   [U]   (eski cevap + editions)
+  -> { "item": catalog + "editions":[edition...],  "entries":[...eskisi gibi...],
+       "editions": [edition...] }          // EK: ayni liste hem item.editions hem ust seviyede (kolaylik)
+  Sadece YEREL baskilari doner (internet cagirmaz). Internetten doldurmak icin asagidaki uc.
+
+GET /api/catalog/:id/editions?lang=tr   [U]      (lang opsiyonel: iki harf ISO; refresh=1 zorla yeniden ceker)
+  -> 200 { "catalog_id":12, "lang":"tr"|null,
+           "editions":[edition...],            // lang verildiyse sadece o dil; once yayinevi+sayfasi dolu olanlar
+           "groups":[ {"language":"tr","label":"Türkçe","count":3,"editions":[edition...]},
+                      {"language":"en","label":"İngilizce","count":2,"editions":[...]},
+                      {"language":null,"label":"Dil belirtilmemiş","count":1,"editions":[...]} ],
+           "languages":[ {"language":"tr","label":"Türkçe","count":3}, ... ],   // FILTREDEN BAGIMSIZ, tum bilinen diller (sekmeler icin)
+           "online":{ "ok":true, "errors":[], "fetched":true } }
+  - Yerel kayit yoksa/eksikse (bu katalog+dil icin son 7 gunde denenmediyse ya da refresh=1) Open Library
+    (works/{id}/editions.json) ve Google Books (langRestrict, publisher, pageCount) ile doldurup KAYDEDER (cache).
+    Dis kaynak hatasi 200 doner, yerel sonuc ile devam (hata denemesi "denendi" sayilmaz, sonra tekrar dener).
+    online.ok = en az bir kaynak yanitladi (ya da hic dis istek gerekmedi); errors = basarisiz kaynaklarin mesajlari.
+    Google Books anahtarsiz kotasi sik dolar: dolu iken hic denenmez ve hata da gosterilmez (Open Library yeterli).
+  - Dizilim: groups ve languages once Turkce, sonra Ingilizce, sonra baski sayisina gore; dili bilinmeyenler en sonda.
+  - Open Library bagli olmayan kayitlar (elle eklenen/Google) icin ayni baslik+yazarli OL eseri aranip baskilari alinir.
+  - Sadece type=book kataloglar icin; film/dizi -> 400. Ilk cagri 2-7 sn surebilir (zaman asimli).
+  - Bir internet sonucu (id:null) icin once POST /api/catalog/pick ile kalici kayit olusturun, sonra bu ucu cagirin.
+  - Ayni dil+yayinevi+sayfa tekrarlari tek baskiya indirilir.
+
+GET /api/catalog/search?q=&type=&lang=tr|en|...   (lang opsiyonel)
+  Kitap sonucuna EK alanlar:  "languages":["tr","en"],  "editions_count": 14,
+                              "publisher":"Kolektif Kitap"|null, "publishers":["Kolektif Kitap","..."]  (en fazla 3; ayirt etmek icin)
+  - lang verilirse: kaynaklarda o dil de aranir; sonucun bilinen dilleri VARSA ve lang icermiyorsa elenir; dili bilinmeyen
+    sonuclar elenmez (arayuz "Hepsi/TR/EN" filtresi icin yeterli). type=book disindakileri etkilemez.
+  - editions_count = bilinen baski sayisi (yerelde kayitli baskilar ile kaynagin bildirdigi sayidan buyuk olan).
+  - Akilli sorgu cozumu (V5-3).
+
+POST /api/entries   EK alan: "edition_id"?: 5   (katalog kaydina ait olmali; degilse 400)
+  - total_pages onceligi: istekteki total_pages > baskinin pages > (baski SECILMEDIYSE) katalog pages.
+    Baski secili ve pages=null ise total_pages=null kalir (baska baskinin sayfasi VARSAYILMAZ; arayuz sayfa sorsun,
+    PATCH total_pages ile girilir).
+PATCH /api/entries/:id   EK alan: "edition_id": 5 | null   (baski degistir / kaldir; sadece kitap)
+  - edition_id verilirse baskinin pages'i dolu ise: pages < current_page -> 400
+    "Bu baskida 320 sayfa var ama siz 400. sayfadasiniz." (hicbir sey degismez). Degilse total_pages = pages.
+    Ayni istekte total_pages de varsa o kazanir. pages=null baski: total_pages degismez. null: sadece baski baglantisi kalkar.
+    Biten (bitti) kitapta current_page de yeni toplama esitlenir (100% kalir).
+Entry, feed item ve raf cevaplarinda: "edition": {id,language,publisher,pages}|null  + entry'de "edition_id".
+
+POST /api/admin/catalog/:id/editions  [A]
+  Istek : { "language":"tr"?, "publisher":"..."?, "pages":464?, "year":2015?, "isbn":"..."?, "cover_url":"https://..."? }
+          (language, publisher, pages'ten en az biri gerekli; pages bos birakilabilir)  -> 201 { "edition": edition }
+          Sadece type=book. Ayni (dil+yayinevi+sayfa) varsa 409.
+DELETE /api/admin/editions/:id  [A]  -> { "ok":true, "detached_entries":2 }  (baglı kayitlarin edition_id'si bosalir, total_pages korunur)
+
+V5-3) KATALOGDA OLMAYAN KITAPLAR / AKILLI ARAMA
+-----------------------------------------------
+GET /api/catalog/search  (cevap bicimi AYNI) -- degisen davranis:
+  - "Baslik / Yazar", "Baslik - Yazar", "Baslik, Yazar", "Baslik | Yazar" girdileri ayrilip baslik+yazar olarak
+    ayri aranir; "yazar baslik" sirasiz kelime mantigi yine calisir. Turkce karakterli/karaksiz fark etmez.
+  - Yerel arama baski YAYINEVI adini da kapsar ("anna karenina is bankasi" -> Is Bankasi baskisi olan eser).
+  - Kitaplarda Turkce kaynaklar da aranir (Google Books langRestrict=tr, Open Library language=tur).
+  - Kurator listesi (seed-extra) acilista otomatik eklenir: bkz ajanlar/backend.txt "ARANAN 5 KITAP".
+  Cevap alan degisikligi yok (items/online/local_count) + yukaridaki kitap EK alanlari.
+
+V5-4) DIZI: GERCEK SEZON / BOLUM SAYILARI
+-----------------------------------------
+GET /api/catalog/:id/seasons   [U]    (sadece type=series; degilse 400)
+  -> 200 { "catalog_id":30, "known":true,
+           "seasons":[ {"season":1,"episodes":10,"total_episodes":10,"runtime":45}, {"season":2,"episodes":8,"total_episodes":10,"runtime":45} ],
+           "total_seasons":2, "total_episodes":18, "runtime":45|null,
+           "online":{"ok":true,"errors":[]} }
+  - episodes = YAYINLANMIS bolum sayisi (airdate <= bugun; ozel bolumler yani numarasiz olanlar haric; tarihi bos
+    bolum yayinlanmis sayilmaz, dizi "Ended" ise sayilir). total_episodes = duyurulanlar dahil (bilgi).
+    runtime = dakika (bolum suresi ortalamasi; yoksa dizi suresi; yoksa null).
+  - EK: seasons listesinde sadece izlenebilir (episodes>=1) sezonlar yer alir. total_seasons = listedeki sezon sayisi,
+    total_episodes (ust seviye) = yayinlanmis bolum toplami.
+  - Yerelde yoksa (ya da devam eden dizide 24 saatten eskiyse) TVMaze /shows/:id?embed=episodes ile doldurulur (lazy-fill).
+    TVMaze erisilemez/tvmaze kaynakli degilse: 200 { "known":false, "seasons":[], "total_seasons":0, "total_episodes":0 }.
+  - Dizi secilince (POST /catalog/pick, POST /entries catalog_key, admin import) sezon bilgisi de cekilir ve kaydedilir.
+catalog nesnesinde dizi icin "seasons" (sezon sayisi) ve "runtime" doldurulur.
+
+POST /api/entries (dizi) ve PATCH /api/entries/:id ve POST /api/entries/:id/series-progress:
+  - sezon bilgisi biliniyorsa: season listede yoksa 400 "Bu dizide 3 sezon var." ; episode > o sezonun bolumu ise
+    400 "Bu dizide 3. sezon 10 bolumden olusuyor." ; bolum verilip sezon yoksa (ve kayitta da yoksa) 400 "Bolum icin sezonu da secin."
+  - sezon bilgisi hic yoksa (TVMaze erisilemedi/manuel dizi): eski serbest davranis ve cevapta  "seasons_unknown": true.
+Entry ve feed item cevabinda (dizi): "season_count": 5|null (dizinin sezon sayisi), "episode_count": 10|null (SECILI sezonun bolum sayisi),
+  "seasons_unknown": false|true.   (kitap/film entry'lerinde bu alanlar yok.)
+
+V5-5) LIDERLIK: GUNLUK SERI
+---------------------------
+GET /api/leaderboards/streak   [U]    (period parametresi YOK SAYILIR)
+  -> 200 { "period":"all", "title":"Gunluk seri", "entries":[
+            { "rank":1, "user":{id,display_name,avatar,color}, "value":9, "detail":{ "longest":14, "last_date":"2026-10-24" } } ] }
+  - value = GUNCEL seri (ust uste gercek kitap okuma gunu; bugun ya da dun okuduysa surer, yoksa 0 -> listeye girmez).
+    Sadece reading_logs, estimated=0, pages_read>0 gunleri. Pasif kullanicilar yok. Siralama: value desc, longest desc, ad.
+    Ayni rank = hem value hem longest esit.
+
+V5-6) BENIM RAFIM: TUR BAZLI ISTATISTIK
+---------------------------------------
+GET /api/users/:id/stats?type=all|book|series|movie&period=all|year|month   [U]
+  type opsiyonel (varsayilan all). Backend TUM alanlari HER ZAMAN doner; type sadece dogrulanir ve cevapta "type" olarak
+  geri doner (arayuz karti filtreye gore secer). Eski alanlar AYNEN durur.
+  -> { "user":{...}, "type":"all", "period":"all",
+       // eskiler:
+       "total_pages":4210, "books_finished":6, "movies_watched":9, "series_active":2, "series_finished":1,
+       "avg_pages_per_day":23.4, "record":{...}|null, "current_streak":4, "longest_streak":12, "active_days":87,
+       // YENI:
+       "episodes_watched": 132,      // dizi kaydinin geldigi (sezon,bolum) konumuna kadar YAYINLANMIS bolum sayisi; bitti ise tum bolumler
+       "series_minutes": 5940,       // izlenen bolum * sezon runtime (yoksa katalog runtime; yoksa 0)
+       "movie_minutes": 1210,        // bitti filmlerin catalog.runtime toplami (runtime'i bilinmeyen 0 sayilir)
+       "episodes_unknown": false,    // true: en az bir dizinin sezon bilgisi yok -> o dizi 0 sayildi (tahmin YOK)
+       "movie_runtime_unknown": 2 }  // suresi bilinmeyen bitmis film sayisi (arka planda doldurulmaya calisilir)
+  - period (all|year|month) yeni alanlara da uygulanir: bitis tarihi periyotta olan 'bitti' kayitlar; devam/birakildi dizilerde
+    bitis tarihi yoktur -> son guncelleme gunu (updated_at) periyotta ise sayilir. 'planlandi' sayilmaz.
+  - Gun serisi (current_streak/longest_streak) SADECE kitap okumasindan gelir (dizi/film serisi YOK).
+
+V5-7) GUN SERISI SADECE KITAP: degisiklik yok; mevcut hesap zaten yalnizca kitap reading_logs'tan (estimated=0).
+
+V5-8) ISI HARITASI: GET /api/users/:id/heatmap?days=90 zaten gun, sayfa, estimated doner; ek is yok.
+
+#####################################################################
 
 GENEL
 -----

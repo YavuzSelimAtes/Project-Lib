@@ -9,6 +9,7 @@ import Shelf from './pages/Shelf.jsx';
 import Admin from './pages/Admin.jsx';
 import Bell from './Bell.jsx';
 import ChangePassword from './ChangePassword.jsx';
+import ProfileEdit from './Profile.jsx';
 
 import { AuthCtx } from './auth.js';
 
@@ -40,6 +41,7 @@ function useTheme() {
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = yukleniyor, null = giris yok
   const [dark, toggleTheme] = useTheme();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -83,7 +85,7 @@ export default function App() {
 
   const isAdmin = user.role === 'admin';
   return (
-    <AuthCtx.Provider value={{ user, refresh }}>
+    <AuthCtx.Provider value={{ user, refresh, editProfile: () => setProfileOpen(true) }}>
       <header className="topbar">
         <div className="topbar-in">
           <Link to="/" className="brand">
@@ -100,15 +102,16 @@ export default function App() {
           <span className="spacer" />
           <Bell />
           <ThemeBtn dark={dark} toggle={toggleTheme} />
-          <span className="who" title={user.display_name}>
+          <button className="who" onClick={() => setProfileOpen(true)} title="Profili düzenle" aria-label="Profili düzenle">
             <Avatar user={user} size="sm" />
-          </span>
+          </button>
           <button className="btn small ghost" onClick={logout}>
             Çıkış
           </button>
         </div>
       </header>
       {user.must_change_pw && <ChangePassword forced onDone={refresh} />}
+      {profileOpen && !user.must_change_pw && <ProfileEdit onClose={() => setProfileOpen(false)} />}
       <main className="page">
         <Routes>
           <Route path="/" element={<Home />} />

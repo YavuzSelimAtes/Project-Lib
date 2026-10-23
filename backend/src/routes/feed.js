@@ -2,9 +2,11 @@ import { requireUser } from '../auth.js';
 import { oneOf, todayStr, addDays, nowIso, publicUser, round1 } from '../util.js';
 import { entryAvg } from '../services/entries.js';
 import { leaderboard, streaksOf } from '../services/stats.js';
+import { editionBrief, getEdition } from '../services/editions.js';
+import { seriesExtras } from '../services/seasons.js';
 
 const CARD_MAX = 8; // kart basina en fazla 8 oge, kalani more_count
-const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren' };
+const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren', streak: 'Gunluk seri' };
 
 export default async function routes(app) {
   const db = app.db;
@@ -39,6 +41,8 @@ export default async function routes(app) {
         pages_today: e.type === 'book' ? (ptMap.get(e.id) || 0) : null,
         avg_pages_per_day: e.type === 'book' ? entryAvg(db, e, today).avg : null,
         updated_at: e.updated_at,
+        edition: e.edition_id ? editionBrief(getEdition(db, e.edition_id)) : null,
+        ...(e.type === 'series' ? seriesExtras(db, e.cid, e.season) : {}),
       };
       byUser.get(e.user_id)?.push(item);
     }
@@ -51,10 +55,11 @@ export default async function routes(app) {
     return { generated_at: nowIso(), cards, activity };
   });
 
-  for (const kind of ['record', 'average', 'finished']) {
+  for (const kind of ['record', 'average', 'finished', 'streak']) {
     app.get(`/api/leaderboards/${kind}`, async (req) => {
       requireUser(req);
-      const period = oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all';
+      // seri liderliginde period yok sayilir (gecersiz deger bile hata vermez)
+      const period = kind === 'streak' ? 'all' : (oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all');
       return { period, title: TITLES[kind], entries: leaderboard(db, kind, period) };
     });
   }

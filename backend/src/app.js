@@ -17,6 +17,8 @@ import requestRoutes from './routes/requests.js';
 import entryRoutes from './routes/entries.js';
 import socialRoutes from './routes/social.js';
 import feedRoutes from './routes/feed.js';
+import { cleanupUnlisted } from './services/catalog.js';
+import { seedExtraDb, seedExtraCovers } from './services/seedExtra.js';
 
 async function seedAdmin(db, log) {
   const row = db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get();
@@ -115,8 +117,22 @@ export async function buildApp({ logger = true } = {}) {
   for (const r of [adminRoutes, authRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes]) await app.register(r);
 
   await seedAdmin(db, app.log);
+  // Kurator listesi (aranan ama bulunamayan kitaplar): veritabani kismi aninda, kapaklar arka planda. SEED_EXTRA=0 ile kapatilir.
+  if (process.env.SEED_EXTRA !== '0') {
+    try {
+      const r = seedExtraDb(db);
+      if (r.touched) app.log.info(`seed-extra: ${r.touched} kitap islendi (${r.added} yeni katalog kaydi)`);
+    } catch (e) { app.log.warn(`seed-extra calismadi: ${e.message}`); }
+    if (process.env.SEED_EXTRA_COVERS !== '0') {
+      let closing = false;
+      app.addHook('onClose', async () => { closing = true; });
+      const t = setTimeout(() => { if (!closing) seedExtraCovers(db, app.log).catch(() => {}); }, 3000);
+      t.unref();
+    }
+  }
   const housekeeping = () => {
     try { db.prepare('DELETE FROM sessions WHERE expires_at<?').run(nowIso()); } catch { /* onemsiz */ }
+    try { cleanupUnlisted(db, 14); } catch { /* onemsiz */ } // kullanilmayan onizleme (pick) kayitlari 14 gunde silinir
   };
   housekeeping();
   const timer = setInterval(housekeeping, 12 * 3600 * 1000);

@@ -1,25 +1,27 @@
 import { addDays, diffDays, nowIso, round1, todayStr, publicUser, bad, err } from '../util.js';
 import { catalogOut } from './catalog.js';
+import { editionBrief, getEdition } from './editions.js';
+import { seriesExtras } from './seasons.js';
 
 export const getEntry = (db, id) => db.prepare('SELECT * FROM entries WHERE id=?').get(id);
 
 export const pagesReadOf = (db, e) => {
   if (e.type !== 'book' || e.status === 'planlandi') return 0;
   const base = e.base_page || 0; // kayit acilirken zaten okunmus sayfalar okuma sayilmaz
-  if (e.status === 'bitti' && e.total_pages) return Math.max(0, e.total_pages - base);
+  if (e.status === 'bitti' && e.total_pages) return Math.max(0, (e.finished_pages ?? e.total_pages) - base); // finished_pages: bitis aninda sabitlenmis deger (baski degisimi gecmisi oynatmasin)
   return Math.max(0, (e.current_page || 0) - base);
 };
 
 // Bir kitap kaydinin gun-bazli sayfa modeli: Map(date -> {real, est}) + aralik + kaynak
 export function entryDayModel(db, e, today = todayStr()) {
-  const logs = db.prepare('SELECT date,pages_read,estimated FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id);
+  const logs = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id);
   const days = new Map();
   let sumLogs = 0;
   let hasEst = false;
   for (const l of logs) {
     sumLogs += l.pages_read; // duzeltme (geri alma) satirlari negatif olabilir
     if (l.pages_read <= 0) continue;
-    days.set(l.date, l.estimated ? { real: 0, est: l.pages_read } : { real: l.pages_read, est: 0 });
+    days.set(l.date, l.estimated || l.no_streak ? { real: 0, est: l.pages_read } : { real: l.pages_read, est: 0 }); // gecmise dolgu (no_streak) satirlari ortalamaya girer, rekora girmez
     if (l.estimated) hasEst = true;
   }
   const pagesRead = Math.max(pagesReadOf(db, e), sumLogs);
@@ -67,7 +69,9 @@ export function entryOut(db, e, { withCatalog = true, withUser = true } = {}) {
     start_date: e.start_date, end_date: e.end_date, total_pages: e.total_pages, current_page: e.current_page,
     season: e.season, episode: e.episode, rating: e.rating, created_at: e.created_at, updated_at: e.updated_at,
     percent: null, avg_pages_per_day: null, avg_source: null,
+    edition_id: e.edition_id ?? null, edition: e.edition_id ? editionBrief(getEdition(db, e.edition_id)) : null,
   };
+  if (e.type === 'series') Object.assign(out, seriesExtras(db, e.catalog_id, e.season));
   if (e.type === 'book') {
     if (e.total_pages > 0) out.percent = e.status === 'bitti' ? 100 : Math.min(100, round1((e.current_page / e.total_pages) * 100));
     const a = entryAvg(db, e);
@@ -142,7 +146,7 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
   }
   if (!start && status !== 'planlandi') start = date;
   if (status === 'devam') end = null;
-  db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?')
+  db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, finished_pages=NULL, updated_at=? WHERE id=?')
     .run(currentPage, status, start, end, nowIso(), e.id);
   const pagesOnDate = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE entry_id=? AND date=?').get(e.id, date).s;
   return { delta, pagesOnDate, finished, spread, estimated };
@@ -150,6 +154,7 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
 
 // ---------- gun gun okuma kaydi ----------
 const OPEN_WINDOW = 90;
+export const LATE_DAYS = 7; // bu kadar gunden eski gunlere sonradan girilen sayfalar seri/rekora sayilmaz
 
 // Kullanicinin "kac sayfa okudun?" diye sorulabilecek gunleri: satiri hic olmayan ('open') ve
 // tahmini ('estimated') gunler. 'Okumadim' (0) ve gercek girilmis gunler listelenmez.
@@ -211,8 +216,10 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
   current += diff;
   if (current < 0) throw bad('Sayfa sayisi 0\'in altina dusemez', { pages: 'cok dusuk' });
   if (current > e.total_pages) throw bad(`Toplam sayfa sayisini (${e.total_pages}) asiyor`, { pages: 'toplamdan buyuk' });
-  if (row) db.prepare('UPDATE reading_logs SET pages_read=?, page_from=?, page_to=?, estimated=0 WHERE id=?').run(next, Math.max(0, current - next), current, row.id);
-  else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,0)').run(e.id, e.user_id, date, Math.max(0, current - next), current, next);
+  // 7 gunden eski gunlere sonradan girilen sayfalar ortalamaya girer ama seri/rekora girmez (liderlik tek istekle sismesin)
+  const late = diffDays(date, today) > LATE_DAYS ? 1 : 0;
+  if (row) db.prepare('UPDATE reading_logs SET pages_read=?, page_from=?, page_to=?, estimated=0, no_streak=? WHERE id=?').run(next, Math.max(0, current - next), current, late, row.id);
+  else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,no_streak) VALUES (?,?,?,?,?,?,0,?)').run(e.id, e.user_id, date, Math.max(0, current - next), current, next, late);
   db.prepare('DELETE FROM reading_logs WHERE entry_id=? AND estimated=1 AND pages_read=0').run(e.id);
   let status = e.status;
   let start = e.start_date;
@@ -225,7 +232,7 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
     status = 'devam';
     end = null;
   }
-  db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?').run(current, status, start, end, nowIso(), e.id);
+  db.prepare('UPDATE entries SET current_page=?, status=?, start_date=?, end_date=?, finished_pages=NULL, updated_at=? WHERE id=?').run(current, status, start, end, nowIso(), e.id);
   return { pages: next, date };
 }
 
@@ -238,12 +245,12 @@ export function backfillLogs(db, e, mode, days) {
   const today = todayStr();
   const cur = e.current_page;
   if (!(cur > 0)) return { rows: 0 };
-  const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,no_streak) VALUES (?,?,?,?,?,?,?,?)');
   const start = e.start_date;
   const past = start && start < today ? diffDays(start, today) : 0; // baslangic..dun gun sayisi
   let page = 0;
   let rows = 0;
-  const put = (date, p, est) => { ins.run(e.id, e.user_id, date, page, page + p, p, est ? 1 : 0); page += p; rows++; };
+  const put = (date, p, est, noStreak = 0) => { ins.run(e.id, e.user_id, date, page, page + p, p, est ? 1 : 0, noStreak); page += p; rows++; };
   if (past === 0) { put(today, cur, false); return { rows }; }
   const dates = Array.from({ length: Math.min(past, 90) }, (_, i) => addDays(today, -(Math.min(past, 90) - i)));
   if (mode === 'spread') {
@@ -262,9 +269,9 @@ export function backfillLogs(db, e, mode, days) {
   if (sum > cur) throw bad(`Girdiginiz gunluk sayfalarin toplami (${sum}), su an bulundugunuz sayfayi (${cur}) asiyor`, { days: 'toplam fazla' });
   for (const d of dates) { // bos birakilan gun = okumadim (0, gercek satir)
     const p = given.get(d) || 0;
-    if (p > 0) put(d, p, false);
-    else { ins.run(e.id, e.user_id, d, page, page, 0, 0); rows++; }
+    if (p > 0) put(d, p, false, diffDays(d, today) > LATE_DAYS ? 1 : 0);
+    else { ins.run(e.id, e.user_id, d, page, page, 0, 0, 0); rows++; }
   }
-  if (cur - sum > 0) put(today, cur - sum, false);
+  if (cur - sum > 0) put(today, cur - sum, false, 1); // 'kalan' sayfalar bugunun okumasi degil: ortalamaya girer, rekora girmez
   return { rows };
 }

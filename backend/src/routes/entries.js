@@ -2,8 +2,10 @@ import { requireUser } from '../auth.js';
 import { err, bad, int, date as vdate, oneOf, todayStr, nowIso, addDays, diffDays } from '../util.js';
 import { tx } from '../db.js';
 import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs } from '../services/entries.js';
-import { pickByKey } from '../services/catalog.js';
-import { userStats } from '../services/stats.js';
+import { pickByKey, finishPick, markListed } from '../services/catalog.js';
+import { userStats, backfillMediaInfo } from '../services/stats.js';
+import { getEdition } from '../services/editions.js';
+import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
 
@@ -55,9 +57,17 @@ export default async function routes(app) {
     const b = req.body || {};
     let catId = b.catalog_key ? pickByKey(db, b.catalog_key)?.id : int(b.catalog_id, { field: 'catalog_id', required: true });
     if (!catId) throw bad('Katalog sonucunun suresi dolmus, aramayi tekrarlayin', { catalog_key: 'gecersiz' });
-    const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(catId);
+    let cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(catId);
     if (!cat) throw err(404, 'Katalog kaydi bulunamadi', { catalog_id: 'yok' });
     const type = cat.type;
+    if (type === 'series') { await ensureForPosition(db, cat, int(b.season, { min: 1, max: 200, field: 'season' }), int(b.episode, { min: 1, max: 5000, field: 'episode' })); cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(catId); } // sezon/bolum bilgisi (lazy-fill + gerekirse taze)
+    else if (type === 'movie') await finishPick(db, cat);
+    let ed = null;
+    if (b.edition_id !== undefined && b.edition_id !== null) {
+      if (type !== 'book') throw bad('Baski sadece kitaplar icin secilir', { edition_id: 'gecersiz' });
+      ed = getEdition(db, int(b.edition_id, { field: 'edition_id', min: 1 }));
+      if (!ed || ed.catalog_id !== catId) throw bad('Bu baski secilen kitaba ait degil', { edition_id: 'gecersiz' });
+    }
     const today = todayStr();
     const status = oneOf(b.status, STATUSES, { field: 'status' }) || (type === 'movie' ? 'bitti' : 'devam');
     if (status === 'devam' && db.prepare("SELECT 1 FROM entries WHERE user_id=? AND catalog_id=? AND status='devam'").get(me.id, catId)) {
@@ -71,13 +81,15 @@ export default async function routes(app) {
     let season = null;
     let episode = null;
     if (type === 'book') {
-      total = b.total_pages !== undefined && b.total_pages !== null ? int(b.total_pages, { min: 1, max: 20000, field: 'total_pages' }) : cat.pages;
+      // oncelik: istekteki total_pages > secilen baskinin sayfasi > (baski secilmediyse) katalog sayfasi
+      total = b.total_pages !== undefined && b.total_pages !== null ? int(b.total_pages, { min: 1, max: 20000, field: 'total_pages' }) : (ed ? ed.pages : cat.pages);
       cur = int(b.current_page, { min: 0, field: 'current_page' }) || 0;
       if (total && cur > total) throw bad('Sayfa, toplam sayfa sayisini asamaz', { current_page: 'toplamdan buyuk' });
       if (status === 'bitti' && total) cur = total;
     } else if (type === 'series') {
       season = int(b.season, { min: 1, max: 200, field: 'season' });
       episode = int(b.episode, { min: 1, max: 5000, field: 'episode' });
+      validateSeriesPosition(db, cat, season, episode); // gercek sezon/bolum sayilarina gore (bilgi yoksa serbest)
     }
     if (status === 'planlandi') { start = null; end = null; }
     else if (status === 'devam') { start = start || today; end = null; }
@@ -98,11 +110,13 @@ export default async function routes(app) {
     }
     if (backfill !== 'none' && !(type === 'book' && status === 'devam' && cur > 0)) throw bad('backfill sadece current_page>0 olan, devam eden kitaplar icindir', { backfill: 'gecersiz' });
     const now = nowIso();
-    const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,season,episode,rating,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, season, episode, rating, now, now);
+    const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,season,episode,rating,created_at,updated_at,edition_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, season, episode, rating, now, now, ed ? ed.id : null);
     if (backfill !== 'none') {
       try { backfillLogs(db, getEntry(db, info.lastInsertRowid), backfill, backDays); } catch (e) { db.prepare('DELETE FROM entries WHERE id=?').run(info.lastInsertRowid); throw e; }
     }
+    if (type === 'series' && status === 'bitti') pinSeriesFinish(db, info.lastInsertRowid);
+    markListed(db, catId); // kullanildi -> kalici (listed=1)
     reply.code(201);
     return { entry: entryOut(db, getEntry(db, info.lastInsertRowid)) };
   });
@@ -114,21 +128,47 @@ export default async function routes(app) {
     const b = req.body || {};
     const has = (k) => b[k] !== undefined;
     if (has('current_page')) throw bad('Sayfa ilerlemesi sadece POST /api/entries/:id/progress ile girilir', { current_page: 'progress ucunu kullanin' });
+    if (e.type === 'series' && (has('season') || has('episode'))) {
+      const ns = has('season') ? int(b.season, { min: 1, max: 200, field: 'season' }) : e.season;
+      const ne = has('episode') ? int(b.episode, { min: 1, max: 5000, field: 'episode' }) : e.episode;
+      await ensureForPosition(db, db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id), ns, ne);
+    }
     const today = todayStr();
     const out = tx(db, () => {
       let cur = getEntry(db, id);
+      // baski degistirme / kaldirma (sadece kitap)
+      let editionId = cur.edition_id ?? null;
+      let editionTotal = null; // baskidan gelen yeni toplam sayfa (varsa)
+      // biten kitap bitmis kalacaksa sayfa kurali gevser: toplam her yone degisebilir, current_page yeni toplama esitlenir
+      const finishedStays = cur.status === 'bitti' && (!has('status') || b.status === 'bitti');
+      if (has('edition_id')) {
+        if (cur.type !== 'book') throw bad('Baski sadece kitaplar icin secilir', { edition_id: 'gecersiz' });
+        if (b.edition_id === null) editionId = null;
+        else {
+          const ed = getEdition(db, int(b.edition_id, { field: 'edition_id', min: 1, required: true }));
+          if (!ed || ed.catalog_id !== cur.catalog_id) throw bad('Bu baski secilen kitaba ait degil', { edition_id: 'gecersiz' });
+          editionId = ed.id;
+          if (ed.pages && !has('total_pages')) {
+            if (!finishedStays && cur.current_page > ed.pages) throw bad(`Bu baskida ${ed.pages} sayfa var ama siz ${cur.current_page}. sayfadasiniz.`, { edition_id: 'sayfa yetersiz' });
+            editionTotal = ed.pages;
+          }
+        }
+      }
       const status = has('status') ? oneOf(b.status, STATUSES, { field: 'status', required: true }) : cur.status;
       let start = has('start_date') ? vdate(b.start_date, { field: 'start_date' }) : cur.start_date;
       let end = has('end_date') ? vdate(b.end_date, { field: 'end_date' }) : cur.end_date;
-      let total = cur.total_pages;
+      let total = editionTotal ?? cur.total_pages;
       if (has('total_pages')) {
         if (cur.type !== 'book') throw bad('Sadece kitaplarda toplam sayfa olur');
         total = b.total_pages === null ? null : int(b.total_pages, { min: 1, max: 20000, field: 'total_pages' });
-        if (total && cur.current_page > total) throw bad('Toplam sayfa, mevcut sayfadan kucuk olamaz', { total_pages: 'mevcut sayfadan kucuk' });
+        if (total && !finishedStays && cur.current_page > total) throw bad('Toplam sayfa, mevcut sayfadan kucuk olamaz', { total_pages: 'mevcut sayfadan kucuk' });
       }
       const season = has('season') ? int(b.season, { min: 1, max: 200, field: 'season' }) : cur.season;
       const episode = has('episode') ? int(b.episode, { min: 1, max: 5000, field: 'episode' }) : cur.episode;
       const rating = has('rating') ? ratingOf(b.rating) : cur.rating;
+      if (cur.type === 'series' && (has('season') || has('episode'))) {
+        validateSeriesPosition(db, db.prepare('SELECT * FROM catalog WHERE id=?').get(cur.catalog_id), season, episode);
+      }
       if (status === 'devam' && cur.status !== 'devam' && db.prepare("SELECT 1 FROM entries WHERE user_id=? AND catalog_id=? AND status='devam' AND id<>?").get(cur.user_id, cur.catalog_id, id)) {
         throw err(409, 'Bu kayit zaten "devam ediyor" olarak listenizde');
       }
@@ -142,9 +182,19 @@ export default async function routes(app) {
         const first = db.prepare('SELECT MIN(date) d FROM reading_logs WHERE entry_id=?').get(id).d;
         if (first && first < start) throw bad(`Baslangic tarihi, ilk okuma kaydindan (${first}) sonra olamaz`, { start_date: 'kayitlardan sonra' });
       }
-      db.prepare('UPDATE entries SET status=?, start_date=?, end_date=?, total_pages=?, season=?, episode=?, rating=?, updated_at=? WHERE id=?')
-        .run(status, start, end, total, season, episode, rating, nowIso(), id);
+      db.prepare('UPDATE entries SET status=?, start_date=?, end_date=?, total_pages=?, season=?, episode=?, rating=?, edition_id=?, updated_at=? WHERE id=?')
+        .run(status, start, end, total, season, episode, rating, editionId, nowIso(), id);
+      // biten kitapta toplam degisimi: 100% kalsin, current_page yeni toplama esitlenir; GECMIS istatistik oynamasin diye okunan toplam
+      // (finished_pages) eski degerde sabitlenir ve gunluk okuma kaydi URETILMEZ
+      if (finishedStays && cur.type === 'book' && total && total !== cur.total_pages) {
+        db.prepare('UPDATE entries SET current_page=?, finished_pages=COALESCE(finished_pages, ?) WHERE id=?').run(total, cur.total_pages, id);
+      }
+      const before = cur;
       cur = getEntry(db, id);
+      if (cur.type === 'series') {
+        pinSeriesFinish(db, id);
+        if (has('season') || has('episode') || has('status')) logSeriesProgress(db, before, cur, today);
+      }
       if (cur.type === 'book') {
         let target = null;
         if (status === 'bitti' && cur.total_pages) target = cur.total_pages;
@@ -230,10 +280,16 @@ export default async function routes(app) {
     const b = req.body || {};
     const season = int(b.season, { min: 1, max: 200, field: 'season', required: true });
     const episode = int(b.episode, { min: 1, max: 5000, field: 'episode', required: true });
+    const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id);
+    await ensureForPosition(db, cat, season, episode);
+    validateSeriesPosition(db, cat, season, episode);
     let { status, start_date, end_date } = e;
     if (status === 'planlandi' || status === 'birakildi' || status === 'bitti') { status = 'devam'; end_date = null; }
     start_date = start_date || todayStr();
     db.prepare('UPDATE entries SET season=?, episode=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?').run(season, episode, status, start_date, end_date, nowIso(), e.id);
+    const after = getEntry(db, e.id);
+    pinSeriesFinish(db, e.id);
+    logSeriesProgress(db, e, after, todayStr());
     return { entry: entryOut(db, getEntry(db, e.id)) };
   });
 
@@ -242,7 +298,9 @@ export default async function routes(app) {
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(Number(req.params.id));
     if (!u) throw err(404, 'Kullanici bulunamadi');
     const period = oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all';
-    return userStats(db, u, period);
+    const type = oneOf(req.query.type, ['all', 'book', 'series', 'movie'], { field: 'type' }) || 'all';
+    if (u.id === req.user.id) backfillMediaInfo(db, u.id); // sadece kendi rafinda (baskasinin rafi dis istek tetiklemesin) // eksik sezon bilgisi / film suresi arka planda doldurulur
+    return { type, period, ...userStats(db, u, period) };
   });
 
   app.get('/api/users/:id/heatmap', async (req) => {
@@ -251,7 +309,13 @@ export default async function routes(app) {
     if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(id)) throw err(404, 'Kullanici bulunamadi');
     const n = Math.min(int(req.query.days, { min: 1, max: 730, field: 'days' }) || 90, 730);
     const from = addDays(todayStr(), -(n - 1));
-    const days = db.prepare('SELECT date, SUM(pages_read) pages, MIN(estimated) real_flag FROM reading_logs WHERE user_id=? AND date>=? GROUP BY date HAVING pages>0 ORDER BY date').all(id, from).map((r) => ({ date: r.date, pages: r.pages, estimated: r.real_flag === 1 }));
+    // Ayni gunde gercek + tahmini sayfa varsa: pages = GERCEK sayfa (estimated:false), tahmini kisim estimated_pages'te ayri doner.
+    // Yalniz tahmini varsa: pages = tahmini sayfa, estimated:true. (Negatif duzeltme satirlari gercek toplamdan duser.)
+    const days = db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? GROUP BY date HAVING real_p + est_p > 0 ORDER BY date').all(id, from).map((r) => {
+      const real = Math.max(0, r.real_p);
+      const est = Math.max(0, r.est_p);
+      return real > 0 ? { date: r.date, pages: real, estimated: false, estimated_pages: est } : { date: r.date, pages: est, estimated: true, estimated_pages: est };
+    }).filter((d) => d.pages > 0);
     return { days };
   });
 }

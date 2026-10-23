@@ -1,7 +1,287 @@
 ﻿=====================================================================
  ELESTIRMEN - elestiri.txt
 =====================================================================
-ELESTIRMEN: IKNA OLDUM - gerekce: 27 bulgunun hepsi DOGRULANDI (17) ya da KAPANDI (10); acik madde yok.
+SON GUNCELLEME: 2026-10-24 01:20  (v5 TURU eklendi)
+SAYAC TABLOSU (toplam 46 bulgu)
+                         ACIK   KABUL  YAPILDI  DOGRULANDI  KAPANDI
+  v5 TURU (E-28..E-46)    19      0       0         0          0     KRITIK 0 / ONEMLI 8 / KUCUK 11
+  v1-v4 (E-01..E-27)       0      0       0        17         10
+  TOPLAM                  19      0       0        17         10
+v5 ONEMLI (acik): E-28 E-29 E-30 E-31 E-32 E-33 E-34 E-35   |  KUCUK (acik): E-36 .. E-46
+
+ELESTIRMEN: IKNA OLDUM notu (asagida, v4) v5 ILE GERI ALINDI: v5 kodu yeni ONEMLI sorunlar getirdi. Tekrar
+  "ikna oldum" icin E-28..E-35 DOGRULANDI/KAPANDI olmali.
+
+=====================================================================
+ v5 TURU  (YENI_ISTEKLER.txt 1-8)   2026-10-24   ELESTIRMEN
+=====================================================================
+YONTEM: backend.txt + frontend.txt + API_SOZLESMESI v5 okundu; yeni dosyalar (avatars.js, langs.js, services/editions.js,
+  seasons.js, seedExtra.js, scripts/seed-extra.js, Profile.jsx, Editions.jsx, Seasons.jsx, Heatmap.jsx) ve degisenler
+  (routes/auth|catalog|entries|feed, services/stats|entries|catalog|sources, AddFlow, Shelf, Leaderboard, EntryDetail,
+  QuickUpdate, Admin, ui.jsx, styles.css) satir satir okundu. Proje git deposu degil: "git diff" yok, dosyalar dogrudan okundu.
+  CANLI: kendi backend'im 4200'de (Node 24.15 = Cursor'un node'u, ELECTRON_RUN_AS_NODE=1), gecici DB, gercek internet
+  (Open Library, TVMaze, Wikidata calisti; Google Books denenmedi). Tarayici araci localhost'a izin vermedi: UI
+  KOD OKUYARAK degerlendirildi (mobil/hover davranislari tarayicida GORULMEDI - asagida "Dogrulanmadi" bolumune bak).
+  Cikan "CANLI" satirlari gercek istek/cevaptir. Frontend, backend ile hic entegre denenmemisti (frontend.txt itiraf ediyor);
+  alan adi/durum kodu uyumunu ben kontrol ettim: uyumsuzluk BULUNMADI (avatars.groups, editions/groups/languages,
+  seasons.seasons[].episodes, stats yeni alanlar, leaderboards/streak {value,detail.longest,last_date}, PATCH /me/profile 409).
+
+8 ISTEGIN KODDA GERCEK DURUMU
+  1 Profil      : VAR ve calisiyor (PATCH /me/profile, 409, name_changed, GET /avatars 158 emoji/58 hayvan, admin reset). Eksik/riskli: E-35.
+  2 Dil/baski   : VAR (editions, entry.edition_id, admin uclari, dil sekmeleri). Hatalar: E-28 (bitti kitapta kucuk baskiya gecis 400),
+                  E-33 (admin baski UI yok), E-37/E-38 (dis kaynak/tahmin dili).
+  3 5 kitap     : Aranan 5 kitap CANLI bulunuyor (Hayvanlardan Tanrilara, Anna Karenina-Is Bankasi, 3 seed). Baski/sayfa bilgisi 3 kitapta
+                  bos: E-33. Arama bicimleri ("Baslik / Yazar", "yazar baslik", karaktersiz) CANLI calisti.
+  4 Dizi sezon  : VAR ve dogru (Breaking Bad S1=7 bolum, "Bu dizide 1. sezon 7 bolumden olusuyor." 400; gelecek bolum haric: Grey's S23 2/5).
+                  Risk: E-29 (24 saat eski onbellek yeni bolumu reddeder), E-40.
+  5 Seri liderlik: VAR ve sozlesmeye uygun. Risk: E-36 (kolay sisirme).
+  6 Raf kartlari: VAR, kart seti spesifikasyonla birebir. Hesap dogru (canli: BB S2B5=12 + Severance bitti=19 -> 31 bolum, 1652 dk
+                  = 12*60+9*48+10*50). Sorunlar: E-30, E-31 (period/bitti semantigi), E-34 (bilinmeyen sure sessiz).
+  7 Seri sadece kitap: DOGRU (Shelf.jsx:191-198 yalniz KITAP kartinda; HEPSI/DIZI/FILM'de yok).
+  8 Isi haritasi: VAR (hover/odak/dokunma sabitleme, klavye, ~ tahmini). Kucuk sorunlar: E-39.
+
+---------------------------------------------------------------------
+ONEMLI
+---------------------------------------------------------------------
+E-28  [ACIK] ONEMLI  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: Biten kitapta DAHA KUCUK sayfali baskiya gecmek 400 veriyor (sozlesme K16 ile celisiyor, mesaj yaniltici)
+Metin: routes/entries.js:141-146 baski degisince "cur.current_page > ed.pages" ise 400. Biten kitapta current_page = total_pages
+  oldugu icin, 700 sayfali baskida bitirmis biri 412 sayfalik baskiya (ya da hatali secimi duzeltmek icin 600'e) GECEMIYOR.
+  CANLI: POST bitti total_pages=700 -> PATCH {edition_id:16 (412 sayfa)} -> 400 "Bu baskida 412 sayfa var ama siz 700. sayfadasiniz."
+  Ayni istege total_pages:412 eklenince de 400 (entries.js:156 yine cur.current_page'e bakiyor). Yani biten kitabin baskisi
+  yalnizca buyuge/esite cevrilebilir. backend.txt K16 ("biten kitapta baski degisimi 100% kalir") sadece yarim dogru.
+  Neden onemli: "yanlis baskiyi sectim, duzeltiyorum" en yaygin senaryo; kullanici "siz 700. sayfadasiniz" mesajini anlamaz
+  (kitabi bitirmis). Frontend EntryDetail.jsx:EditionRow hatayi aynen gosteriyor. Yon: 'bitti' durumunda sayfa kurali gevsetilmeli
+  (current_page yeni toplama cekilir), devam eden kitapta mevcut kural kalir.
+
+E-29  [ACIK] ONEMLI  BACKEND (+ FRONTEND etkisi)
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Devam eden dizide sezon bilgisi 24 saat eski kalabilir: yeni yayinlanan bolum reddedilir ve secicide hic gorunmez
+Metin: services/seasons.js:29-31 ensureSeasons "devam eden dizi 24 saatten eskiyse yenile" der; arada gelen istekler eski sayiyi kullanir.
+  routes/entries.js:63,129,268 ve GET /catalog/:id/seasons ayni onbellegi okur. Senaryo: dizi persembe 21:00'de yeni bolum yayinlar,
+  cache persembe 20:00'de cekilmis -> cuma sabahi kullanici o bolumu kaydetmeye calisir: 400 "Bu dizide 23. sezon 2 bolumden
+  olusuyor." Seasons.jsx:290-345 secicide de o bolum YOK (select 1..eski sayi), kullanicinin yapabilecegi bir sey yok; en
+  fazla 24 saat bekler. Canli veri: Grey's Anatomy S23 = 2 yayinlanmis / 5 duyurulan (devam eden dizi bu durumda).
+  Ek: TVMaze airdate dizinin yerel tarihidir; 00:00 Istanbul'da "yayinlandi" sayilir, ABD aksam yayini henuz yayinlanmamis olabilir
+  (tersi sorun, kucuk). Yon: reddetmeden once (tek seferlik, lastFail korumali) zorla yenileme ya da stale suresini kisaltma;
+  frontend'de bolum secicide "listede yok mu? yenile" yolu.
+
+E-30  [ACIK] ONEMLI  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: Dizi istatistiginde "Bu ay/Bu yil" kumulatif sayiyor: periyot filtresi dizide gercekte bir "donem" olcmuyor
+Metin: services/stats.js:84-93 (mediaStats). Devam/birakildi dizi, son guncelleme gunu (updated_at) periyottaysa, konumuna kadar
+  TUM bolumleri ve dakikayi sayar (watchedOf seasons.js:80-96): 3 yildir izlenen 120 bolumluk dizide bu ay 1 bolum izleyen
+  "Bu ay: 120 bolum, 85 sa" gorur. Biten dizi icin de bitis ayinda tum bolumler yazilir (iki yilda izlense bile). updated_at
+  puan/yorum/baski gibi her PATCH ile de ilerler (entries.js:177) -> sadece puan veren dizisini bu aya tasir.
+  Kitaplar gun bazli modelle (userModel) dogru; dizilerde ayni titizlik yok. backend.txt K13 bunu kabul ediyor ama
+  arayuzde "Bu ay" sekmesi altinda bolum/dakika kartlari yanlis okunur. Canli: devam BB kaydi period=all/month/year icin ayni (12).
+  Yon: ya donem sekmelerinde dizi dakikasi/bolumu gizle/etiketle, ya da bolum ilerlemesi icin gun bazli iz tut (delta).
+
+E-31  [ACIK] ONEMLI  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: "Bitti" isaretli devam eden dizinin bolum/dakika sayisi sonradan kendiliginden SISER
+Metin: seasons.js:87 bitti -> "tum yayinlanmis bolumler" (s.episodes). Devam eden dizilerde sezon tablosu 24 saatte bir yenileniyor
+  (E-29). Kullanici S2 sonunda "bitirdim" der; S3 yayinlaninca episodes_watched ve series_minutes izlenmemis bolumler kadar
+  artar (ve "dizi bitti" sayisi sabit kalir). Spesifikasyon ("bitti ise dizinin tum bolumleri") bu durumu ongormemis;
+  kod yine de gozleyen icin yanlis sayi uretiyor. Ayrica bitti dizide season/episode alanlari artik dikkate alinmiyor
+  (kayit S2B10'da bitirilmis olsa da). Yon: bitirme aninda sayiyi dondurmak ya da bitti kaydinda konuma bakmak.
+
+E-32  [ACIK] ONEMLI  BACKEND + FRONTEND   (istenen: "pick tasarimini degerlendir")
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Katalogdan "pick" ile secip vazgecince kayit KALIYOR; `listed` mekanizmasi olu; kalici kayit amacinin disinda uretiliyor
+Metin: frontend AddFlow.jsx:146-156 kitap/dizi sonucuna dokunur dokunmaz POST /catalog/pick atiyor (sadece baski/sezon
+  listesi gorebilmek icin). catalog.js:126-135 insertCatalog listed'i hep 1 yaziyor; `listed=0` hicbir yerde uretilmiyor ve
+  markListed (catalog.js:135) hicbir yerde cagrilmiyor (grep: tek kullanim tanimin kendisi). Sonuc: vazgecilen/gozatilan her
+  sonuc (Kuran-i Kerim, yanlis yazarli "Hayta"lar...) herkesin yerel aramasinda ve admin katalog listesinde kalici cop oluyor;
+  Google Books sonucunda ayrica sahte "baski" satiri da (persistOnline catalog.js:203). Temizleyen is (GC) yok; admin silmek
+  zorunda. Tutarsizlik: film sonucu erken pick EDILMIYOR (AddFlow.jsx:147) ama kitap/dizi ediliyor. pickByKey (catalog.js:208-212)
+  TTL kontrol etmiyor: "10 dk dolmus" mesaji pratikte (pickCache >3000 olana kadar) hic uretilmez; anahtar sonsuza yasar.
+  Dizi pick'i ayrica TVMaze cagrisini (12 sn zaman asimi) UI'da tetikler.
+  Tasarim degerlendirmesi: arama-yan-etkisiz ilkesi (v4) ile celisiyor. Isteği karsilayan en az sismeli yol zaten kodda duruyor
+  (listed=0 + markListed + sıralamada +4 ceza, catalog.js:153). Risk: katalogun sessizce buyumesi, admin listesinin
+  kirlenmesi, ayni eserin farkli yazar yazimlariyla coklanmasi (findExisting gevsek: catalog.js:266).
+
+E-33  [ACIK] ONEMLI  BACKEND + FRONTEND   (istenen: "5 kitaptan 3'u bos bilgi - yeterli mi?")
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Dikkat Kaygan Zemin / Dunyayi Okuyan Cocuk / Hayta: yayinevi-sayfa bos "yer tutucu baski" + doldurmak icin arayuz YOK
+Metin: Degerlendirme: "uydurma yok" ilkesi DOGRU, ama su haliyle yeterli degil.
+  (a) seedExtra.js:142,152,162 bu kitaplara icinde yalniz {language:'tr'} olan bos baski satiri yaziyor. CANLI: GET /catalog/5 ->
+      editions:[{id:5,language:'tr',publisher:null,pages:null,source:'seed'}]. Editions.jsx:262-263 bunu "Yayinevi
+      belirtilmemis / sayfa sayisi bilinmiyor" diye BIR KART olarak gosteriyor: secmek hicbir bilgi eklemiyor, "Baski belirtmeden
+      devam" ile ayni; kullaniciya bos kart baskı secimi izlenimi veriyor.
+  (b) backend.txt "admin Baski ekle ile tamamlanabilir (POST /api/admin/catalog/:id/editions)" diyor; frontend.txt "BILINEN EKSIK:
+      admin elle baski ekleme/silme arayuzu yok". Yani tamamlama yolu yalnizca curl. Ustelik gercek baski eklenince bos seed
+      satiri SILINMIYOR (editions.js:25-35 findEdition: dil+yayinevi+sayfa farkli -> yeni satir) -> ayni kitapta iki kart, bos olani
+      admin DELETE ile (yine curl) silmek zorunda; seed bayragi (seedExtra.js:168-170) silineni geri getirmiyor (iyi).
+  (c) Bilgi bos oldugu icin aile kitabi eklerken sayfayi her seferinde elle yaziyor (AddFlow zorunlu kiliyor: iyi) ama bu bilgi
+      baska kimseye faydali olmuyor: kullanici girdigi sayfa sayisi baskiya/katalog sayfasina geri yazilmiyor.
+  (d) Dis kaynak durumu: Google Books bu makinede denenmedi; OL'de bu 3 kitap yok. Lazy-fill yolu var (ensureEditions GB'yi
+      dener, editions.js:221) ve kota acilinca otomatik dolabilir - ama GB yanlis baski dondurme riski tasir (yazar soyadi eslesmesi
+      disinda dogrulama yok) ve kimse sonucu gormeden kalici yazilir.
+  Riskler: bos kartlar guvensizlik yaratir; admin icin pratik duzeltme yolu yok. Alternatif yonler (cozum yazmiyorum): bos baski satiri
+  yerine yalniz catalog.languages etiketi; ya da kullanicinin girdigi sayfa/yayinevi "onay bekleyen baski" olarak admin'e dussun.
+
+E-34  [ACIK] ONEMLI  FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [FRONTEND]
+Konu: Suresi bilinmeyen film/dizi sessizce 0 dk sayiliyor ve UI bunu hic soylemiyor
+Metin: backend movie_runtime_unknown dondurur (stats.js:101) ama frontend hicbir yerde kullanmiyor (grep: Shelf.jsx'te yok;
+  yalniz episodes_unknown notu var, Shelf.jsx:222). CANLI: iki film bitti (biri Wikidata'dan 148 dk, biri elle eklenmis) ->
+  movies_watched=2, movie_minutes=148, movie_runtime_unknown=1 -> kart "2 film izlendi" ve "izlenen sure 2 sa 28 dk" yan yana,
+  kullanici suresi eksik oldugunu anlayamaz. Wikidata P2047'si olmayan filmler (Turkce/bagimsiz filmler dahil) sik: sayi sistematik
+  eksik cikar. Ayni sey runtime'i olmayan dizi icin (series_minutes). Yon: "N filmin suresi bilinmiyor" notu; bos durumda 0 dk
+  yerine tire.
+
+E-35  [ACIK] ONEMLI  BACKEND + FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: "Gorunen ad bir kez" hakki: geri alinamaz islem sessizce degisen/gorunmez ada harcanabiliyor
+Metin: Hak yarisi (race) YOK: auth.js:108-124 SELECT ile UPDATE arasinda `await` yok, node:sqlite senkron -> guvenli (bkz
+  "Sorun bulunmayanlar"). Ama:
+  (a) Kaydedilen ad onizlemeden farkli olabilir: auth.js:52 cleanName `<` `>` karakterlerini siler. Kullanici "<3 kitap"
+      yazarsa onizleme (Profile.jsx:130) "<3 kitap" gosterir, kayit "3 kitap" olur ve hak YANAR; arayuz bunu soylemez.
+  (b) Gorunmez/yaniltici ad kabul ediliyor. CANLI: PATCH display_name "​​" (sifir genislikli bosluk) -> 200,
+      ad gorunmez, name_changed=true. RTL-override (U+202E) gibi kontrol karakterleri de ayiklanmiyor (cleanName yalniz \s ve <>).
+      Baska uyenin adiyla ayni ad da serbest (benzersizlik yok): "Yonetici" / "Ayse" taklidi.
+  (c) Admin tarafi AYNI temizlikten gecmiyor: auth.js:154 ve :173 yalniz str(max:40). CANLI: admin "Mehmet  <b>Ali</b>   x"
+      adli kullanici olusturabildi (40 karakter limiti, 2-30 kurali ve HTML temizligi yok). Mehmet profilde ayni adi aynen
+      gonderince 200 doner, ad "Mehmet Ali x"e doner ve name_changed=true olur (backend ham ile temizi karsilastiriyor,
+      auth.js:117-118). Frontend de bosluklari daraltip "degisti" saydigi icin (Profile.jsx:95-96) sadece avatar degistirmek
+      isteyen bu kullaniciya "Bir kere degistirebilecegimi biliyorum" kutusunu zorunlu gosteriyor.
+  (d) Onay yalniz bir onay kutusu; kaydetmeden once "Bu ad kalici: <ad>" son-gosterimi yok.
+  XSS: React metin olarak basiyor, kayitli HTML calismaz (dogrulandi: img olusmaz); risk gorsel/taklit, script degil.
+
+---------------------------------------------------------------------
+KUCUK
+---------------------------------------------------------------------
+E-36  [ACIK] KUCUK  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: Yeni "Seri" liderligi tek istekle sisirilebiliyor
+Metin: POST /entries backfill=manual (routes/entries.js:105-116, services/entries.js:241-272) GERCEK (estimated=0) gun satirlari
+  yazar; seri hesabi yalniz bu satirlara bakar (stats.js:62). CANLI: baslangic 33 gun once, her gune 1 sayfa -> tek POST ile
+  longest=33 (kullanici baslangicta current=1 yalniz "dun" bos oldugu icin). PUT /day-logs ayni etkiyi verir. Ayrica
+  "kalan sayfa bugune gercek yazilir" kurali (entries.js:272) 60 sayfalik girisle 27 sayfalik "rekor" uretti (record: pages 27).
+  Aile ici guven modeli kabul edilebilir ama liderlik tablosu rekabetci; en azindan "gecmise dolgu" gunleri seriye/rekora
+  katmamak ya da acikca belgelemek gerekir.
+
+E-37  [ACIK] KUCUK  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: GET /catalog/:id/editions kullanici tetiklemeli dis istek: hiz siniri yok, kismi basarisizlik 7 gun onbellege aliniyor
+Metin: catalog.js:162 searchLimit yalniz refresh=1'de. Her uye her katalog icin bu ucu cagirabilir; OL tarafi 1 + (size/200) paralel
+  istek (editions.js:122-131, ornek AK = 7 istek; en cok 2000/200=10). Basarisiz denemede "denendi" isaretlenmez
+  (editions.js:208-212) -> ardisik cagrilarda her seferinde tekrar. GB anahtari dile gore (gb:xx, editions.js:221): gecerli her
+  iki harfli kod ayri istek, ama GB devre kesici (sources.js:7-18) sinirliyor. Tersine: OL sayfalarindan bazilari dusup digerleri
+  gelirse (Promise.allSettled, editions.js:129-130 reddedilenler sessizce yutulur) markFetched yine yazilir -> eksik liste 7 gun
+  kalir. Ayrica PER_LANG_CAP=10 (editions.js:7,162): AK'de 13 Turkce yayinevli baski var (Is Bankasi'nin sayfasiz 2015 baskisi dahil), hepsi gorunmez; "Tumunu goster" bunu
+  asamaz (canli listede 9 OL + 1 seed baski gorundu); dilsiz yayinevi baskilari tavan 4. (SSRF/SQL sorunu yok; bkz asagi.)
+
+E-38  [ACIK] KUCUK  BACKEND + FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: "TR" sekmesi buyuk olcude TAHMINE dayaniyor ve arayuz bunu gostermiyor
+Metin: langs.js:79-81 guessLanguage: yayinevi adinda "Yayinlari/Yayincilik/Yayinevi..." gecerse dil=tr. CANLI (Anna Karenina,
+  OL): 13 Turkce yayinevli baskidan yalniz 1'inde dil alani 'tur'; 12'si tahminle TR. Turkce yayinevinin Ingilizce/Azerice basimi
+  da TR sayilir. language_guessed API'de var ama frontend hic okumuyor (grep: yok) -> tahmin kesin bilgi gibi "TR (10)" sekmesinde.
+  Dil filtresi (Hepsi/TR/EN) sonuclari da buna gore eleniyor.
+
+E-39  [ACIK] KUCUK  FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [FRONTEND]
+Konu: Isi haritasi: hata/yukleme durumu yok, mobil dokunma hedefi kucuk, balon konumu bir kere hesaplaniyor
+Metin: Heatmap.jsx:285 `if (!data) return null` + Shelf.jsx:105: istek basarisiz/yavassa kart hic gorunmez, hata gosterilmez
+  (heat.error kullanilmiyor). styles.css:267 mobil hucre 19px (+3px bosluk): 24px hedef onerisinin altinda, komsu hucreler yanlis
+  dokunulur. Balon konumu useEffect ile yalniz tip degisince olculur (Heatmap.jsx:268-273): hm-scroll yatay kaydirilir ya da cihaz
+  donerse sabitlenmis balon hucreden kopar. Gunleri uretirken yerel tarayici saati (Heatmap.jsx:254-259 setDate/getDay) ile
+  Istanbul anahtari (ymd) karisiyor: tarayici saat dilimi farkliysa hafta satiri/gun kayar. Renk yogunlugu disinda gosterge (legend)
+  yok. DOGRULANMADI: hover/dokunma gercek tarayicida denenmedi (arac localhost'a izin vermedi).
+
+E-40  [ACIK] KUCUK  FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [FRONTEND]
+Konu: Sessiz basarisizliklar: pick hatasi ve sezon secicisinin sessiz duzeltmesi
+Metin: AddFlow.jsx:149-152 pick hata verirse `() => {}`: kullanici hicbir sey gormez, "Baski / dil" ve "Kacinci bolumdesin" adimlari
+  yok olur, nedeni bilinmez. Seasons.jsx:297-306 effect: kayitli sezon listede yoksa (eski veri, E-29 sonrasi daralma) sessizce
+  1. sezon 1. bolume ceker; SeriesQuick'te kullanici fark etmeden Kaydet'e basarsa ilerleme SIFIRLANIR (Seasons.jsx:303 +
+  QuickUpdate.jsx:77-87). Sezon istegi hata verirse "Sezon bilgisi alinamadi" notu cikar (Seasons.jsx:310-318) ama sebep ag hatasi
+  mi, yoksa dizinin sezon verisi mi yok ayirt edilmez.
+
+E-41  [ACIK] KUCUK  FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [FRONTEND]
+Konu: Profil penceresi: erisilebilirlik ve kaybolan degisiklik
+Metin: "Kaydedildi" (Profile.jsx:167) role=status/aria-live yok; onay kutusu dinamik beliriyor, ekran okuyucuya duyurulmuyor.
+  Ozel renk dairesi (styles.css:248) opacity:0 input uzerinde; klavye odagi gorunmez. Avatar alani 230px ic kaydirmali (styles.css:238)
+  modal icinde: mobilde ic ice kaydirma. Modal arka plana tiklayinca/Esc ile kapaniyor (ui.jsx:100,77) ve dirty degisiklik sorusuz
+  kaybolur. Avatar dugmelerinin adi "Avatar <emoji>" (ekran okuyucu emoji adini okur; kabul edilebilir). Bazi avatarlar (Unicode 13/14:
+  🥷 🧌 🦭 🪄) eski Windows 10 yazi tiplerinde kutu olarak gorunebilir.
+
+E-42  [ACIK] KUCUK  BACKEND + FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND, FRONTEND]
+Konu: Yeni hata metinleri ASCII Turkce ("Gorunen", "bolumden", "olusuyor") ve oldugu gibi gosteriliyor
+Metin: ErrorBox (ui.jsx:58) backend mesajini aynen basiyor: "Gorunen ad bir kez degistirilebilir.", "Bu dizide 3. sezon 10 bolumden
+  olusuyor." Arayuzun geri kalani duzgun Turkce ("Görünen ad"). YENI_ISTEKLER 409 metnini ASCII yazmis; yine de kullanici gordugu
+  yer. Tutarlilik icin ya backend dogru Turkce yazmali ya da frontend bilinen kodlari eslemeli.
+
+E-43  [ACIK] KUCUK  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: seed-extra: "Hayvanlardan Tanrilara" Sapiens'ten AYRI eser; kaynaksiz aciklama; gevsek eslesme
+Metin: seedExtra.js:111-120 Turkce baski ayri katalog kaydi olarak aciliyor; ayni TR baski (Kolektif Kitap 412 sf) Sapiens eserinin
+  altinda da var (CANLI: Sapiens editions tr -> id:16 Kolektif Kitap 412). Arama iki sonuc donduruyor: biri secilirse "kimler okuyor/
+  yorum" ayri havuza bolunur. seedExtra.js:141 "Kral Sakir cizgi film kitabi." aciklamasi hicbir kaynaga dayanmiyor (ilke:
+  uydurma yok; yazar alani "Kral Sakir" bir karakter/seri adi, kullanicinin dili; gercek yazar belirsiz). catalog.js:266 findExisting
+  `!na || !ca` kosulu yazari bos her ayni basligi esler: ileride yazarsiz bir "Hayta" varsa seed ona baglanir ya da tersi.
+  Anna Karenina 1062 sayfa/2018 degeri yalniz Open Library tek kayit; dogrulama notu seedExtra yorumunda var (iyi).
+
+E-44  [ACIK] KUCUK  FRONTEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [FRONTEND, BACKEND]
+Konu: Rafim her filtre/donem tikinda stats'i yeniden istiyor; `type` backend'de etkisiz
+Metin: Shelf.jsx:34 deps [uid,period,filter]. routes/entries.js:282-284 type'i yalniz dogrulayip yansitir; hesap ayni. 4 filtre x 3 donem =
+  12 ayni maliyetli sorgu (userModel tum kitap/log), her seferinde backfillMediaInfo cagrisi (baska uyenin rafi acilinca onun
+  dizileri icin TVMaze cagrisi tetiklenebilir; sinirli ama gereksiz). Filtre degisiminde `key={filter}`+count-up+opaklik
+  titremesi (Shelf.jsx:99-100) gereksiz yeniden cizim. Ayrica filtre degisince kartlar bos/0 gorunup tekrar sayiyor.
+
+E-45  [ACIK] KUCUK  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: TVMaze kesintisinde dizi ekleme/ilerleme istegi 12 sn bekliyor
+Metin: routes/entries.js:63 POST /entries `await ensureSeasons` (fetchShowSeasons 12 sn zaman asimi, sources.js:172; 429'da +3 sn
+  bekleme). Kesinti sirasinda ilk istek ~12 sn takilir; lastFail (seasons.js:31) sonraki 5 dk'yi korur. Ayni sekilde series-progress
+  (entries.js:268) ve PATCH (entries.js:129). Kullanici icin "Kaydediliyor..." 12 sn.
+
+E-46  [ACIK] KUCUK  BACKEND
+[2026-10-24 01:20] [ELESTIRMEN] -> [BACKEND]
+Konu: Biten kitapta baski degisimi gecmis istatistigi sessizce yeniden yaziyor
+Metin: entries.js:180 current_page yeni toplama esitlenir; pagesReadOf bitti icin total_pages-base (services/entries.js:11) -> 600'den
+  700'e gecis +100 "okunan sayfa" ekler (entryDayModel bunu bos gunlere TAHMINI olarak boler, services/entries.js:36-50),
+  gunluk ortalama ve donem toplamlari degisir; hicbir okuma kaydi yok. (Kucuk/ters yonde de ayni, ama E-28 yuzunden ters yon zaten
+  engelli.) Kullaniciya "sayfa toplamin degisecek" uyarisi yok (EntryDetail EditionRow).
+
+---------------------------------------------------------------------
+SORUN BULUNMAYANLAR (kontrol edildi)
+---------------------------------------------------------------------
+ - PATCH /me/profile: hak yarisi yok (senkron); avatar listesi + U+FE0F esdegerligi CANLI dogru (🧑‍⚕ varyantlari kabul, "<b>" 400);
+   color #rrggbb dogrulaniyor, buyuk harf kucuge cevriliyor, "red"/"#abcdefg" 400; bos govde 400; 409 avatar/renk ayni istekte
+   olsa bile TUMUYLE reddediyor (CANLI). (Kucuk: UPDATE `WHERE name_changed=0` ile korunmuyor, auth.js:124; ileride araya await
+   girerse hak yarisi dogar.)
+ - Yetki: admin uclari (editions POST/DELETE, catalog, users) requireAdmin; uye 403 (kodda). Baskasinin kaydini PATCH: owned() 403.
+   edition_id IDOR yok: baska eserin baskisi 400 (CANLI: 16 baska kataloga 400), olmayan 999 400, "abc" 400. Baski eser-duzeyinde
+   paylasimli, kullaniciya ait degil: baskasinin entry'sine baglanamaz.
+ - SQL: tum sorgular parametreli; LIKE kelimeleri kacisli (catalog.js:146). SSRF: cover_url downloadCover/safeGetBuffer
+   (ozel IP, port, yonlendirme, 5MB, magic byte) - v4'te dogrulanmisti, v5 yeni cikis yolu eklemedi; OL/TVMaze kimlikleri
+   encodeURIComponent; Wikidata Q kimligi /^Q\d+$/ (catalog.js:231). DNS rebinding TOCTOU (E-04 notu) degisiklik yok.
+ - Hesaplar CANLI dogru: episodes_watched/series_minutes (31 bolum/1652 dk beklenenle ayni), gelecek tarihli bolumler haric
+   (Grey's S23 2/5), movie_minutes=148 (Inception), type/period yansitma, gecersiz type 400, streak liderligi bos iken [] ,
+   period=foo hata vermez.
+ - Arama: "Hayvanlardan Tanrilara"/"hayvanlardan tanrılara"/"Harari Hayvanlardan Tanrilara"/"... / Yuval Noah Harari", "Anna Karenina - Turkiye
+   Is Bankasi Kultur Yayinlari", "anna karenina is bankasi", "Dikkat Kaygan Zemin"(+Kral Sakir), "dunyayi okuyan cocuk", "Mert Arik",
+   "Hayta", "Hayta / Anil Basili", "hayta anıl başılı" -> CANLI hepsi yerel seed kaydini ilk sirada buldu (0.001-1.5 sn).
+   Not: "Hayvanlardan Tanrilara" ayni zamanda alakasiz "Kuran-i Kerim" sonucu da getirdi (OL bulanik eslesme, ilgi kucuk).
+ - Migrasyon: yeni kolonlar ALTER ... ADD COLUMN ile eklenir; temiz DB'de acilis sorunsuz (CANLI). Eski semali DB denemesi
+   backend.txt'te iddia, ben ayrica denemedim.
+
+DOGRULANMADI (kapsam disi / arac siniri)
+ - Tarayicida gercek hover/dokunma/klavye, 375px yerlesim, profil modali gorunumu: arac localhost'a izin vermedi; yalnizca kod ve
+   styles.css okundu. (Onceki turlarda 375px dogrulanmisti; v5 bilesenleri yeni.)
+ - Google Books yolu (kota nedeniyle backend ajani da dogrulayamadi): langRestrict=tr, intitle/inauthor, lazy-fill GB.
+
+=====================================================================
+(ASAGISI v1-v4 TURLARININ ESKI GIRDILERIDIR - SILINMEDI)
+=====================================================================
+[v4 TURU NOTU - v5 ILE GERI ALINDI] ELESTIRMEN: IKNA OLDUM - gerekce: 27 bulgunun hepsi DOGRULANDI (17) ya da KAPANDI (10); acik madde yok.
   Cekirdek ozellikler canli dogrulandi: atlanan gunler bolunuyor ve rekora girmiyor (E-01), gecmisten eklenen
   kitaplar ortalamayi bozmuyor (E-15), bos giris log silmiyor ve geri gidis onayli (E-16), internet
   sonucu ekleme calisiyor (E-25), 375px sigiyor (E-26), baska uyenin rafi acilip soru sorulabiliyor
@@ -11,8 +291,8 @@ ELESTIRMEN: IKNA OLDUM - gerekce: 27 bulgunun hepsi DOGRULANDI (17) ya da KAPAND
   rebinding icin ayri onlem yok (backend.txt'te belirtilmis). Yeni kod yeni sorun getirirse notu geri alirim.
   Doğrulama yöntemi: kendi sunucum (4290) + vite 5373, gecici DB, tarayicida gercek tiklama.
 
-SON GUNCELLEME: 2026-10-23 17:15
-DURUM OZETI: ACIK 0 / KABUL 0 / YAPILDI 0 / DOGRULANDI 17 / KAPANDI 10  (toplam 27)
+(v4 sonu, tarihsel) SON GUNCELLEME: 2026-10-23 17:15
+(v4 sonu, tarihsel) DURUM OZETI: ACIK 0 / KABUL 0 / YAPILDI 0 / DOGRULANDI 17 / KAPANDI 10  (toplam 27)  -> guncel sayac en ustte
 
 TAKIP (17:15) - son tur, canli
   E-02 [DOGRULANDI] ADMIN_PASSWORD yokken rastgele sifre log'da; giriste "Sifreni degistir" penceresi,

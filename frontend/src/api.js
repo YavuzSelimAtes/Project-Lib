@@ -7,6 +7,19 @@ export class ApiError extends Error {
   }
 }
 
+// Backend bazi Turkce mesajlari ASCII yaziyor; bilinen sozcukleri duzgun Turkceye cevirir.
+const TR_WORDS = {
+  Gorunen: 'Görünen', gorunen: 'görünen', degistirilebilir: 'değiştirilebilir', bolumden: 'bölümden', Bolum: 'Bölüm', bolum: 'bölüm',
+  olusuyor: 'oluşuyor', baskida: 'baskıda', baski: 'baskı', Baski: 'Baskı', sayfadasiniz: 'sayfadasınız', secin: 'seçin',
+  sezonu: 'sezonu', icin: 'için', Icin: 'İçin', oldugu: 'olduğu', gecersiz: 'geçersiz', Gecersiz: 'Geçersiz', kucuk: 'küçük',
+  buyuk: 'büyük', bulunamadi: 'bulunamadı', Kullanici: 'Kullanıcı', kullanici: 'kullanıcı', sifre: 'şifre', Sifre: 'Şifre',
+  yok: 'yok', gun: 'gün', sayisi: 'sayısı', olmali: 'olmalı', olamaz: 'olamaz', hatali: 'hatalı', Bu: 'Bu',
+};
+function fixTr(m) {
+  if (typeof m !== 'string') return m;
+  return m.replace(/[A-Za-z]+/g, (w) => TR_WORDS[w] ?? w);
+}
+
 async function request(method, path, body) {
   let res;
   try {
@@ -36,7 +49,7 @@ async function request(method, path, body) {
           : res.status >= 500
             ? 'Sunucuda bir sorun oluştu. Biraz sonra tekrar dene.'
             : 'İşlem tamamlanamadı.');
-    throw new ApiError(msg, res.status, data?.fields);
+    throw new ApiError(fixTr(msg), res.status, data?.fields);
   }
   return data;
 }
@@ -57,8 +70,12 @@ export const api = {
   feed: () => request('GET', '/feed'),
   leaderboard: (kind, period) => request('GET', `/leaderboards/${kind}${qs({ period })}`),
 
-  search: (q, type) => request('GET', '/catalog/search' + qs({ q, type })),
+  search: (q, type, lang) => request('GET', '/catalog/search' + qs({ q, type, lang })),
   catalogItem: (id) => request('GET', `/catalog/${id}`),
+  catalogEditions: (id, lang) => request('GET', `/catalog/${id}/editions${qs({ lang })}`),
+  catalogSeasons: (id, refresh) => request('GET', `/catalog/${id}/seasons${qs({ refresh: refresh ? 1 : '' })}`),
+  avatars: () => request('GET', '/avatars'),
+  updateProfile: (data) => request('PATCH', '/me/profile', data),
   pickCatalog: (key) => request('POST', '/catalog/pick', { key }),
   createRequest: (data) => request('POST', '/requests', data),
   myRequests: () => request('GET', '/requests'),
@@ -85,7 +102,7 @@ export const api = {
   answer: (qid, answer) => request('PATCH', `/questions/${qid}`, { answer }),
   pending: () => request('GET', '/me/pending-questions'),
 
-  stats: (userId, period) => request('GET', `/users/${userId}/stats${qs({ period })}`),
+  stats: (userId, period, type) => request('GET', `/users/${userId}/stats${qs({ period, type })}`),
   heatmap: (userId, days) => request('GET', `/users/${userId}/heatmap${qs({ days })}`),
   notifications: () => request('GET', '/notifications'),
   readNotifications: (data) => request('POST', '/notifications/read', data),
@@ -93,6 +110,9 @@ export const api = {
   adminUsers: () => request('GET', '/admin/users'),
   adminAddUser: (data) => request('POST', '/admin/users', data),
   adminDeleteUser: (id, hard) => request('DELETE', `/admin/users/${id}${hard ? '?hard=1' : ''}`),
+  adminAddEdition: (catalogId, data) => request('POST', `/admin/catalog/${catalogId}/editions`, data),
+  adminDeleteEdition: (id) => request('DELETE', `/admin/editions/${id}`),
+  adminUpdateUser: (id, data) => request('PATCH', `/admin/users/${id}`, data),
   adminActivateUser: (id) => request('POST', `/admin/users/${id}/activate`),
   adminResetPassword: (id, password) => request('POST', `/admin/users/${id}/reset-password`, { password }),
   adminRequests: (status) => request('GET', '/admin/requests' + qs({ status })),

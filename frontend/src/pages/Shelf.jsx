@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { Cover, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, useAsync } from '../ui.jsx';
+import { CountUp, Cover, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
+import Heatmap from '../Heatmap.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
 
@@ -21,7 +22,7 @@ const PERIODS = [
 const fmt = (n, d = 0) => (n ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: d });
 
 export default function Shelf() {
-  const { user: me } = useAuth();
+  const { user: me, editProfile } = useAuth();
   const params = useParams();
   const uid = params.id ? Number(params.id) : me.id;
   const own = uid === me.id;
@@ -36,6 +37,11 @@ export default function Shelf() {
   const pending = useAsync(() => (own ? api.pending() : Promise.resolve(null)), [own]);
   const requests = useAsync(() => (own ? api.myRequests() : Promise.resolve(null)), [own]);
 
+  // tum alanlar her zaman geldigi icin istatistik donem basina BIR kez cekilir; filtre kart setini secer
+  const animated = useRef(false);
+  useEffect(() => {
+    if (stats.data) animated.current = true;
+  }, [stats.data]);
   const s = stats.data;
   const owner = s?.user;
   const reloadAll = () => {
@@ -57,7 +63,7 @@ export default function Shelf() {
 
   return (
     <>
-      <div className="row">
+      <div className="shelf-head">
         <div className="grow">
           <h1>{own ? 'Benim rafım' : owner ? `${owner.avatar} ${owner.display_name} – rafı` : 'Raf'}</h1>
           <p className="sub" style={{ marginBottom: 8 }}>
@@ -65,12 +71,24 @@ export default function Shelf() {
           </p>
         </div>
         {own && (
-          <button className="btn" onClick={() => setAdding(true)}>
-            + Yeni ekle
-          </button>
+          <div className="shelf-actions">
+            <button className="btn ghost" onClick={editProfile}>
+              ✏️ Profili düzenle
+            </button>
+            <button className="btn" onClick={() => setAdding(true)}>
+              + Yeni ekle
+            </button>
+          </div>
         )}
       </div>
 
+      <div className="tabs" role="tablist" aria-label="Tür">
+        {FILTERS.map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={filter === k} className="tab" onClick={() => setFilter(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
       <div className="tabs" role="tablist" aria-label="Dönem">
         {PERIODS.map(([k, l]) => (
           <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
@@ -83,21 +101,13 @@ export default function Shelf() {
         <Skeleton h={80} />
       ) : (
         s && (
-          <div className="stats">
-            <div className="card stat"><b>{fmt(s.total_pages)}</b>sayfa okundu</div>
-            <div className="card stat"><b>{s.books_finished}</b>kitap bitti</div>
-            <div className="card stat"><b>{s.movies_watched}</b>film izlendi</div>
-            <div className="card stat"><b>{fmt(s.avg_pages_per_day, 1)}</b>sayfa / gün</div>
-            <div className="card stat"><b>🔥 {s.current_streak}</b>gün seri (en uzun {s.longest_streak})</div>
-            <div className="card stat">
-              <b>{s.record ? s.record.pages : '–'}</b>rekor
-              {s.record && <div className="small muted">{fmtDate(s.record.date)}</div>}
-            </div>
+          <div style={{ opacity: stats.loading ? 0.55 : 1, transition: 'opacity .2s' }}>
+            <StatCards key={filter} s={s} type={filter} animate={!animated.current} />
           </div>
         )
       )}
 
-      <Heatmap data={heat.data?.days} />
+      {(filter === 'all' || filter === 'book') && <Heatmap data={heat.data?.days} loading={heat.loading} error={heat.error} onRetry={heat.reload} />}
 
       {own && pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -111,13 +121,6 @@ export default function Shelf() {
         </div>
       )}
 
-      <div className="tabs" role="tablist" aria-label="Tür">
-        {FILTERS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={filter === k} className="tab" onClick={() => setFilter(k)}>
-            {l}
-          </button>
-        ))}
-      </div>
       {entries.loading && !entries.data && <Skeleton h={90} n={3} />}
       <ErrorBox error={entries.error} onRetry={entries.reload} />
       {entries.data && entries.data.entries.length === 0 && (
@@ -172,38 +175,89 @@ export default function Shelf() {
   );
 }
 
-// son 13 hafta, GitHub tarzi
-function Heatmap({ data }) {
-  if (!data) return null;
-  const map = new Map(data.map((d) => [d.date, d.pages]));
-  const est = new Set(data.filter((d) => d.estimated).map((d) => d.date));
-  const max = Math.max(1, ...data.map((d) => d.pages));
-  const days = [];
-  const end = new Date();
-  for (let i = 90; i >= 0; i--) {
-    const d = new Date(end);
-    d.setDate(end.getDate() - i);
-    const key = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(d);
-    days.push({ key, pages: map.get(key) || 0, est: est.has(key), dow: (d.getDay() + 6) % 7 });
-  }
-  const pad = days[0].dow;
-  const cells = [...Array(pad).fill(null), ...days];
+// Tur filtresine gore istatistik kartlari. Alan yoksa (eski backend) kart gizlenir.
+function Mins({ v, plus, animate }) {
+  const x = useCountUp(v, 700, animate);
   return (
-    <div className="card" style={{ marginBottom: 16, overflowX: 'auto' }}>
-      <b>Son 3 ay</b>
-      <div style={{ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: 'repeat(7, 14px)', gap: 3, marginTop: 8, width: 'max-content' }} role="img" aria-label="Günlük okuma ısı haritası">
-        {cells.map((c, i) =>
-          c ? (
-            <span
-              key={i}
-              title={`${fmtDate(c.key)}: ${c.pages} sayfa${c.est ? ' (tahmini)' : ''}`}
-              style={{ width: 14, height: 14, borderRadius: 4, opacity: c.est ? 0.55 : 1, background: c.pages ? `color-mix(in srgb, var(--accent) ${25 + (c.pages / max) * 75}%, var(--surface-2))` : 'var(--surface-2)' }}
-            />
-          ) : (
-            <span key={i} />
-          ),
-        )}
-      </div>
+    <>
+      {fmtMinutes(x)}
+      {plus ? '+' : ''}
+    </>
+  );
+}
+function StatCards({ s, type, animate }) {
+  const num = (v, dec = 0) => <CountUp value={v} decimals={dec} animate={animate} />;
+  const has = (k) => s[k] != null;
+  const card = (key, big, label, extra) => (
+    <div className="card stat" key={key}>
+      <b>{big}</b>
+      {label}
+      {extra}
     </div>
+  );
+  const movieUnk = s.movie_runtime_unknown || 0;
+  const epUnk = !!s.episodes_unknown;
+  let cards = [];
+  if (type === 'book') {
+    cards = [
+      card('pg', num(s.total_pages), 'sayfa okundu'),
+      card('bf', num(s.books_finished), 'kitap bitti'),
+      card('avg', num(s.avg_pages_per_day, 1), 'sayfa / gün'),
+      card('rec', s.record ? s.record.pages : '–', 'rekor', s.record && <div className="small muted">{fmtDate(s.record.date)}</div>),
+      card('st', <>🔥 {s.current_streak ?? 0}</>, 'gün seri', s.longest_streak != null && <div className="small muted">en uzun {s.longest_streak}</div>),
+    ];
+  } else if (type === 'series') {
+    cards = [
+      has('series_minutes') &&
+        card(
+          'sm',
+          s.series_minutes === 0 && epUnk ? '–' : <Mins v={s.series_minutes} plus={epUnk} animate={animate} />,
+          epUnk ? 'en az izlenen süre' : 'izlenen süre',
+          epUnk && <div className="small muted">bazı dizilerin süresi bilinmiyor</div>,
+        ),
+      card('sf', num(s.series_finished), 'dizi bitti'),
+      has('episodes_watched') &&
+        card(
+          'ep',
+          <>
+            {num(s.episodes_watched)}
+            {epUnk ? '+' : ''}
+          </>,
+          epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi',
+        ),
+    ];
+  } else if (type === 'movie') {
+    cards = [
+      has('movie_minutes') &&
+        card(
+          'mm',
+          s.movie_minutes === 0 && movieUnk > 0 ? '–' : <Mins v={s.movie_minutes} plus={movieUnk > 0} animate={animate} />,
+          movieUnk > 0 ? 'en az izlenen süre' : 'izlenen süre',
+          movieUnk > 0 && <div className="small muted">{movieUnk} filmin süresi bilinmiyor</div>,
+        ),
+      card('mv', num(s.movies_watched), 'film izlendi'),
+    ];
+  } else {
+    cards = [
+      card('bf', num(s.books_finished), 'kitap bitti'),
+      card('pg', num(s.total_pages), 'sayfa okundu'),
+      card('sf', num(s.series_finished), 'dizi bitti'),
+      has('episodes_watched') &&
+        card(
+          'ep',
+          <>
+            {num(s.episodes_watched)}
+            {epUnk ? '+' : ''}
+          </>,
+          epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi',
+        ),
+      card('mv', num(s.movies_watched), 'film izlendi'),
+    ];
+  }
+  return (
+    <>
+      <div className="stats fade-in">{cards.filter(Boolean)}</div>
+      {epUnk && (type === 'series' || type === 'all') && <p className="small muted" style={{ marginTop: -8 }}>Sezon bilgisi olmayan dizilerde bölümler sayılamadı; gerçek sayı daha yüksek olabilir.</p>}
+    </>
   );
 }

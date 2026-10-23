@@ -132,12 +132,12 @@ export function useAsync(fn, deps = []) {
   return { ...state, reload: run };
 }
 
-export function useCountUp(target, ms = 700) {
-  const [v, setV] = useState(0);
+export function useCountUp(target, ms = 700, animate = true) {
+  const [v, setV] = useState(animate ? 0 : Number(target) || 0);
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const to = Number(target) || 0;
-    if (reduce) return setV(to);
+    if (reduce || !animate) return setV(to);
     let raf;
     const t0 = performance.now();
     const tick = (t) => {
@@ -147,12 +147,12 @@ export function useCountUp(target, ms = 700) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
+  }, [target, ms, animate]);
   return v;
 }
 
-export function CountUp({ value, decimals = 0 }) {
-  const v = useCountUp(value);
+export function CountUp({ value, decimals = 0, animate = true }) {
+  const v = useCountUp(value, 700, animate);
   return <>{v.toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</>;
 }
 
@@ -180,3 +180,51 @@ export const TYPE_ICON = { book: '📖', movie: '🎬', series: '📺' };
 const ymd = (d) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(d);
 export const today = () => ymd(new Date());
 export const yesterday = () => ymd(new Date(Date.now() - 86400000));
+
+// ---- dil / sure / tarih yardimcilari (v5) ----
+const LANG_ALIAS = { tur: 'tr', eng: 'en', ger: 'de', deu: 'de', fre: 'fr', fra: 'fr', spa: 'es', ita: 'it', rus: 'ru', ara: 'ar', jpn: 'ja', por: 'pt', dut: 'nl', nld: 'nl' };
+export function normLang(code) {
+  if (!code) return '';
+  const c = String(code).toLowerCase().trim();
+  return LANG_ALIAS[c] || c.slice(0, 2);
+}
+export function langLabel(code) {
+  const c = normLang(code);
+  if (!c) return 'Diğer';
+  try {
+    const n = new Intl.DisplayNames(['tr'], { type: 'language' }).of(c);
+    if (n && n !== c) return n.charAt(0).toLocaleUpperCase('tr') + n.slice(1);
+  } catch {
+    /* yoksay */
+  }
+  return c.toUpperCase();
+}
+
+// 760 -> "12 sa 40 dk", 45 -> "45 dk"
+export function fmtMinutes(m) {
+  const n = Math.max(0, Math.round(Number(m) || 0));
+  if (n < 60) return `${n} dk`;
+  const h = Math.floor(n / 60);
+  const r = n % 60;
+  return r ? `${h.toLocaleString('tr-TR')} sa ${r} dk` : `${h.toLocaleString('tr-TR')} sa`;
+}
+
+const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const DOW3 = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+// "2026-03-12" -> "12 Mart Per" (farkli yildaysa yil da eklenir)
+export function fmtDayLong(d) {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d || '';
+  const [y, m, day] = d.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay();
+  const thisYear = Number(today().slice(0, 4));
+  return `${day} ${MONTHS[m - 1]}${y !== thisYear ? ' ' + y : ''} ${DOW3[dow]}`;
+}
+
+// arama sonucu / baski ozeti: yayinevi, diller, baski sayisi
+export function SearchMeta({ it }) {
+  if (it.type !== 'book') return null;
+  const pub = it.publisher || (Array.isArray(it.publishers) ? it.publishers[0] : null);
+  const langs = [...new Set((it.languages || []).map(normLang).filter(Boolean))].map(langLabel);
+  const parts = [pub, langs.length ? langs.join(', ') : null, it.editions_count > 0 ? `${it.editions_count} baskı` : null].filter(Boolean);
+  return parts.length ? <div className="line sm">{parts.join(' · ')}</div> : null;
+}

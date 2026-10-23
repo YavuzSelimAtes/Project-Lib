@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
-import { err, bad, str, oneOf, nowIso } from '../util.js';
+import { err, bad, str, oneOf, nowIso, normalizeDisplayName } from '../util.js';
+import { AVATAR_GROUPS, canonAvatar } from '../avatars.js';
 
 const attempts = new Map(); // anahtar -> {n, reset}
 const WINDOW = 5 * 60 * 1000;
@@ -36,6 +37,15 @@ function parseAvatar(v) {
   const a = str(v, { max: 16, field: 'avatar' });
   if (a && ([...segmenter.segment(a)].length > 3 || /[<>&"'\`]/.test(a))) throw bad('Avatar en fazla 3 karakterlik bir emoji olmali', { avatar: 'gecersiz' });
   return a;
+}
+// Avatar listedeki emojilerden biri olmali; kullanicinin mevcut (eski) avatari aynen kalabilir
+function listedAvatar(v, current = null) {
+  const a = parseAvatar(v);
+  if (!a) throw bad('Avatar bos olamaz', { avatar: 'zorunlu' });
+  if (current && a === current) return current;
+  const c = canonAvatar(a);
+  if (!c) throw bad('Avatar, listedeki emojilerden biri olmali (GET /api/avatars)', { avatar: 'listede yok' });
+  return c;
 }
 function parseColor(v) {
   if (v === undefined || v === null || v === '') return null;
@@ -78,6 +88,38 @@ export default async function routes(app) {
 
   app.get('/api/auth/me', async (req) => ({ user: toUser(requireUser(req)) }));
 
+  app.get('/api/avatars', async (req) => {
+    requireUser(req);
+    return { groups: AVATAR_GROUPS };
+  });
+
+  // Profil: avatar/renk serbest; gorunen ad SADECE BIR KEZ degisir (name_changed)
+  app.patch('/api/me/profile', async (req) => {
+    const me = requireUser(req);
+    const b = req.body || {};
+    const has = (k) => b[k] !== undefined;
+    if (!has('avatar') && !has('color') && !has('display_name')) throw bad('Degistirilecek bir alan gonderin (avatar, color, display_name)');
+    const row = db.prepare('SELECT * FROM users WHERE id=?').get(me.id);
+    let { avatar, color, display_name, name_changed } = row;
+    if (has('avatar')) avatar = listedAvatar(b.avatar, row.avatar);
+    if (has('color')) {
+      const c = parseColor(b.color);
+      if (!c) throw bad('Renk #rrggbb bicimde olmali', { color: 'zorunlu' });
+      color = c.toLowerCase();
+    }
+    if (has('display_name')) {
+      // gonderilen, kayitli adla birebir aynisiysa (eski/duzensiz kayitlar dahil) hak harcanmaz
+      const n = b.display_name === row.display_name ? row.display_name : normalizeDisplayName(b.display_name);
+      if (n !== row.display_name) {
+        if (row.name_changed) throw err(409, 'Gorunen ad bir kez degistirilebilir.');
+        display_name = n;
+        name_changed = 1;
+      }
+    }
+    db.prepare('UPDATE users SET avatar=?, color=?, display_name=?, name_changed=? WHERE id=?').run(avatar, color, display_name, name_changed, me.id);
+    return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(me.id)) };
+  });
+
   app.post('/api/auth/change-password', async (req) => {
     const me = requireUser(req);
     const b = req.body || {};
@@ -104,11 +146,12 @@ export default async function routes(app) {
     const b = req.body || {};
     const username = (str(b.username, { field: 'username', required: true, max: 32 }) || '').toLowerCase();
     if (!USERNAME_RE.test(username)) throw bad('Kullanici adi 3-32 karakter, sadece a-z 0-9 . _ - olabilir', { username: 'gecersiz' });
-    const display_name = str(b.display_name, { field: 'display_name', required: true, max: 40 });
+    if (b.display_name === undefined || b.display_name === null || b.display_name === '') throw bad('display_name zorunludur', { display_name: 'zorunlu' });
+    const display_name = normalizeDisplayName(b.display_name, { min: 1 });
     const password = parsePassword(b.password);
     const role = oneOf(b.role, ['admin', 'member'], { field: 'role' }) || 'member';
     const n = db.prepare('SELECT COUNT(*) c FROM users').get().c;
-    const avatar = parseAvatar(b.avatar) || EMOJIS[n % EMOJIS.length];
+    const avatar = b.avatar !== undefined && b.avatar !== null && b.avatar !== '' ? listedAvatar(b.avatar) : EMOJIS[n % EMOJIS.length];
     const color = parseColor(b.color) || PALETTE[n % PALETTE.length];
     if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw err(409, 'Bu kullanici adi zaten alinmis', { username: 'alinmis' });
     const info = db.prepare('INSERT INTO users (username,display_name,password_hash,role,avatar,color,created_at) VALUES (?,?,?,?,?,?,?)')
@@ -123,14 +166,15 @@ export default async function routes(app) {
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(id);
     if (!u) throw err(404, 'Kullanici bulunamadi');
     const b = req.body || {};
-    const display_name = b.display_name !== undefined ? str(b.display_name, { field: 'display_name', required: true, max: 40 }) : u.display_name;
-    const avatar = b.avatar !== undefined ? (parseAvatar(b.avatar) || u.avatar) : u.avatar;
+    const display_name = b.display_name !== undefined && b.display_name !== u.display_name ? normalizeDisplayName(b.display_name, { min: 1 }) : u.display_name;
+    const avatar = b.avatar !== undefined && b.avatar !== null && b.avatar !== '' ? listedAvatar(b.avatar, u.avatar) : u.avatar;
     const color = b.color !== undefined ? (parseColor(b.color) || u.color) : u.color;
     const role = b.role !== undefined ? oneOf(b.role, ['admin', 'member'], { field: 'role', required: true }) : u.role;
     if (u.role === 'admin' && role !== 'admin') {
       if (db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c <= 1) throw bad('Son yonetici uyeye cevrilemez');
     }
-    db.prepare('UPDATE users SET display_name=?,avatar=?,color=?,role=? WHERE id=?').run(display_name, avatar, color, role, id);
+    const nameChanged = b.reset_name_change === true ? 0 : u.name_changed;
+    db.prepare('UPDATE users SET display_name=?,avatar=?,color=?,role=?,name_changed=? WHERE id=?').run(display_name, avatar, color, role, nameChanged, id);
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(id)) };
   });
 

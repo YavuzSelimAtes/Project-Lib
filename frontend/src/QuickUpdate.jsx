@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { today } from './ui.jsx';
+import SeasonPicker from './Seasons.jsx';
 
 const Msg = ({ msg }) =>
   msg ? (
@@ -77,12 +78,23 @@ function SeriesQuick({ entry, id, onSaved }) {
   const [episode, setEpisode] = useState(entry.episode ?? 1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setMsg(null);
     try {
-      const r = await api.seriesProgress(id, Number(season), Number(episode));
+      if (!season || !episode) throw new Error('Sezon ve bölümü seç.');
+      let r;
+      try {
+        r = await api.seriesProgress(id, Number(season), Number(episode));
+      } catch (x) {
+        // sezon bilgisi bayat olabilir: bir kez zorla tazele ve tekrar dene
+        if (x.status !== 400 || !entry.catalog?.id) throw x;
+        await api.catalogSeasons(entry.catalog.id, true).catch(() => {});
+        setReloadKey((k) => k + 1);
+        r = await api.seriesProgress(id, Number(season), Number(episode));
+      }
       setMsg({ ok: true, text: 'Kaydedildi' });
       onSaved?.(r.entry, r);
     } catch (x) {
@@ -94,10 +106,7 @@ function SeriesQuick({ entry, id, onSaved }) {
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <form className="quick" onSubmit={submit}>
-        <label className="small muted">Sezon</label>
-        <input type="number" min="1" value={season} onChange={(e) => setSeason(e.target.value)} style={{ width: 70 }} aria-label="Sezon" />
-        <label className="small muted">Bölüm</label>
-        <input type="number" min="1" value={episode} onChange={(e) => setEpisode(e.target.value)} style={{ width: 70 }} aria-label="Bölüm" />
+        <SeasonPicker catalogId={entry.catalog?.id} reloadKey={reloadKey} season={season} episode={episode} onChange={(sn, ep) => { setSeason(sn); setEpisode(ep); }} />
         <button className="btn small" disabled={busy}>
           Kaydet
         </button>

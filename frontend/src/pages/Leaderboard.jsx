@@ -6,6 +6,7 @@ const BOARDS = [
   { key: 'record', label: '🏆 Rekor', unit: 'sayfa', note: 'Bir günde en çok okunan sayfa', dec: 0 },
   { key: 'average', label: '📈 Günlük ortalama', unit: 'sayfa/gün', note: 'Günde ortalama okunan sayfa', dec: 1 },
   { key: 'finished', label: '📕 En çok bitiren', unit: 'kitap', note: 'Bitirilen kitap sayısı', dec: 0 },
+  { key: 'streak', label: '🔥 Seri', unit: 'gün', note: 'Üst üste her gün kitap okuyanlar (güncel seri)', dec: 0, noPeriod: true },
 ];
 const PERIODS = [
   ['all', 'Tüm zamanlar'],
@@ -22,6 +23,7 @@ function detailText(kind, d) {
   if (kind === 'record') return cut([fmtDate(d.date), titles(d.books)].filter(Boolean).join(' · '));
   if (kind === 'average') return d.total_pages ? `${d.total_pages} sayfa / ${d.days} gün` : '';
   if (kind === 'finished') return cut(titles(d.books));
+  if (kind === 'streak') return [d.longest != null ? `en uzun ${d.longest} gün` : null, d.last_date ? `son okuma ${fmtDate(d.last_date)}` : null].filter(Boolean).join(' · ');
   return '';
 }
 
@@ -29,7 +31,7 @@ export default function Leaderboard() {
   const [kind, setKind] = useState('record');
   const [period, setPeriod] = useState('all');
   const board = BOARDS.find((b) => b.key === kind);
-  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind, period), [kind, period]);
+  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind, board.noPeriod ? undefined : period), [kind, board.noPeriod ? '-' : period]);
   const list = data?.entries || [];
   const top = list.filter((e) => e.rank <= 3).slice(0, 3);
   const rest = list.filter((e) => !top.includes(e));
@@ -47,19 +49,21 @@ export default function Leaderboard() {
           </button>
         ))}
       </div>
-      <div className="tabs" role="tablist" aria-label="Dönem">
-        {PERIODS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
-            {l}
-          </button>
-        ))}
-      </div>
+      {!board.noPeriod && (
+        <div className="tabs" role="tablist" aria-label="Dönem">
+          {PERIODS.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && <Skeleton h={90} n={3} />}
       <ErrorBox error={error} onRetry={reload} />
       {!loading && !error && list.length === 0 && (
         <Empty icon="🏁" title="Henüz kimse listede değil">
-          Sayfa ilerlemeni kaydettikçe burası dolacak.
+          {kind === 'streak' ? 'Ardışık günlerde kitap okudukça burası dolacak.' : 'Sayfa ilerlemeni kaydettikçe burası dolacak.'}
         </Empty>
       )}
       {!loading && list.length > 0 && (

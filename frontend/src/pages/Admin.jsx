@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { Avatar, Cover, Empty, ErrorBox, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
-
-const AVATARS = ['🦊', '🐼', '🐯', '🦁', '🐸', '🐙', '🦉', '🐰', '🐻', '🦄', '🐧', '🐱'];
-const COLORS = ['#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#22c55e', '#eab308'];
+import { Avatar, Cover, Empty, ErrorBox, SearchMeta, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
+import { AvatarPicker, ColorPicker, COLORS, validateName } from '../Profile.jsx';
+import { flattenEditions } from '../Editions.jsx';
+import { langLabel } from '../ui.jsx';
 const RSTATUS = { acik: 'Açık', inceleniyor: 'İnceleniyor', tamamlandi: 'Tamamlandı', reddedildi: 'Reddedildi' };
 
 export default function Admin() {
@@ -128,6 +128,7 @@ function RequestCard({ r, reload }) {
               <div className="meta">
                 <div className="t">{it.title}</div>
                 <div className="line">{[it.author_or_creator, it.year].filter(Boolean).join(' · ')}</div>
+                <SearchMeta it={it} />
                 <button
                   className="btn small"
                   disabled={busy}
@@ -173,19 +174,21 @@ function RequestCard({ r, reload }) {
 function Users() {
   const { user: me } = useAuth();
   const users = useAsync(() => api.adminUsers(), []);
-  const [form, setForm] = useState({ username: '', display_name: '', password: '', avatar: AVATARS[0], color: COLORS[0], role: 'member' });
+  const [form, setForm] = useState({ username: '', display_name: '', password: '', avatar: '🦊', color: COLORS[0], role: 'member' });
   const [err, setErr] = useState(null);
   const [okMsg, setOkMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const nameCheck = form.display_name ? validateName(form.display_name) : { norm: '', error: null };
   const add = async (e) => {
     e.preventDefault();
+    if (nameCheck.error) return setErr(new Error(nameCheck.error));
     setBusy(true);
     setErr(null);
     setOkMsg('');
     try {
-      await api.adminAddUser(form);
+      await api.adminAddUser({ ...form, display_name: nameCheck.norm });
       setOkMsg(`${form.display_name} eklendi. Kullanıcı adı ve şifreyi kendisine ilet.`);
       setForm((f) => ({ ...f, username: '', display_name: '', password: '' }));
       users.reload();
@@ -218,6 +221,15 @@ function Users() {
       setErr(x);
     }
   };
+  const resetName = async (u) => {
+    try {
+      await api.adminUpdateUser(u.id, { reset_name_change: true });
+      setOkMsg(`${u.display_name} görünen adını bir kez daha değiştirebilir.`);
+      users.reload();
+    } catch (x) {
+      setErr(x);
+    }
+  };
   const activate = async (u) => {
     try {
       await api.adminActivateUser(u.id);
@@ -239,7 +251,8 @@ function Users() {
           </label>
           <label className="field grow">
             <span>Görünen ad</span>
-            <input type="text" value={form.display_name} onChange={set('display_name')} placeholder="Ayşe" required />
+            <input type="text" value={form.display_name} onChange={set('display_name')} placeholder="Ayşe" required maxLength={40} aria-invalid={!!nameCheck.error} />
+            {nameCheck.error && <span className="small" style={{ color: 'var(--danger)' }}>{nameCheck.error}</span>}
           </label>
           <label className="field grow">
             <span>Şifre (en az 6)</span>
@@ -248,20 +261,14 @@ function Users() {
         </div>
         <div className="field">
           <span>Avatar</span>
-          <div className="row" style={{ marginTop: 4 }}>
-            {AVATARS.map((a) => (
-              <button type="button" key={a} className="icon-btn" aria-pressed={form.avatar === a} aria-label={`Avatar ${a}`} onClick={() => setForm((f) => ({ ...f, avatar: a }))} style={form.avatar === a ? { borderColor: 'var(--accent)', borderWidth: 3 } : undefined}>
-                {a}
-              </button>
-            ))}
+          <div style={{ marginTop: 4 }}>
+            <AvatarPicker value={form.avatar} onChange={(a) => setForm((f) => ({ ...f, avatar: a }))} />
           </div>
         </div>
         <div className="field">
           <span>Renk</span>
-          <div className="row" style={{ marginTop: 4 }}>
-            {COLORS.map((c) => (
-              <button type="button" key={c} aria-label={`Renk ${c}`} aria-pressed={form.color === c} onClick={() => setForm((f) => ({ ...f, color: c }))} style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: form.color === c ? '4px solid var(--text)' : '2px solid var(--line)', cursor: 'pointer' }} />
-            ))}
+          <div style={{ marginTop: 4 }}>
+            <ColorPicker value={form.color} onChange={(c) => setForm((f) => ({ ...f, color: c }))} />
           </div>
         </div>
         <label className="field">
@@ -306,6 +313,7 @@ function Users() {
             ) : (
               <>
                 <button className="btn small ghost" onClick={() => reset(u)}>Şifre sıfırla</button>
+                {u.name_changed && <button className="btn small ghost" onClick={() => resetName(u)} title="Kullanıcı görünen adını bir kez daha değiştirebilsin">Ad hakkını sıfırla</button>}
                 {u.id !== me.id && (
                   <button className="btn small danger" onClick={() => del(u)}>Pasife al</button>
                 )}
@@ -416,6 +424,7 @@ function CatalogList() {
   const [type, setType] = useState('');
   const [dq, setDq] = useState('');
   const [editing, setEditing] = useState(null);
+  const [edOpen, setEdOpen] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
     const t = setTimeout(() => setDq(q), 350);
@@ -465,10 +474,12 @@ function CatalogList() {
                 </div>
                 <div className="row">
                   <button className="btn small ghost" onClick={() => setEditing(editing === it.id ? null : it.id)}>Düzenle</button>
+                  {it.type === 'book' && <button className="btn small ghost" onClick={() => setEdOpen(edOpen === it.id ? null : it.id)}>📘 Baskılar</button>}
                   <button className="btn small danger" onClick={() => del(it)}>Sil</button>
                 </div>
               </div>
             </div>
+            {edOpen === it.id && <EditionsAdmin catalogId={it.id} />}
             {editing === it.id && <CatalogEdit it={it} onDone={() => { setEditing(null); list.reload(); }} />}
           </div>
         ))}
@@ -519,5 +530,84 @@ function CatalogEdit({ it, onDone }) {
       <ErrorBox error={err} />
       <button className="btn small" disabled={busy}>Kaydet</button>
     </form>
+  );
+}
+
+/* ---------- baski ekle / sil (admin) ---------- */
+const LANG_OPTS = ['tr', 'en', 'de', 'fr', 'es', 'it', 'ru', 'ar'];
+function EditionsAdmin({ catalogId }) {
+  const state = useAsync(async () => flattenEditions(await api.catalogItem(catalogId).then((r) => ({ editions: r.editions || r.item?.editions || [] }))), [catalogId]);
+  const [f, setF] = useState({ language: 'tr', publisher: '', pages: '', year: '', isbn: '' });
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const add = async (e) => {
+    e.preventDefault();
+    if (!f.publisher.trim() && !f.pages) return setErr(new Error('Yayınevi ya da sayfa sayısından en az birini yaz.'));
+    setBusy(true);
+    setErr(null);
+    try {
+      const d = { language: f.language || undefined, publisher: f.publisher.trim() || undefined };
+      if (f.pages) d.pages = Number(f.pages);
+      if (f.year) d.year = Number(f.year);
+      if (f.isbn.trim()) d.isbn = f.isbn.trim();
+      await api.adminAddEdition(catalogId, d);
+      setF((x) => ({ ...x, publisher: '', pages: '', year: '', isbn: '' }));
+      state.reload();
+    } catch (x) {
+      setErr(x);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const del = async (ed) => {
+    if (!window.confirm('Bu baskı silinsin mi? Bağlı kayıtların toplam sayfası korunur.')) return;
+    setErr(null);
+    try {
+      await api.adminDeleteEdition(ed.id);
+      state.reload();
+    } catch (x) {
+      setErr(x);
+    }
+  };
+  const list = state.data || [];
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <b className="small">Baskılar</b>
+      {state.loading && !state.data && <p className="small muted">Yükleniyor…</p>}
+      <ErrorBox error={state.error} onRetry={state.reload} />
+      {state.data && list.length === 0 && <p className="small muted">Henüz baskı yok.</p>}
+      {list.map((ed) => (
+        <div className="lrow" key={ed.id}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b>{ed.publisher || 'Yayınevi yok'}</b>{' '}
+            <span className="small muted">
+              {[ed.language ? langLabel(ed.language) : null, ed.pages ? `${ed.pages} sayfa` : 'sayfa yok', ed.year, ed.isbn].filter(Boolean).join(' · ')}
+              {ed.source ? ` · ${ed.source}` : ''}
+            </span>
+          </div>
+          <button className="btn small danger" onClick={() => del(ed)} aria-label="Baskıyı sil">Sil</button>
+        </div>
+      ))}
+      <form onSubmit={add} style={{ marginTop: 10 }}>
+        <b className="small">Baskı ekle</b>
+        <div className="row" style={{ alignItems: 'stretch', marginTop: 6 }}>
+          <label className="field grow"><span>Dil</span>
+            <select value={f.language} onChange={set('language')}>
+              {LANG_OPTS.map((l) => <option key={l} value={l}>{langLabel(l)}</option>)}
+              <option value="">Belirtme</option>
+            </select>
+          </label>
+          <label className="field grow"><span>Yayınevi</span><input type="text" value={f.publisher} onChange={set('publisher')} maxLength={120} /></label>
+        </div>
+        <div className="row" style={{ alignItems: 'stretch' }}>
+          <label className="field grow"><span>Sayfa</span><input type="number" min="1" value={f.pages} onChange={set('pages')} /></label>
+          <label className="field grow"><span>Yıl</span><input type="number" value={f.year} onChange={set('year')} /></label>
+          <label className="field grow"><span>ISBN</span><input type="text" value={f.isbn} onChange={set('isbn')} maxLength={20} /></label>
+        </div>
+        <ErrorBox error={err} />
+        <button className="btn small" disabled={busy}>Baskıyı ekle</button>
+      </form>
+    </div>
   );
 }

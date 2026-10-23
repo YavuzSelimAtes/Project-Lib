@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from './api.js';
 import { useAuth } from './auth.js';
-import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, timeAgo, useAsync } from './ui.jsx';
+import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, langLabel, timeAgo, useAsync } from './ui.jsx';
+import EditionPicker from './Editions.jsx';
 import QuickUpdate, { OpenDays } from './QuickUpdate.jsx';
 
 const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı', planlandi: 'Planlandı' };
@@ -66,6 +67,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
               <div className="small muted">
                 {e.start_date && `Başlangıç: ${fmtDate(e.start_date)}`} {e.end_date && ` · Bitiş: ${fmtDate(e.end_date)}`}
               </div>
+              {e.type === 'book' && <EditionRow e={e} mine={mine} onChanged={changed} />}
               {mine && e.status !== 'bitti' && (e.type === 'book' || e.type === 'series') && (
                 <QuickUpdate
                   key={e.updated_at}
@@ -94,6 +96,51 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
         </>
       )}
     </Modal>
+  );
+}
+
+// Secili baski (dil, yayinevi, sayfa); sahibi degistirebilir
+function EditionRow({ e, mine, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const ed = e.edition;
+  const pick = async (x) => {
+    if (!x || x.id === ed?.id) return setOpen(false);
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.updateEntry(e.id, { edition_id: x.id });
+      setOpen(false);
+      onChanged();
+    } catch (x2) {
+      setErr(x2);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!ed && !mine) return null;
+  return (
+    <div style={{ marginTop: 6 }}>
+      {ed ? (
+        <div className="small">
+          📘 Baskı: {[ed.language ? langLabel(ed.language) : null, ed.publisher, ed.pages ? `${ed.pages} sayfa` : null].filter(Boolean).join(' · ') || 'belirtilmemiş'}
+        </div>
+      ) : (
+        <div className="small muted">Baskı belirtilmemiş</div>
+      )}
+      {mine && (
+        <button className="btn small ghost" style={{ marginTop: 4 }} disabled={busy} onClick={() => setOpen((v) => !v)}>
+          {open ? 'Kapat' : ed ? '🔁 Baskıyı değiştir' : '➕ Baskı seç'}
+        </button>
+      )}
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          <EditionPicker catalogId={e.catalog.id} selectedId={ed?.id ?? null} allowNone={false} onSelect={pick} />
+        </div>
+      )}
+      <ErrorBox error={err} />
+    </div>
   );
 }
 
