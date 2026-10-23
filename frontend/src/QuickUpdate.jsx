@@ -156,7 +156,7 @@ export function OpenDays({ entryId, onChanged }) {
           Girdiklerimi kaydet
         </button>
         <button className="btn small ghost" disabled={busy} onClick={() => window.confirm('Boş günlerin hepsi "okumadım" olarak işaretlensin mi?') && send({ skip_open: true })}>
-          Hepsini okumadım
+          Bugünlerde okumadım (Buna basarsanız listedeki tüm günlere 0 yazar)
         </button>
       </div>
       {err && <div className="err" role="alert">{err.message}</div>}
