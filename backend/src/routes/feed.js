@@ -6,7 +6,7 @@ import { editionBrief, getEdition } from '../services/editions.js';
 import { seriesExtras } from '../services/seasons.js';
 
 const CARD_MAX = 8; // kart basina en fazla 8 oge, kalani more_count
-const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren', streak: 'Gunluk seri' };
+const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren', streak: 'Gunluk seri', best_streak: 'En uzun seri' };
 
 export default async function routes(app) {
   const db = app.db;
@@ -55,11 +55,11 @@ export default async function routes(app) {
     return { generated_at: nowIso(), cards, activity };
   });
 
-  for (const kind of ['record', 'average', 'finished', 'streak']) {
+  for (const kind of ['record', 'average', 'finished', 'streak', 'best_streak']) {
     app.get(`/api/leaderboards/${kind}`, async (req) => {
       requireUser(req);
       // seri liderliginde period yok sayilir (gecersiz deger bile hata vermez)
-      const period = kind === 'streak' ? 'all' : (oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all');
+      const period = (kind === 'streak' || kind === 'best_streak') ? 'all' : (oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all');
       return { period, title: TITLES[kind], entries: leaderboard(db, kind, period) };
     });
   }

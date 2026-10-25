@@ -12,6 +12,22 @@ import ChangePassword from './ChangePassword.jsx';
 import ProfileEdit from './Profile.jsx';
 
 import { AuthCtx } from './auth.js';
+import { flushQueue, queueCount } from './offlineQueue.js';
+
+function PendingBadge() {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const upd = () => queueCount().then(setN);
+    upd();
+    window.addEventListener('queue-changed', upd);
+    return () => window.removeEventListener('queue-changed', upd);
+  }, []);
+  return n > 0 ? (
+    <span className="small muted" title="İnternet gelince gönderilecek" style={{ whiteSpace: 'nowrap' }}>
+      ⏳ {n} bekleyen güncelleme
+    </span>
+  ) : null;
+}
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -42,6 +58,15 @@ export default function App() {
   const [user, setUser] = useState(undefined); // undefined = yukleniyor, null = giris yok
   const [dark, toggleTheme] = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
+
+  // Cevrimdisi kuyruk: giris yapildiginda/acilista ve internet gelince gonder
+  const loggedIn = !!user;
+  useEffect(() => {
+    if (!loggedIn) return;
+    flushQueue();
+    window.addEventListener('online', flushQueue);
+    return () => window.removeEventListener('online', flushQueue);
+  }, [loggedIn]);
 
   const refresh = useCallback(async () => {
     try {
@@ -89,7 +114,7 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-in">
           <Link to="/" className="brand">
-            📚 <span>Aile Kütüphanesi</span>
+            <img src="/brand.png" alt="" width="28" height="28" /> <span>Aile Kütüphanesi</span>
           </Link>
           <nav className="nav" aria-label="Ana menü">
             <NavLink to="/" end>
@@ -100,6 +125,7 @@ export default function App() {
             {isAdmin && <NavLink to="/yonetim">Yönetim</NavLink>}
           </nav>
           <span className="spacer" />
+          <PendingBadge />
           <Bell />
           <ThemeBtn dark={dark} toggle={toggleTheme} />
           <button className="who" onClick={() => setProfileOpen(true)} title="Profili düzenle" aria-label="Profili düzenle">

@@ -53,7 +53,10 @@ a { color: inherit; }
   max-width: 980px; margin: 0 auto; padding: 10px 16px;
   display: flex; align-items: center; gap: 12px;
 }
-.brand { font-weight: 800; font-size: 1.1rem; text-decoration: none; white-space: nowrap; }
+.brand { font-weight: 800; font-size: 1.1rem; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.brand img { border-radius: 7px; }
+.sec-h { margin: 22px 0 8px; font-size: 1.05rem; }
+.sec-h:first-of-type { margin-top: 8px; }
 .nav { display: flex; gap: 4px; margin-left: 8px; }
 .nav a {
   text-decoration: none; padding: 8px 14px; border-radius: 999px; font-weight: 700; color: var(--muted);

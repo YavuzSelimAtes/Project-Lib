@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { today } from './ui.jsx';
 import SeasonPicker from './Seasons.jsx';
 
+const QUEUED_TEXT = 'Çevrimdışısın, internet gelince gönderilecek';
+
 const Msg = ({ msg }) =>
   msg ? (
     <div className={`small ${msg.ok ? 'ok-note' : ''}`} style={msg.ok ? undefined : { color: 'var(--danger)' }}>
@@ -45,6 +47,7 @@ function BookQuick({ entry, id, onSaved, onOpen }) {
     try {
       const r = await api.dayLogs(id, { days: [{ date, pages: n }], add: true });
       setPages('');
+      if (r?.queued) return setMsg({ ok: true, text: QUEUED_TEXT });
       setMsg({ ok: true, text: r.entry?.status === 'bitti' ? '🎉 Tebrikler, kitabı bitirdin!' : `+${n} sayfa eklendi` });
       onSaved?.(r.entry, r);
     } catch (x) {
@@ -95,6 +98,7 @@ function SeriesQuick({ entry, id, onSaved }) {
         setReloadKey((k) => k + 1);
         r = await api.seriesProgress(id, Number(season), Number(episode));
       }
+      if (r?.queued) return setMsg({ ok: true, text: QUEUED_TEXT });
       setMsg({ ok: true, text: 'Kaydedildi' });
       onSaved?.(r.entry, r);
     } catch (x) {

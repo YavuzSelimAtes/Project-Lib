@@ -170,9 +170,25 @@ function streakBoard(db, users) {
   });
 }
 
+// En uzun seri liderligi: value = gecmisteki en uzun seri (gun), detail = {current, last_date}. period yok sayilir.
+function bestStreakBoard(db, users) {
+  const rows = [];
+  for (const u of users) {
+    const s = streaksOf(db, u.id);
+    if (s.longest > 0) rows.push({ user: publicUser(u), value: s.longest, detail: { current: s.current, last_date: s.last_date } });
+  }
+  rows.sort((a, b) => b.value - a.value || b.detail.current - a.detail.current || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
+  let rank = 0;
+  return rows.map((r, i) => {
+    if (i === 0 || r.value !== rows[i - 1].value) rank = i + 1;
+    return { rank, ...r };
+  });
+}
+
 export function leaderboard(db, kind, period = 'all') {
   const users = db.prepare('SELECT * FROM users WHERE active=1').all();
   if (kind === 'streak') return streakBoard(db, users);
+  if (kind === 'best_streak') return bestStreakBoard(db, users);
   const rows = [];
   for (const u of users) {
     const m = userModel(db, u.id, period);

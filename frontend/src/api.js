@@ -1,3 +1,5 @@
+import { enqueue, isQueueable } from './offlineQueue.js';
+
 // Tum backend cagrilari burada. Sozlesme: ajanlar/API_SOZLESMESI.txt
 export class ApiError extends Error {
   constructor(message, status, fields) {
@@ -20,7 +22,7 @@ function fixTr(m) {
   return m.replace(/[A-Za-z]+/g, (w) => TR_WORDS[w] ?? w);
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, canQueue = false) {
   let res;
   try {
     res = await fetch('/api' + path, {
@@ -30,6 +32,15 @@ async function request(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
+    // Cevrimdisi: yalnizca gunluk ilerleme cagrilari kuyruga alinir, arayuze 'bekliyor' doner
+    if (canQueue && isQueueable(method, path)) {
+      try {
+        await enqueue(method, path, body);
+        return { queued: true };
+      } catch {
+        /* IndexedDB yok: normal hata */
+      }
+    }
     throw new ApiError('Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.', 0);
   }
   let data = null;
@@ -88,11 +99,11 @@ export const api = {
   progress: (id, current_page, date, confirm) =>
     request('POST', `/entries/${id}/progress`, { current_page, ...(date ? { date } : {}), ...(confirm ? { confirm: true } : {}) }),
   openDays: (id) => request('GET', `/entries/${id}/open-days`),
-  dayLogs: (id, body) => request('PUT', `/entries/${id}/day-logs`, body),
+  dayLogs: (id, body) => request('PUT', `/entries/${id}/day-logs`, body, body?.add === true),
   adminCatalog: (params) => request('GET', '/admin/catalog' + qs(params)),
   adminUpdateCatalog: (id, data) => request('PATCH', `/admin/catalog/${id}`, data),
   adminDeleteCatalog: (id) => request('DELETE', `/admin/catalog/${id}`),
-  seriesProgress: (id, season, episode) => request('POST', `/entries/${id}/series-progress`, { season, episode }),
+  seriesProgress: (id, season, episode) => request('POST', `/entries/${id}/series-progress`, { season, episode }, true),
 
   comments: (id) => request('GET', `/entries/${id}/comments`),
   addComment: (id, body) => request('POST', `/entries/${id}/comments`, { body }),

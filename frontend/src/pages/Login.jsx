@@ -25,7 +25,7 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit} noValidate>
-        <h1>📚 Aile Kütüphanesi</h1>
+        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />Aile Kütüphanesi</h1>
         <p className="sub" style={{ textAlign: 'center' }}>
           Ne okuduk, ne izledik – hepsi burada.
         </p>

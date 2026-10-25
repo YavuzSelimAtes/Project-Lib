@@ -1,0 +1,46 @@
+=====================================================================
+ YONETICI NOTLARI - PWA ISI
+=====================================================================
+SON GUNCELLEME: 2026-10-25
+
+AMAC
+----
+Kutuphanem web uygulamasini PWA yapmak: linkten/QR'dan "Ana Ekrana Ekle"
+ile uygulama gibi kurulsun. Mağaza yok, ucretsiz, hesap gerekmez.
+
+TOKEN KURALI (proje sahibinden)
+-------------------------------
+Onceki yonetici kucuk bir is icin tum tokeni tuketti. Bu is KUCUK tutulur:
+ - Sonsuz dongu yok. ajanlar/0_ORTAK.txt'deki "ikna olana kadar dongu"
+   kurali BU ISTE GECERSIZ. Is bitince oturum durur.
+ - Gereksiz dosya okuma yok; 0_ORTAK.txt ve 2_FRONTEND.txt'yi okumak gerekmez.
+ - Oturum sayisi: 1 (FRONTEND/PWA). Backend, test, elestirmen, fikir
+   ajanlari acilmadi; gereksiz. Backend'e dokunulacak tek sey: sw.js ve
+   manifest icin cache basliklari (cok kucuk, PWA oturumu yapabilir).
+ - Dogrulamayi yonetici (bu oturum) ucuz yoldan yapar: build + curl + dosya
+   kontrolu. Tarayici screenshot dongusu YOK.
+
+PROJE SAHIBININ KARARLARI
+-------------------------
+ 1) Ikon : C:\Users\yavuz\Downloads\image-Photoroom.png (509x514, kare degil,
+           kare tuvale ortala/pad et; 192, 512, maskable 512, apple-touch 180).
+ 2) Cevrimdisi: internet yokken yapilan guncelleme (gunluk sayfa ilerlemesi)
+           kuyruga alinsin, internet gelince ARKA PLANDA otomatik gonderilsin.
+           Arayuz her halukarda internetsiz acilsin (uygulama kabugu onbellek).
+           /api GET verisi onbelleklenmez (eski veri gostermeyelim) - kullanici
+           isterse "veri de onbellek" ayri istenir.
+ 3) Isim : "Aile Kutuphanesi" (kisa ad: "Kutuphane"), tr dili.
+
+OTURUMLAR
+---------
+ [FRONTEND-PWA] (oturum: pwa-frontend, local_e3fd1bb0-3af2-4b4d-af37-1f1e72780443) -> durum: BITTI 2026-10-25 (build gecti, dist'te PWA dosyalari var; commit YOK)
+
+RAPOR
+-----
+[FRONTEND-PWA] Eklenen: frontend/public/{manifest.webmanifest, sw.js, icon-192/512, icon-maskable-512, apple-touch-icon}, frontend/src/offlineQueue.js.
+ Degisen: index.html (manifest/theme/apple meta), src/main.jsx (SW sadece PROD'da), src/api.js (ag hatasinda kuyruga alma), src/QuickUpdate.jsx (mesaj), src/App.jsx (rozet + flush).
+ SW: kabuk onbellegi 'kutuphane-v1' (surum arttirinca eski silinir), navigasyon agdan, cevrimdisi index.html; /api/* asla onbelleklenmez.
+ Kuyruk kapsami: BookQuick'in kullandigi PUT /entries/:id/day-logs (add:true, tarih korunur), series-progress, ve POST /progress (UI'da su an kuyruga bagli degil; EntryDetail'deki ilerleme normal hata verir).
+ Gonderim: acilis/giris + 'online' + (destekleniyorsa) SW Background Sync; Web Locks ile cift gonderim engeli; 401/5xx/ag hatasinda dur, diger 4xx'te ogeyi at+logla. Ust barda "N bekleyen guncelleme" rozeti.
+ Kisitlar: iOS'ta Background Sync yok (yalnizca uygulama acikken online/acilis); iOS'ta kurulum Safari 'Ana Ekrana Ekle'; SW/PWA icin HTTPS sart (localhost haric); kuyruk gonderildikten sonra liste otomatik yenilenmez; gercek tarayicida denenmedi.
+=====================================================================
