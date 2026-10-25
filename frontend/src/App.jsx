@@ -8,6 +8,7 @@ import Leaderboard from './pages/Leaderboard.jsx';
 import Shelf from './pages/Shelf.jsx';
 import Admin from './pages/Admin.jsx';
 import Bell from './Bell.jsx';
+import AccountSwitch from './AccountSwitch.jsx';
 import ChangePassword from './ChangePassword.jsx';
 import ProfileEdit from './Profile.jsx';
 import { dropPushOnLogout } from './pushClient.js';
@@ -133,6 +134,7 @@ export default function App() {
           <button className="who" onClick={() => setProfileOpen(true)} title="Profili düzenle" aria-label="Profili düzenle">
             <Avatar user={user} size="sm" />
           </button>
+          <AccountSwitch userId={user.id} />
           <button className="btn small ghost" onClick={logout}>
             Çıkış
           </button>

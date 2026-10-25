@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, oneOf, nowIso, normalizeDisplayName } from '../util.js';
 import { AVATAR_GROUPS, canonAvatar } from '../avatars.js';
+import { linkedUsers, pruneLinks, unlinkUser } from '../links.js';
 
 const attempts = new Map(); // anahtar -> {n, reset}
 const WINDOW = 5 * 60 * 1000;
@@ -87,6 +88,28 @@ export default async function routes(app) {
   });
 
   app.get('/api/auth/me', async (req) => ({ user: toUser(requireUser(req)) }));
+
+  // ---- bagli hesaplar ----
+  const linkedOut = (u) => ({ id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color });
+  app.get('/api/auth/linked', async (req) => {
+    const me = requireUser(req);
+    return { accounts: linkedUsers(db, me.id).map(linkedOut) };
+  });
+
+  // Sifresiz gecis: yalnizca MEVCUT oturumdaki kullanicinin kendi grubundaki (aktif, admin olmayan) biri
+  app.post('/api/auth/switch', async (req, reply) => {
+    const me = requireUser(req);
+    const id = Number((req.body || {}).user_id);
+    if (!Number.isInteger(id) || id <= 0) throw bad('user_id gecersiz', { user_id: 'gecersiz' });
+    if (id === me.id) throw bad('Zaten bu hesaptasiniz');
+    const target = linkedUsers(db, me.id).find((u) => u.id === id);
+    if (!target) throw err(403, 'Bu hesaba gecis yetkiniz yok');
+    const old = req.cookies?.[COOKIE];
+    const { token, maxAge } = createSession(db, target.id);
+    if (old) destroySession(db, old);
+    reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
+    return { user: toUser(target) };
+  });
 
   app.get('/api/avatars', async (req) => {
     requireUser(req);
@@ -175,6 +198,7 @@ export default async function routes(app) {
     }
     const nameChanged = b.reset_name_change === true ? 0 : u.name_changed;
     db.prepare('UPDATE users SET display_name=?,avatar=?,color=?,role=?,name_changed=? WHERE id=?').run(display_name, avatar, color, role, nameChanged, id);
+    if (role === 'admin') unlinkUser(db, id); // admin hesaplar bagli grupta olamaz
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(id)) };
   });
 
@@ -199,12 +223,64 @@ export default async function routes(app) {
     if (u.role === 'admin' && u.active && db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin' AND active=1").get().c <= 1) throw bad('Son yonetici silinemez');
     if (req.query.hard === '1') {
       db.prepare('DELETE FROM users WHERE id=?').run(id);
+      pruneLinks(db);
       return { ok: true, deactivated: false };
     }
     db.prepare('UPDATE users SET active=0 WHERE id=?').run(id);
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
     db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(id);
+    unlinkUser(db, id);
     return { ok: true, deactivated: true };
+  });
+
+  // ---- admin: hesap baglantilari ----
+  const groupsOut = () => {
+    const rows = db.prepare(`SELECT l.group_id, u.id, u.display_name, u.username, u.avatar, u.color FROM account_links l JOIN users u ON u.id=l.user_id ORDER BY l.group_id, u.id`).all();
+    const m = new Map();
+    for (const r of rows) {
+      if (!m.has(r.group_id)) m.set(r.group_id, { id: r.group_id, users: [] });
+      m.get(r.group_id).users.push({ id: r.id, display_name: r.display_name, username: r.username, avatar: r.avatar, color: r.color });
+    }
+    return [...m.values()];
+  };
+  app.get('/api/admin/link-groups', async (req) => {
+    requireAdmin(req);
+    pruneLinks(db);
+    return { groups: groupsOut() };
+  });
+  app.put('/api/admin/link-groups', async (req) => {
+    requireAdmin(req);
+    const ids = (req.body || {}).user_ids;
+    if (!Array.isArray(ids) || ids.length > 50) throw bad('user_ids dizisi gerekli', { user_ids: 'gecersiz' });
+    const uniq = [...new Set(ids.map(Number))];
+    if (uniq.some((n) => !Number.isInteger(n) || n <= 0)) throw bad('user_ids gecersiz', { user_ids: 'gecersiz' });
+    if (uniq.length < 2) throw bad('En az 2 hesap secin', { user_ids: 'en az 2' });
+    const get = db.prepare('SELECT * FROM users WHERE id=?');
+    for (const n of uniq) {
+      const u = get.get(n);
+      if (!u) throw err(404, 'Kullanici bulunamadi');
+      if (u.role === 'admin') throw bad('Yonetici hesaplar baglanamaz', { user_ids: 'yonetici' });
+      if (!u.active) throw bad('Pasif hesaplar baglanamaz', { user_ids: 'pasif' });
+    }
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const gid = (db.prepare('SELECT COALESCE(MAX(group_id),0)+1 g FROM account_links').get().g);
+      const up = db.prepare('INSERT INTO account_links (user_id,group_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET group_id=excluded.group_id');
+      for (const n of uniq) up.run(n, gid);
+      pruneLinks(db); // eski gruplarda tek kisi kalirsa temizlenir
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+    return { groups: groupsOut() };
+  });
+  app.delete('/api/admin/link-groups/:id', async (req) => {
+    requireAdmin(req);
+    const id = Number(req.params.id);
+    const r = db.prepare('DELETE FROM account_links WHERE group_id=?').run(id);
+    if (!r.changes) throw err(404, 'Grup bulunamadi');
+    return { ok: true };
   });
 
   app.post('/api/admin/users/:id/activate', async (req) => {

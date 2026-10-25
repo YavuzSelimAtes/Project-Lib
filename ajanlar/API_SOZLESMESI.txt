@@ -597,3 +597,11 @@ PUT /api/entries/:id/day-logs    [sahibi]
    GET  /api/push/prefs        -> {prefs:{own_events, family_updates, reminders}}  (varsayilan hepsi true)
    PUT  /api/push/prefs        {own_events?, family_updates?, reminders?} (boolean) -> {prefs}
    Push yuku (SW'ye): {title, body, url, tag}. notify() olaylari own_events; aile ilerleme/bitirme family_updates; hatirlaticilar reminders.
+
+BAGLI HESAPLAR (grup = birbirine sifresiz gecebilen hesaplar; admin/pasif hesap gruba giremez)
+GET    /api/auth/linked           [U] -> { accounts:[{id,display_name,avatar,color}] }  (kendisi haric, bagli yoksa [])
+POST   /api/auth/switch           [U] { user_id } -> yeni oturum cerezi, eski oturum silinir, { user }. 400 kendisi / 403 kendi grubunda degil
+GET    /api/admin/link-groups     [A] -> { groups:[{id, users:[{id,display_name,username,avatar,color}]}] }
+PUT    /api/admin/link-groups     [A] { user_ids:[>=2] } -> yeni grup (eski gruplardan tasinir) -> { groups }. 400 admin/pasif/<2
+DELETE /api/admin/link-groups/:id [A] -> { ok:true } / 404
+Kullanici pasife alininca, silinince veya admin yapilinca gruptan duser; 1 kisi kalan grup silinir.

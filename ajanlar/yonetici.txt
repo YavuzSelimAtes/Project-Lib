@@ -35,6 +35,7 @@ OTURUMLAR
 ---------
  [FRONTEND-PWA] (oturum: pwa-frontend, local_e3fd1bb0-3af2-4b4d-af37-1f1e72780443) -> durum: BITTI 2026-10-25 (build gecti, dist'te PWA dosyalari var; commit YOK)
  [WEB-PUSH] (oturum: push-notifications) -> durum: BITTI 2026-10-25 (frontend build gecti, backend node --check gecti, calistirilamadi: Node 20; commit YOK)
+ [BAGLI-HESAPLAR] (oturum: baglı hesaplar yan oturumu) -> durum: BITTI 2026-10-25 (frontend build + backend node --check gecti, calistirilamadi: Node 20; commit YOK)
 
 RAPOR
 -----
@@ -52,3 +53,9 @@ RAPOR
  Zamanlayici: 10 dk'da bir (ilk tur 60 sn sonra), TZ_NAME saatine gore; aksam REMINDER_HOUR (vars. 20) 'bugun okuma yok + devam eden kitap' (seri varsa 'N gunluk serin'), saat>=10 doldurulmamis gun hatirlaticisi; push_log ile gunde bir kez. REMINDERS=0 / NODE_ENV=test kapatir.
  iOS: yalnizca 16.4+ ve ana ekrana eklenmis PWA'da calisir; Safari sekmesinde arayuz kurulum yonergesi gosterir. Tikla-ac url'si simdilik '/' (uygulamada entry detay rotasi yok).
  Test edilemedi: gercek push gonderimi/cihaz, backend calistirma (node:sqlite -> Node 24), SQL sorgulari yalnizca incelendi.
+
+[BAGLI-HESAPLAR] Eklenen: backend/src/links.js, frontend/src/AccountSwitch.jsx. Degisen: db.js (account_links tablosu), routes/auth.js (linked, switch, admin link-groups, pasif/silme/admin yapma temizligi), api.js, pushClient.js (moveSubscriptionToCurrentUser), App.jsx (ust bar menu), pages/Admin.jsx (Hesap baglantilari bolumu), API_SOZLESMESI.txt.
+ Guvenlik: admin gruba eklenemez (PUT 400) ve rol admin yapilinca gruptan duser; gecis yalnizca oturumdaki kullanicinin kendi grubundaki aktif+admin-olmayan uyeye (sunucuda kontrol, aksi 403); kendine gecis 400; pasif/silinen gruptan duser, tek kisi kalan grup silinir; gecista eski oturum silinir.
+ Cevrimdisi kuyruk: gecis oncesi flushQueue(), bekleyen varsa gecis engellenir (mesaj). Cikis akisi ayni riski tasiyor (bekleyen kuyruk sonraki girisin kullanicisina gider) - degistirilmedi.
+ Push: gecis sonrasi cihazdaki abonelik yeni hesaba POST /push/subscribe ile tasinir; bildirimler cihazda yalniz en son secili hesaba gider.
+ Kisit/test edilemeyen: backend Node 20 ile calistirilamadi (yalniz node --check), uctan uca gecis ve push tasima elle denenmeli.

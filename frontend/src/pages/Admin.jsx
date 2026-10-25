@@ -322,7 +322,74 @@ function Users() {
           </div>
         ))}
       </div>
+
+      <LinkGroups users={users.data?.users || []} />
     </>
+  );
+}
+
+/* ---------- hesap baglantilari ---------- */
+function LinkGroups({ users }) {
+  const groups = useAsync(() => api.adminLinkGroups(), []);
+  const [sel, setSel] = useState([]);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const candidates = users.filter((u) => u.role !== 'admin' && u.active !== false);
+  const toggle = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const link = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.adminSetLinkGroup(sel);
+      setSel([]);
+      groups.reload();
+    } catch (x) {
+      setErr(x);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const unlink = async (g) => {
+    if (!window.confirm('Bu bağlantı kaldırılsın mı? Hesaplar artık birbirine şifresiz geçemez.')) return;
+    try {
+      await api.adminDeleteLinkGroup(g.id);
+      groups.reload();
+    } catch (x) {
+      setErr(x);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Hesap bağlantıları</h2>
+      <p className="small muted">Bağlı hesaplar birbirine şifresiz, tek dokunuşla geçebilir. Yönetici hesaplar bağlanamaz.</p>
+      {groups.loading && !groups.data && <Skeleton h={40} n={1} />}
+      <ErrorBox error={groups.error} onRetry={groups.reload} />
+      {groups.data?.groups.map((g) => (
+        <div className="lrow" key={g.id}>
+          <div style={{ flex: 1, minWidth: 0 }}>{g.users.map((u) => `${u.avatar} ${u.display_name}`).join(' • ')}</div>
+          <button className="btn small danger" onClick={() => unlink(g)}>
+            Bağlantıyı kaldır
+          </button>
+        </div>
+      ))}
+      {groups.data && !groups.data.groups.length && <p className="small muted">Henüz bağlantı yok.</p>}
+      <h3>Yeni bağlantı</h3>
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="small muted">Bağlanacak hesapları seç (en az 2). Zaten bağlı olanlar yeni gruba taşınır.</legend>
+        {candidates.map((u) => (
+          <label key={u.id} className="row" style={{ minHeight: 44, alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={sel.includes(u.id)} onChange={() => toggle(u.id)} />
+            <Avatar user={u} size="sm" /> {u.display_name} <span className="muted small">@{u.username}</span>
+          </label>
+        ))}
+      </fieldset>
+      <ErrorBox error={err} />
+      <button className="btn" disabled={busy || sel.length < 2} onClick={link}>
+        Bağla
+      </button>
+    </div>
   );
 }
 

@@ -171,6 +171,11 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   user_agent TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_push_sub_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS account_links (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_links_group ON account_links(group_id);
 CREATE TABLE IF NOT EXISTS push_prefs (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   own_events INTEGER NOT NULL DEFAULT 1,

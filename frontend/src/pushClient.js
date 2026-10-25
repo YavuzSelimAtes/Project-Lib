@@ -39,6 +39,19 @@ export async function disablePush() {
   await sub.unsubscribe().catch(() => {});
 }
 
+// Hesap geçişinden sonra: cihazda aktif abonelik varsa yeni (oturumdaki) kullanıcıya taşır
+export async function moveSubscriptionToCurrentUser() {
+  try {
+    if (!pushSupported() || Notification.permission !== 'granted') return;
+    const sub = await Promise.race([currentSubscription(), new Promise((r) => setTimeout(() => r(null), 2500))]);
+    if (!sub) return;
+    const j = sub.toJSON();
+    await api.pushSubscribe({ endpoint: j.endpoint, keys: j.keys });
+  } catch {
+    /* yoksay */
+  }
+}
+
 // Çıkışta: yanlış kullanıcıya bildirim gitmesin
 export async function dropPushOnLogout() {
   try {
