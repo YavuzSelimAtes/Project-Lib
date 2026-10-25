@@ -203,6 +203,7 @@ export default async function routes(app) {
     }
     db.prepare('UPDATE users SET active=0 WHERE id=?').run(id);
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(id);
     return { ok: true, deactivated: true };
   });
 

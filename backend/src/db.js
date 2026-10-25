@@ -161,6 +161,28 @@ CREATE TABLE IF NOT EXISTS series_progress (
   minutes INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_series_progress_user ON series_progress(user_id, date);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_push_sub_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS push_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  own_events INTEGER NOT NULL DEFAULT 1,
+  family_updates INTEGER NOT NULL DEFAULT 1,
+  reminders INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS push_log (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  day TEXT NOT NULL,
+  PRIMARY KEY (user_id, kind, day)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT

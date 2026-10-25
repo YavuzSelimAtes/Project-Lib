@@ -589,3 +589,11 @@ PUT /api/entries/:id/day-logs    [sahibi]
      backfill gonderilmezse (varsayilan "none") eski davranis: current_page "onceden okunmus" sayilir (base_page);
      sonradan day-logs ile gun girilirse sayfa ONUN USTUNE eklenir (38 + 28 = 66 gibi). Bu yuzden current_page>0 ve
      gecmis baslangicta backfill her zaman sorulmali. backfill yalniz kitap + devam + current_page>0 icin gecerli.
+
+[v8] WEB PUSH (telefon bildirimleri; hepsi giris gerektirir)
+   GET  /api/push/key          -> {enabled, public_key}   (VAPID anahtari yoksa enabled:false; arayuz bolumu gizler)
+   POST /api/push/subscribe    {endpoint, keys:{p256dh,auth}} -> {ok}   (ayni endpoint baska kullaniciya aitse sahibi guncellenir)
+   POST /api/push/unsubscribe  {endpoint} -> {ok}
+   GET  /api/push/prefs        -> {prefs:{own_events, family_updates, reminders}}  (varsayilan hepsi true)
+   PUT  /api/push/prefs        {own_events?, family_updates?, reminders?} (boolean) -> {prefs}
+   Push yuku (SW'ye): {title, body, url, tag}. notify() olaylari own_events; aile ilerleme/bitirme family_updates; hatirlaticilar reminders.

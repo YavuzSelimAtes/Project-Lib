@@ -17,6 +17,8 @@ import requestRoutes from './routes/requests.js';
 import entryRoutes from './routes/entries.js';
 import socialRoutes from './routes/social.js';
 import feedRoutes from './routes/feed.js';
+import pushRoutes from './routes/push.js';
+import { initPush, startReminders } from './services/push.js';
 import { cleanupUnlisted } from './services/catalog.js';
 import { seedExtraDb, seedExtraCovers } from './services/seedExtra.js';
 
@@ -114,7 +116,7 @@ export async function buildApp({ logger = true } = {}) {
   });
 
   app.get('/api/health', async () => ({ ok: true, time: nowIso() }));
-  for (const r of [adminRoutes, authRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes]) await app.register(r);
+  for (const r of [adminRoutes, authRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes]) await app.register(r);
 
   await seedAdmin(db, app.log);
   // Kurator listesi (aranan ama bulunamayan kitaplar): veritabani kismi aninda, kapaklar arka planda. SEED_EXTRA=0 ile kapatilir.
@@ -137,6 +139,8 @@ export async function buildApp({ logger = true } = {}) {
   housekeeping();
   const timer = setInterval(housekeeping, 12 * 3600 * 1000);
   timer.unref();
-  app.addHook('onClose', async () => db.close());
+  initPush(app.log);
+  const stopReminders = startReminders(db, app.log);
+  app.addHook('onClose', async () => { stopReminders(); db.close(); });
   return app;
 }

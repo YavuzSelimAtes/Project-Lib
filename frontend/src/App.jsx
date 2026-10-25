@@ -10,6 +10,7 @@ import Admin from './pages/Admin.jsx';
 import Bell from './Bell.jsx';
 import ChangePassword from './ChangePassword.jsx';
 import ProfileEdit from './Profile.jsx';
+import { dropPushOnLogout } from './pushClient.js';
 
 import { AuthCtx } from './auth.js';
 import { flushQueue, queueCount } from './offlineQueue.js';
@@ -85,6 +86,7 @@ export default function App() {
 
   const logout = async () => {
     try {
+      await dropPushOnLogout();
       await api.logout();
     } catch {
       /* yoksay */

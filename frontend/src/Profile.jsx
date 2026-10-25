@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { useAuth } from './auth.js';
 import { Avatar, ErrorBox, Modal } from './ui.jsx';
+import PushSettings from './PushSettings.jsx';
 
 export const COLORS = ['#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#22c55e', '#eab308', '#64748b', '#a16207'];
 
@@ -184,6 +185,8 @@ export default function ProfileEdit({ onClose }) {
             </>
           )}
         </div>
+
+        <PushSettings />
 
         <ErrorBox error={error} />
         <div role="status" aria-live="polite">{done && <p className="ok-note">✅ Kaydedildi</p>}</div>

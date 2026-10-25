@@ -76,6 +76,11 @@ export const api = {
   login: (username, password) => request('POST', '/auth/login', { username, password }),
   logout: () => request('POST', '/auth/logout'),
   me: () => request('GET', '/auth/me'),
+  pushKey: () => request('GET', '/push/key'),
+  pushSubscribe: (sub) => request('POST', '/push/subscribe', sub),
+  pushUnsubscribe: (endpoint) => request('POST', '/push/unsubscribe', { endpoint }),
+  pushPrefs: () => request('GET', '/push/prefs'),
+  pushSetPrefs: (p) => request('PUT', '/push/prefs', p),
   changePassword: (old_password, new_password) => request('POST', '/auth/change-password', { old_password, new_password }),
 
   feed: () => request('GET', '/feed'),

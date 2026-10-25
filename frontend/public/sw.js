@@ -1,6 +1,6 @@
 // Aile Kutuphanesi service worker: uygulama kabugu onbellegi + cevrimdisi yazma kuyrugu (Background Sync).
 // Surum degisince CACHE adini arttir; eski onbellekler activate'te silinir.
-const CACHE = 'kutuphane-v2';
+const CACHE = 'kutuphane-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/brand.png', '/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
@@ -98,4 +98,35 @@ self.addEventListener('sync', (e) => {
   // Kilit: sayfadaki flush ile ayni anda calisip cift gonderimi onler
   const run = () => flush();
   e.waitUntil(navigator.locks ? navigator.locks.request('kutuphane-queue-flush', run) : run());
+});
+
+// ---- Web Push ----
+self.addEventListener('push', (e) => {
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch {
+    d = { body: e.data ? e.data.text() : '' };
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title || 'Aile Kütüphanesi', {
+      body: d.body || '',
+      icon: '/icon-192.png',
+      badge: '/favicon-48.png',
+      tag: d.tag || undefined,
+      data: { url: d.url || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const w = list.find((c) => c.url.startsWith(self.location.origin));
+      if (w) return w.focus().then((c) => (c && 'navigate' in c && c.url !== url ? c.navigate(url) : c));
+      return self.clients.openWindow(url);
+    }),
+  );
 });

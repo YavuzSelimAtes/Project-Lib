@@ -5,6 +5,7 @@ import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs 
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
 import { userStats, backfillMediaInfo } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
+import { familyProgressPush, familyFinishedPush } from '../services/push.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
@@ -118,7 +119,9 @@ export default async function routes(app) {
     if (type === 'series' && status === 'bitti') pinSeriesFinish(db, info.lastInsertRowid);
     markListed(db, catId); // kullanildi -> kalici (listed=1)
     reply.code(201);
-    return { entry: entryOut(db, getEntry(db, info.lastInsertRowid)) };
+    const created = getEntry(db, info.lastInsertRowid);
+    if (created.status === 'bitti' && created.end_date === today) familyFinishedPush(db, created);
+    return { entry: entryOut(db, created) };
   });
 
   app.patch('/api/entries/:id', async (req) => {
@@ -213,6 +216,7 @@ export default async function routes(app) {
       }
       return getEntry(db, id);
     });
+    if (e.status !== 'bitti' && out.status === 'bitti' && out.end_date === today) familyFinishedPush(db, out);
     return { entry: entryOut(db, out) };
   });
 
@@ -238,6 +242,10 @@ export default async function routes(app) {
     if (!e.total_pages) throw bad('Bu kitabin toplam sayfa sayisi yok. Once toplam sayfayi girin (PATCH total_pages)', { total_pages: 'gerekli' });
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
+    if (d === todayStr()) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
+      if (r.finished) familyFinishedPush(db, entry);
+      else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
+    }
     return { entry: entryOut(db, entry), delta: r.delta, pages_read_on_date: r.pagesOnDate, date: d, finished: r.finished, spread_days: r.spread, estimated: r.estimated };
   });
 

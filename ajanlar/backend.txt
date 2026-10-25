@@ -281,3 +281,9 @@ v5 9, v5-baski 9, v5-seri 4, v5-dizi-stats 9, v5-arama 18, YENI testler/v5-1.tes
 [Film suresi / "Inception 11 dk" YAPILDI] P2047 parse DOGRU (canli Q25188=148 dk). 11 dk veren, Wikidata'daki AYRI "Inception" kaydi (Q85520081, 2014 kisa film, +11 dakika).
    Sanity: 20-600 dk disi sure supheli -> null (bilinmiyor). Onceden kayitli sureler db migrate ile bir kez sifirlanir, stats cagrisinda arka planda yeniden hesaplanir. Test: v5-1 "film suresi".
 Yeni DB: entries.finished_pages/finished_episodes/finished_minutes, reading_logs.no_streak, series_progress tablosu (migrate ile; eski DB'ler korunur).
+
+WEB PUSH (v8)
+ Kod: src/services/push.js (gonderim, tercihler, aile push'lari, hatirlaticilar), src/routes/push.js. Tablolar: push_subscriptions, push_prefs, push_log.
+ Anahtar uret (bir kez): npx web-push generate-vapid-keys
+ Env: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (ornek mailto:ben@ornek.com). Yoksa push kapali (baslangicta tek uyari satiri).
+ Opsiyonel: REMINDER_HOUR (varsayilan 20), TZ_NAME (varsayilan Europe/Istanbul), REMINDERS=0 (zamanlayici kapali; NODE_ENV=test'te de calismaz).

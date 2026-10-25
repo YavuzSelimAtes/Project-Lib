@@ -16,6 +16,7 @@
     "@fastify/cors": "^11.3.1",
     "@fastify/multipart": "^10.1.6",
     "@fastify/static": "^10.1.7",
-    "fastify": "^5.12.7"
+    "fastify": "^5.12.7",
+    "web-push": "^3.6.7"
   }
 }
