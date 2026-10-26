@@ -93,6 +93,19 @@ export function familyProgressPush(db, e, { now = Date.now() } = {}) {
   } catch { /* onemsiz */ }
 }
 
+// Kitaba baslandi (sayfa 0) ya da okunmaya baslandi (sayfa>0). Yalnizca 'devam' ile eklenen kitap icin cagrilir (throttle yok)
+export function familyStartedPush(db, e) {
+  if (!enabled) return;
+  try {
+    const targets = familyTargets(db, e.user_id);
+    if (!targets.length) return;
+    const who = nameOf(db, e.user_id);
+    const t = titleOf(db, e);
+    const body = e.current_page > 0 ? `${who} '${t}' kitabını okuyor 📖` : `${who} '${t}' kitabına başladı 📖`;
+    for (const x of targets) sendPush(db, x.id, { title: 'Aile Kütüphanesi', body, url: '/', tag: `started-${e.id}` });
+  } catch { /* onemsiz */ }
+}
+
 // Kitap / film / dizi bitirildi (throttle yok)
 export function familyFinishedPush(db, e) {
   if (!enabled) return;

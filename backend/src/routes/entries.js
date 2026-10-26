@@ -5,7 +5,7 @@ import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs 
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
 import { userStats, backfillMediaInfo } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
-import { familyProgressPush, familyFinishedPush } from '../services/push.js';
+import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
@@ -121,6 +121,7 @@ export default async function routes(app) {
     reply.code(201);
     const created = getEntry(db, info.lastInsertRowid);
     if (created.status === 'bitti' && created.end_date === today) familyFinishedPush(db, created);
+    else if (created.type === 'book' && created.status === 'devam') familyStartedPush(db, created); // onceden okunmus (bitti) ve planlanan kitaplar bildirilmez
     return { entry: entryOut(db, created) };
   });
 
