@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, oneOf, nowIso, normalizeDisplayName } from '../util.js';
-import { AVATAR_GROUPS, canonAvatar } from '../avatars.js';
+import { AVATAR_GROUPS, canonAvatar, diceAvatar } from '../avatars.js';
 import { linkedUsers, pruneLinks, unlinkUser } from '../links.js';
 
 const attempts = new Map(); // anahtar -> {n, reset}
@@ -41,6 +41,11 @@ function parseAvatar(v) {
 }
 // Avatar listedeki emojilerden biri olmali; kullanicinin mevcut (eski) avatari aynen kalabilir
 function listedAvatar(v, current = null) {
+  if (typeof v === 'string' && v.startsWith('dice:')) {
+    const d = diceAvatar(v);
+    if (!d) throw bad('Resim avatar gecersiz', { avatar: 'gecersiz' });
+    return d;
+  }
   const a = parseAvatar(v);
   if (!a) throw bad('Avatar bos olamaz', { avatar: 'zorunlu' });
   if (current && a === current) return current;

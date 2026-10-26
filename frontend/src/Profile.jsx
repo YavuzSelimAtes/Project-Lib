@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { useAuth } from './auth.js';
 import { Avatar, ErrorBox, Modal } from './ui.jsx';
 import PushSettings from './PushSettings.jsx';
+import DiceAvatarPicker from './DiceAvatarPicker.jsx';
+import { isDice } from './diceAvatar.js';
 
 export const COLORS = ['#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#22c55e', '#eab308', '#64748b', '#a16207'];
 
@@ -31,6 +33,19 @@ function useAvatarGroups() {
 
 // Gruplu avatar izgarasi + "Rastgele"
 export function AvatarPicker({ value, onChange }) {
+  const [tab, setTab] = useState(isDice(value) ? 'dice' : 'emoji');
+  return (
+    <div>
+      <div className="tabs" role="tablist" aria-label="Avatar türü" style={{ marginBottom: 8 }}>
+        <button type="button" role="tab" aria-selected={tab === 'emoji'} className="tab sm" onClick={() => setTab('emoji')}>Emoji</button>
+        <button type="button" role="tab" aria-selected={tab === 'dice'} className="tab sm" onClick={() => setTab('dice')}>Resim</button>
+      </div>
+      {tab === 'dice' ? <DiceAvatarPicker value={value} onChange={onChange} /> : <EmojiPicker value={isDice(value) ? '' : value} onChange={onChange} />}
+    </div>
+  );
+}
+
+function EmojiPicker({ value, onChange }) {
   const groups = useAvatarGroups();
   if (!groups) return <p className="muted small">Avatarlar yükleniyor…</p>;
   const all = groups.flatMap((g) => g.items || []);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { CountUp, Cover, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
+import { CountUp, Cover, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
 import Heatmap from '../Heatmap.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
@@ -65,7 +65,7 @@ export default function Shelf() {
     <>
       <div className="shelf-head">
         <div className="grow">
-          <h1>{own ? 'Benim rafım' : owner ? `${owner.avatar} ${owner.display_name} – rafı` : 'Raf'}</h1>
+          <h1>{own ? 'Benim rafım' : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}</h1>
           <p className="sub" style={{ marginBottom: 8 }}>
             {own ? 'Okuduklarım, izlediklerim ve rakamlarım.' : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
           </p>

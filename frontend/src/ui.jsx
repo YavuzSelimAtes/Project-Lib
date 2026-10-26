@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { isDice, useDiceSrc } from './diceAvatar.js';
+
+// Resim avatarin metin gereken yerlerde (baslik, liste) yedegi
+export const avatarText = (a) => (isDice(a) ? '🙂' : a || '🙂');
 
 export function Avatar({ user, size = '' }) {
   const u = user || {};
+  const dice = useDiceSrc(u.avatar);
   return (
     <span className={`avatar ${size}`} style={{ '--c': u.color ? u.color + '33' : undefined }} aria-hidden="true">
-      {u.avatar || '🙂'}
+      {isDice(u.avatar) ? (dice ? <img src={dice} alt="" /> : null) : u.avatar || '🙂'}
     </span>
   );
 }

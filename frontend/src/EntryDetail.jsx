@@ -225,7 +225,7 @@ function Others({ catalogId, selfEntryId, onOpen }) {
       <div className="row" style={{ marginTop: 4 }}>
         {list.map((x) => (
           <Link key={x.id} to={`/uye/${x.user.id}`} onClick={onOpen} className="chip" style={{ textDecoration: 'none' }}>
-            {x.user.avatar} {x.user.display_name} · {label[x.status]}
+            <Avatar user={x.user} size="xs" /> {x.user.display_name} · {label[x.status]}
             {x.rating ? ` ${'⭐'.repeat(x.rating)}` : ''}
           </Link>
         ))}

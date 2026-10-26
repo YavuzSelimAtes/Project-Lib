@@ -4,7 +4,7 @@ import { useAuth } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, SearchMeta, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
 import { AvatarPicker, ColorPicker, COLORS, validateName } from '../Profile.jsx';
 import { flattenEditions } from '../Editions.jsx';
-import { langLabel } from '../ui.jsx';
+import { avatarText, langLabel } from '../ui.jsx';
 const RSTATUS = { acik: 'Açık', inceleniyor: 'İnceleniyor', tamamlandi: 'Tamamlandı', reddedildi: 'Reddedildi' };
 
 export default function Admin() {
@@ -368,7 +368,7 @@ function LinkGroups({ users }) {
       <ErrorBox error={groups.error} onRetry={groups.reload} />
       {groups.data?.groups.map((g) => (
         <div className="lrow" key={g.id}>
-          <div style={{ flex: 1, minWidth: 0 }}>{g.users.map((u) => `${u.avatar} ${u.display_name}`).join(' • ')}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>{g.users.map((u) => `${avatarText(u.avatar)} ${u.display_name}`).join(' • ')}</div>
           <button className="btn small danger" onClick={() => unlink(g)}>
             Bağlantıyı kaldır
           </button>
