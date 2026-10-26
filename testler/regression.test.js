@@ -33,12 +33,12 @@ test.before(async () => {
   assert.equal((await admin.login('admin', ADMIN_PW)).status, 200);
 });
 
-test('(a) 3 gun atlayip tek guncelleme rekoru sisirmez', async () => {
+test('(a) 3 gun atlayip tek guncelleme: sayfa o gune yazilir, bos gunler 0, rekor sismez', async () => {
   const c = await newMember();
   const e = await newBook(c, 300, { start_date: daysAgo(3) });
   const r = await c.post(`/api/entries/${e.id}/progress`, { current_page: 90 });
   assert.equal(r.status, 200);
-  assert.ok(r.json.pages_read_on_date < 90, `pages_read_on_date=${r.json.pages_read_on_date}`);
+  assert.equal(r.json.pages_read_on_date, 90);
   const rec = await recordOf(c);
   assert.ok(!rec || rec.pages < 90, 'rekor sisti: ' + JSON.stringify(rec));
 });

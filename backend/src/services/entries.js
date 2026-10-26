@@ -78,7 +78,12 @@ export function entryOut(db, e, { withCatalog = true, withUser = true } = {}) {
     out.avg_pages_per_day = a.avg;
     out.avg_source = a.source;
   }
-  if (withCatalog) out.catalog = catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id));
+  if (withCatalog) {
+    out.catalog = catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id));
+    // Secilen baskinin kapagi varsa o gosterilir; yuklenemezse arayuz katalog kapagina doner
+    const edCover = e.edition_id ? getEdition(db, e.edition_id)?.cover_url : null;
+    if (edCover && edCover !== out.catalog.cover_url) { out.catalog.cover_fallback = out.catalog.cover_url; out.catalog.cover_url = edCover; }
+  }
   if (withUser) out.user = publicUser(db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').get(e.user_id));
   return out;
 }
@@ -99,29 +104,14 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
   let spread = 1;
   let estimated = false;
   if (delta > 0) {
-    // Son log gununden (log yoksa baslangic tarihinden) bu tarihe kadar atlanan gunler varsa fark o gunlere
-    // esit bolunur ve 'tahmini' isaretlenir (rekora/seriye girmez). En fazla son 90 gun.
-    const lastLog = db.prepare('SELECT MAX(date) d FROM reading_logs WHERE entry_id=?').get(e.id).d;
-    let gapStart = lastLog ? (date > lastLog ? addDays(lastLog, 1) : null) : (e.start_date && e.start_date < date ? e.start_date : null);
-    if (gapStart && gapStart < addDays(date, -89)) gapStart = addDays(date, -89);
-    const n = gapStart ? diffDays(gapStart, date) + 1 : 1;
-    if (n > 1) {
-      const base = Math.floor(delta / n);
-      const rest = delta % n;
-      const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,1)');
-      let page = e.current_page;
-      for (let i = 0; i < n; i++) {
-        const p = base + (i >= n - rest ? 1 : 0);
-        if (p <= 0) continue;
-        ins.run(e.id, e.user_id, addDays(gapStart, i), page, page + p, p);
-        page += p;
-      }
-      spread = n;
-      estimated = true;
-    } else {
+    // Aradaki (guncellenmemis) gunlere sayfa dagitilmaz: o gunler bos (0) kalir, fark yalniz bu tarihe yazilir.
+    {
+      const lastLog = db.prepare('SELECT MAX(date) d FROM reading_logs WHERE entry_id=?').get(e.id).d;
       const row = db.prepare('SELECT * FROM reading_logs WHERE entry_id=? AND date=?').get(e.id, date);
       // Ilk guncelleme ve baslangic tarihi bilinmiyorsa (planlandi -> ilk ilerleme) onceki okuma bilinmez: tahmini
-      const est = estimate || (!lastLog && !e.start_date) ? 1 : 0; // 'bitti' isaretiyle kapatilan kalan sayfalar tahmini sayilir (rekor sismesin)
+      // Arada guncellenmemis gun varsa toplu sayfa bugune yazilir ama tahmini sayilir (rekor/seri sismesin)
+      const gap = lastLog ? date > addDays(lastLog, 1) : !!(e.start_date && e.start_date < date);
+      const est = estimate || gap || (!lastLog && !e.start_date) ? 1 : 0; // 'bitti' isaretiyle kapatilan kalan sayfalar tahmini sayilir (rekor sismesin)
       if (row) db.prepare('UPDATE reading_logs SET pages_read=pages_read+?, page_to=?, estimated=MAX(estimated,?) WHERE id=?').run(delta, currentPage, est, row.id);
       else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,?)').run(e.id, e.user_id, date, e.current_page, currentPage, delta, est);
       estimated = !!est;

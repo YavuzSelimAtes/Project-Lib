@@ -33,7 +33,7 @@ function FeedItem({ it, mine, color, onOpen, onSaved }) {
   return (
     <div>
       <button className="item" onClick={() => onOpen(it.entry_id)} aria-label={`Detay: ${it.catalog.title}`}>
-        <Cover src={it.catalog.cover_url} title={it.catalog.title} />
+        <Cover src={it.catalog.cover_url} fallback={it.catalog.cover_fallback} title={it.catalog.title} />
         <div className="meta">
           <div className="t">{describe(it)}</div>
           <div className="line">

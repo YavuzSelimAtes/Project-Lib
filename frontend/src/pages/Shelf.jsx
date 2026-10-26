@@ -136,7 +136,7 @@ export default function Shelf() {
       <div className="shelf-list">
         {entries.data?.entries.map((e) => (
           <button key={e.id} className="item card" style={{ padding: 12 }} onClick={() => setOpenId(e.id)}>
-            <Cover src={e.catalog.cover_url} title={e.catalog.title} />
+            <Cover src={e.catalog.cover_url} fallback={e.catalog.cover_fallback} title={e.catalog.title} />
             <div className="meta">
               <div className="t">{e.catalog.title}</div>
               <div className="line">

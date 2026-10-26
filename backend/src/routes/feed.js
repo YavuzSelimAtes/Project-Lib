@@ -18,8 +18,8 @@ export default async function routes(app) {
     const doneFrom = addDays(today, -6); // biten kitap/dizi: son 7 gun
     // Yonetici hesabi kendi okumasi yoksa kartlardan gizlenir
     const users = db.prepare("SELECT id,display_name,avatar,color FROM users u WHERE active=1 AND (role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all();
-    const entries = db.prepare(`SELECT e.*, c.title, c.author_or_creator, c.year, c.cover_url, c.id AS cid, c.type AS ctype
-      FROM entries e JOIN catalog c ON c.id=e.catalog_id
+    const entries = db.prepare(`SELECT e.*, c.title, c.author_or_creator, c.year, c.cover_url, c.id AS cid, c.type AS ctype, ed.cover_url AS ed_cover
+      FROM entries e JOIN catalog c ON c.id=e.catalog_id LEFT JOIN editions ed ON ed.id=e.edition_id
       WHERE (e.type IN ('book','series') AND e.status='devam')
          OR (e.type IN ('book','series') AND e.status='bitti' AND e.end_date>=?)
          OR (e.type='movie' AND e.status='bitti' AND e.created_at>=?)`).all(doneFrom, movieFrom);
@@ -33,7 +33,7 @@ export default async function routes(app) {
       else kind = e.status === 'devam' ? 'watching_series' : 'finished_series';
       const item = {
         kind, entry_id: e.id, status: e.status,
-        catalog: { id: e.cid, type: e.ctype, title: e.title, author_or_creator: e.author_or_creator, year: e.year, cover_url: e.cover_url },
+        catalog: { id: e.cid, type: e.ctype, title: e.title, author_or_creator: e.author_or_creator, year: e.year, cover_url: e.ed_cover || e.cover_url, cover_fallback: e.ed_cover ? e.cover_url : undefined },
         current_page: e.type === 'book' ? e.current_page : null,
         total_pages: e.total_pages,
         percent: e.type === 'book' && e.total_pages > 0 ? (e.status === 'bitti' ? 100 : Math.min(100, round1((e.current_page / e.total_pages) * 100))) : null,

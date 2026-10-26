@@ -7,17 +7,33 @@ const TTL_MS = 7 * 24 * 3600 * 1000;
 const PER_LANG_CAP = 40; // dil basina saklanan en fazla baski (en dolu olanlar once)
 const NOLANG_CAP = 10;
 
+// Kaynaklar Turkce yayinevlerini ASCII ("Is Bankasi Kultur Yayinlari") verebiliyor; bilinen sozcukler duzeltilir
+const TR_WORDS = {
+  bankasi: 'Bankası', kultur: 'Kültür', yayinlari: 'Yayınları', yayinlar: 'Yayınlar', yayinevi: 'Yayınevi', yayincilik: 'Yayıncılık',
+  yayin: 'Yayın', turkiye: 'Türkiye', basimevi: 'Basımevi', matbaasi: 'Matbaası', kitabevi: 'Kitabevi', cocuk: 'Çocuk',
+  dunya: 'Dünya', ozgur: 'Özgür', iletisim: 'İletişim', sanat: 'Sanat', kirmizi: 'Kırmızı', gunduz: 'Gündüz', ticaret: 'Ticaret',
+};
+const foldTr = (w) => w.replace(/İ/g, 'i').replace(/I/g, 'i').toLowerCase().replace(/ı/g, 'i').replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u');
+export function fixTrPublisher(p) {
+  if (!p) return p;
+  return p.replace(/\bIs Bankasi\b/gi, '\u0130\u015f Bankas\u0131').replace(/\p{L}+/gu, (w) => {
+    const fixed = TR_WORDS[foldTr(w)];
+    if (!fixed) return w;
+    return w === w.toUpperCase() && w.length > 2 ? fixed.toLocaleUpperCase('tr') : fixed;
+  });
+}
+
 export const editionOut = (r) => r && ({
-  id: r.id, catalog_id: r.catalog_id, language: r.language, language_label: langLabel(r.language), publisher: r.publisher,
+  id: r.id, catalog_id: r.catalog_id, language: r.language, language_label: langLabel(r.language), publisher: fixTrPublisher(r.publisher),
   pages: r.pages, year: r.year, isbn: r.isbn, cover_url: r.cover_url, source: r.source, language_guessed: !!r.language_guessed,
 });
 // entry / feed / raf icinde kullanilan kisa ozet
-export const editionBrief = (r) => (r ? { id: r.id, language: r.language, publisher: r.publisher, pages: r.pages } : null);
+export const editionBrief = (r) => (r ? { id: r.id, language: r.language, publisher: fixTrPublisher(r.publisher), pages: r.pages } : null);
 export const getEdition = (db, id) => (id ? db.prepare('SELECT * FROM editions WHERE id=?').get(id) : null);
 
 const cleanPub = (p) => {
   if (typeof p !== 'string') return null;
-  const t = p.replace(/\s+/g, ' ').trim().slice(0, 120);
+  const t = fixTrPublisher(p.replace(/\s+/g, ' ').trim().slice(0, 120));
   return t || null;
 };
 const intOrNull = (v, max = 20000) => (Number.isInteger(v) && v > 0 && v <= max ? v : null);

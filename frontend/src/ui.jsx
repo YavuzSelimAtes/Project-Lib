@@ -10,13 +10,14 @@ export function Avatar({ user, size = '' }) {
 }
 
 const PH_COLORS = ['#d9693b', '#4a8f7c', '#7a6bb0', '#c2557a', '#4f7cac', '#a5883a'];
-export function Cover({ src, title = '?', large }) {
-  const [bad, setBad] = useState(false);
-  useEffect(() => setBad(false), [src]);
-  if (src && !bad) {
+export function Cover({ src, fallback, title = '?', large }) {
+  const [fails, setFails] = useState(0); // 0: src, 1: fallback, 2: yer tutucu
+  useEffect(() => setFails(0), [src, fallback]);
+  const shown = [src, fallback].filter(Boolean)[fails];
+  if (shown) {
     return (
       <div className={`cover${large ? ' lg' : ''}`}>
-        <img src={src} alt="" loading="lazy" onError={() => setBad(true)} />
+        <img src={shown} alt="" loading="lazy" onError={() => setFails((n) => n + 1)} />
       </div>
     );
   }

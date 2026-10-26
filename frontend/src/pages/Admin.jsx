@@ -604,7 +604,7 @@ function CatalogEdit({ it, onDone }) {
 const LANG_OPTS = ['tr', 'en', 'de', 'fr', 'es', 'it', 'ru', 'ar'];
 function EditionsAdmin({ catalogId }) {
   const state = useAsync(async () => flattenEditions(await api.catalogItem(catalogId).then((r) => ({ editions: r.editions || r.item?.editions || [] }))), [catalogId]);
-  const [f, setF] = useState({ language: 'tr', publisher: '', pages: '', year: '', isbn: '' });
+  const [f, setF] = useState({ language: 'tr', publisher: '', pages: '', year: '', isbn: '', cover_url: '' });
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
@@ -618,8 +618,9 @@ function EditionsAdmin({ catalogId }) {
       if (f.pages) d.pages = Number(f.pages);
       if (f.year) d.year = Number(f.year);
       if (f.isbn.trim()) d.isbn = f.isbn.trim();
+      if (f.cover_url.trim()) d.cover_url = f.cover_url.trim();
       await api.adminAddEdition(catalogId, d);
-      setF((x) => ({ ...x, publisher: '', pages: '', year: '', isbn: '' }));
+      setF((x) => ({ ...x, publisher: '', pages: '', year: '', isbn: '', cover_url: '' }));
       state.reload();
     } catch (x) {
       setErr(x);
@@ -672,6 +673,7 @@ function EditionsAdmin({ catalogId }) {
           <label className="field grow"><span>Yıl</span><input type="number" value={f.year} onChange={set('year')} /></label>
           <label className="field grow"><span>ISBN</span><input type="text" value={f.isbn} onChange={set('isbn')} maxLength={20} /></label>
         </div>
+        <label className="field"><span>Kapak URL’si (isteğe bağlı)</span><input type="url" value={f.cover_url} onChange={set('cover_url')} placeholder="https://…" /></label>
         <ErrorBox error={err} />
         <button className="btn small" disabled={busy}>Baskıyı ekle</button>
       </form>

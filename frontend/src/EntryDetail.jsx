@@ -32,7 +32,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
       {e && (
         <>
           <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-            <Cover src={cat.cover_url} title={cat.title} large />
+            <Cover src={cat.cover_url} fallback={cat.cover_fallback} title={cat.title} large />
             <div className="grow">
               <div className="small muted">
                 {TYPE_LABEL[e.type]} {cat.author_or_creator && `· ${cat.author_or_creator}`} {cat.year && `· ${cat.year}`}
@@ -181,6 +181,7 @@ function PageFix({ e, onChanged }) {
       <input type="number" min="1" max={e.total_pages || undefined} value={val} onChange={(x) => setVal(x.target.value)} aria-label="Şu anki sayfa" />
       <span className="small muted">. sayfadayım</span>
       <button className="btn small" disabled={busy}>Kaydet</button>
+      <p className="small muted" style={{ flexBasis: '100%', margin: 0 }}>Arada güncellemediğin günler boş (0) kalır, fark bugüne yazılır. Böyle tekli girişler rekora dahil edilmez.</p>
       <ErrorBox error={err} />
     </form>
   );
