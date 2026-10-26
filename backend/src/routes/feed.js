@@ -15,7 +15,7 @@ export default async function routes(app) {
     requireUser(req);
     const today = todayStr();
     const movieFrom = new Date(Date.now() - 48 * 3600 * 1000).toISOString(); // EKLENME zamanindan 48 saat
-    const doneFrom = addDays(today, -6); // biten kitap/dizi: son 7 gun
+    const doneFrom = addDays(today, -2); // biten kitap/dizi: son 3 gun
     // Yonetici hesabi kendi okumasi yoksa kartlardan gizlenir
     const users = db.prepare("SELECT id,display_name,avatar,color FROM users u WHERE active=1 AND (role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all();
     const entries = db.prepare(`SELECT e.*, c.title, c.author_or_creator, c.year, c.cover_url, c.id AS cid, c.type AS ctype, ed.cover_url AS ed_cover
