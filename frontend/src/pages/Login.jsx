@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
+import { autoEnablePush } from '../pushClient.js';
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -15,6 +16,7 @@ export default function Login({ onLogin }) {
     try {
       const r = await api.login(username.trim(), password);
       onLogin(r.user);
+      autoEnablePush(r.user.id, { prompt: true }); // varsayılan açık: bu cihaz bildirimlere bağlanır (kullanıcı kapattıysa bağlanmaz)
     } catch (err) {
       setError(err.message);
     } finally {

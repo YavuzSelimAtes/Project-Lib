@@ -12,7 +12,7 @@ import Bell from './Bell.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import ChangePassword from './ChangePassword.jsx';
 import ProfileEdit from './Profile.jsx';
-import { dropPushOnLogout } from './pushClient.js';
+import { dropPushOnLogout, autoEnablePush } from './pushClient.js';
 
 import { AuthCtx } from './auth.js';
 import { flushQueue, queueCount } from './offlineQueue.js';
@@ -70,6 +70,11 @@ export default function App() {
     window.addEventListener('online', flushQueue);
     return () => window.removeEventListener('online', flushQueue);
   }, [loggedIn]);
+
+  const uid = user?.id;
+  useEffect(() => {
+    if (uid) autoEnablePush(uid); // izin zaten verilmişse aboneliği sessizce yeniden bağlar
+  }, [uid]);
 
   const refresh = useCallback(async () => {
     try {

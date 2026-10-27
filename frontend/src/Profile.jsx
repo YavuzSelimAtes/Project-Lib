@@ -201,7 +201,7 @@ export default function ProfileEdit({ onClose }) {
           )}
         </div>
 
-        <PushSettings />
+        <PushSettings uid={user.id} />
 
         <ErrorBox error={error} />
         <div role="status" aria-live="polite">{done && <p className="ok-note">✅ Kaydedildi</p>}</div>

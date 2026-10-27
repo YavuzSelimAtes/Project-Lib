@@ -52,12 +52,41 @@ export async function moveSubscriptionToCurrentUser() {
   }
 }
 
-// Çıkışta: yanlış kullanıcıya bildirim gitmesin
+// Çıkışta: yanlış kullanıcıya bildirim gitmesin. Sunucudaki kayıt silinir, tarayıcı aboneliği kalır;
+// sonraki girişte (autoEnablePush) yeniden bağlanır, böylece bildirim ayarı çıkış-girişte bozulmaz.
 export async function dropPushOnLogout() {
   try {
     if (!pushSupported()) return;
-    await Promise.race([disablePush(), new Promise((r) => setTimeout(r, 2500))]);
+    await Promise.race([
+      (async () => {
+        const sub = await currentSubscription();
+        if (sub) await api.pushUnsubscribe(sub.endpoint);
+      })(),
+      new Promise((r) => setTimeout(r, 2500)),
+    ]);
   } catch {
     /* yoksay */
+  }
+}
+
+// "Bu cihazda kapat" seçimi cihazda kullanıcı başına hatırlanır; varsayılan açık
+const optKey = (id) => `push-optout-${id}`;
+export function setPushOptOut(userId, off) {
+  try { off ? localStorage.setItem(optKey(userId), '1') : localStorage.removeItem(optKey(userId)); } catch { /* yoksay */ }
+}
+const optedOut = (userId) => { try { return localStorage.getItem(optKey(userId)) === '1'; } catch { return false; } };
+
+// Giriş/açılışta: kullanıcı kapatmadıysa bu cihazı bildirimlere bağlar. İzin penceresi yalnız
+// prompt=true (kullanıcı jesti, ör. giriş butonu) ile açılır. Asla fırlatmaz.
+export async function autoEnablePush(userId, { prompt = false } = {}) {
+  try {
+    if (!pushSupported() || optedOut(userId) || (isIos() && !isStandalone())) return;
+    const k = await api.pushKey();
+    if (!k?.enabled) return;
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission === 'default' && !prompt) return;
+    await enablePush(k.public_key);
+  } catch {
+    /* izin verilmedi ya da ağ yok: sessizce geç */
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { pushSupported, isIos, isStandalone, currentSubscription, enablePush, disablePush } from './pushClient.js';
+import { setPushOptOut, pushSupported, isIos, isStandalone, currentSubscription, enablePush, disablePush } from './pushClient.js';
 
 const PREFS = [
   ['own_events', 'Yorum, soru ve talep bildirimleri'],
@@ -8,7 +8,7 @@ const PREFS = [
   ['reminders', 'Hatırlatmalar'],
 ];
 
-export default function PushSettings() {
+export default function PushSettings({ uid }) {
   const [key, setKey] = useState(null); // null: yükleniyor, false: sunucuda kapalı
   const [sub, setSub] = useState(false);
   const [prefs, setPrefs] = useState(null);
@@ -53,8 +53,8 @@ export default function PushSettings() {
       setBusy(false);
     }
   };
-  const turnOn = () => run(async () => { await enablePush(key); setSub(true); });
-  const turnOff = () => run(async () => { await disablePush(); setSub(false); });
+  const turnOn = () => run(async () => { await enablePush(key); setPushOptOut(uid, false); setSub(true); });
+  const turnOff = () => run(async () => { await disablePush(); setPushOptOut(uid, true); setSub(false); });
   const toggle = (k) => {
     const before = prefs;
     const next = { ...prefs, [k]: !prefs[k] };
