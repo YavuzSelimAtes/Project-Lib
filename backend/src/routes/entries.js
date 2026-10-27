@@ -330,4 +330,43 @@ export default async function routes(app) {
     }).filter((d) => d.pages > 0);
     return { days };
   });
+
+  // Tur bazli takvim: kitap (sayfa), dizi (bolum), film (adet) + her turun ilk kayit tarihi (kirmizi gun siniri).
+  app.get('/api/users/:id/calendar', async (req) => {
+    requireUser(req);
+    const id = Number(req.params.id);
+    if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(id)) throw err(404, 'Kullanici bulunamadi');
+    const from = vdate(req.query.from, { field: 'from', required: true });
+    const to = vdate(req.query.to, { field: 'to', required: true });
+    if (to < from) throw bad('Bitis baslangictan once olamaz', { to: 'baslangictan once' });
+    if (diffDays(from, to) > 400) throw bad('En fazla 400 gunluk aralik istenebilir', { to: 'aralik cok genis' });
+    const map = new Map();
+    const day = (date) => {
+      if (!map.has(date)) map.set(date, { date, pages: 0, estimated: false, episodes: 0, movies: 0 });
+      return map.get(date);
+    };
+    // kitap: heatmap ucuyla ayni mantik
+    for (const r of db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? AND date<=? GROUP BY date').all(id, from, to)) {
+      const real = Math.max(0, r.real_p);
+      const est = Math.max(0, r.est_p);
+      if (real + est <= 0) continue;
+      const d = day(r.date);
+      d.pages = real > 0 ? real : est;
+      d.estimated = real <= 0;
+    }
+    for (const r of db.prepare('SELECT date, SUM(episodes) ep FROM series_progress WHERE user_id=? AND date>=? AND date<=? GROUP BY date').all(id, from, to)) {
+      if (r.ep > 0) day(r.date).episodes = r.ep;
+    }
+    // film: stats.js gibi bitti + end_date gunu
+    for (const r of db.prepare("SELECT end_date date, COUNT(*) n FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date>=? AND end_date<=? GROUP BY end_date").all(id, from, to)) {
+      day(r.date).movies = r.n;
+    }
+    const days = [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const first = {
+      book: db.prepare('SELECT MIN(date) d FROM reading_logs WHERE user_id=?').get(id).d || null,
+      series: db.prepare('SELECT MIN(date) d FROM series_progress WHERE user_id=?').get(id).d || null,
+      movie: db.prepare("SELECT MIN(end_date) d FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date IS NOT NULL").get(id).d || null,
+    };
+    return { days, first };
+  });
 }

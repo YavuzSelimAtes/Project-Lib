@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
 import { CountUp, Cover, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
-import Heatmap from '../Heatmap.jsx';
+import Calendars from '../Calendar.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
 
@@ -32,7 +32,7 @@ export default function Shelf() {
   const [adding, setAdding] = useState(false);
 
   const stats = useAsync(() => api.stats(uid, period), [uid, period]);
-  const heat = useAsync(() => api.heatmap(uid, 91), [uid]);
+  const [calRev, setCalRev] = useState(0);
   const entries = useAsync(() => api.entries({ user_id: uid, type: filter === 'all' ? '' : filter, limit: 200 }), [uid, filter]);
   const pending = useAsync(() => (own ? api.pending() : Promise.resolve(null)), [own]);
   const requests = useAsync(() => (own ? api.myRequests() : Promise.resolve(null)), [own]);
@@ -47,7 +47,7 @@ export default function Shelf() {
   const reloadAll = () => {
     entries.reload();
     stats.reload();
-    heat.reload();
+    setCalRev((n) => n + 1);
     pending.reload();
   };
 
@@ -107,7 +107,7 @@ export default function Shelf() {
         )
       )}
 
-      {(filter === 'all' || filter === 'book') && <Heatmap data={heat.data?.days} loading={heat.loading} error={heat.error} onRetry={heat.reload} />}
+      <Calendars uid={uid} filter={filter} rev={calRev} />
 
       {own && pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>

@@ -325,3 +325,42 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .lib-card { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); cursor: pointer; }
 .lib-card:hover { border-color: var(--accent); }
+
+/* ---- tur bazli takvimler ---- */
+:root {
+  --cal-book: #2f8f5b; --cal-series: #8a5cd0; --cal-movie: #2f7fc4;
+  --cal-red: #e5766a; --cal-gold: #e0a800;
+  --cal-warn1: #e6b34a; --cal-warn2: #e0822f; --cal-warn3: #8a5a3c;
+}
+:root[data-theme='dark'] {
+  --cal-book: #5cc08a; --cal-series: #b794f4; --cal-movie: #6cb0f0;
+  --cal-red: #c8564a; --cal-gold: #f2c94c;
+  --cal-warn1: #d9a63d; --cal-warn2: #e0903f; --cal-warn3: #a8744f;
+}
+.cal-section { margin-bottom: 4px; }
+.cal-bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.cal-bar .tabs { margin: 0; }
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-nav b { min-width: 110px; text-align: center; }
+.cal-card { margin-bottom: 16px; }
+.hm-cell.today { outline: 2px dashed var(--muted); outline-offset: 1px; }
+.hm-cell.gold { box-shadow: inset 0 0 0 2px var(--cal-gold); display: flex; align-items: center; justify-content: center; }
+.cal-trophy { font-size: 9px; line-height: 1; }
+.hm-grid.is-year { --hm: 12px; gap: 2px; }
+.hm-grid.is-month { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: repeat(7, minmax(0, 1fr)); width: 100%; max-width: 420px; gap: 4px; --hm: auto; }
+.hm-grid.is-month .hm-cell { width: 100%; height: auto; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+.hm-grid.is-month .cal-trophy { font-size: 1.1rem; }
+.cal-num { font-size: 0.78rem; font-weight: 800; color: var(--text); mix-blend-mode: normal; text-shadow: 0 0 3px var(--surface); }
+.cal-dow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-width: 420px; font-size: 0.72rem; color: var(--muted); text-align: center; margin-bottom: 4px; }
+.cal-tip-sub { font-weight: 700; opacity: 0.85; font-size: 0.78rem; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.cal-leg { display: inline-flex; align-items: center; gap: 5px; }
+.cal-leg i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+.cal-burst { position: absolute; width: 0; height: 0; z-index: 6; pointer-events: none; }
+.cal-burst i { position: absolute; left: 0; top: 0; font-style: normal; font-size: 14px; line-height: 1; animation: cal-pop 0.9s ease-out forwards; }
+@keyframes cal-pop { from { transform: translate(-50%, -50%) scale(0.4); opacity: 1; } to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cal-burst { display: none; } }
+@media (max-width: 640px) {
+  .hm-grid.is-year { --hm: 12px; gap: 2px; }
+  .hm-grid.is-month { --hm: auto; gap: 3px; }
+}

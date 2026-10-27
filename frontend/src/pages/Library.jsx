@@ -17,6 +17,9 @@ export default function Library() {
   }, [q]);
   const lib = useAsync(() => api.library({ q: dq, genre, sort, limit: 60 }), [dq, genre, sort]);
   const items = lib.data?.items || [];
+  const [added, setAdded] = useState([]); // bu oturumda listeme eklenenler
+  const onAdded = (id) => setAdded((a) => [...a, id]);
+  const isMine = (b) => !!b.my_status || added.includes(b.id);
 
   return (
     <>
@@ -46,7 +49,8 @@ export default function Library() {
       )}
       <div className="lib-grid">
         {items.map((b) => (
-          <button key={b.id} className="lib-card" onClick={() => setOpenId(b.id)} aria-label={`Detay: ${b.title}`}>
+          <div key={b.id}>
+          <button className="lib-card" style={{ width: '100%' }} onClick={() => setOpenId(b.id)} aria-label={`Detay: ${b.title}`}>
             <Cover src={b.cover_url} fallback={b.cover_fallback} title={b.title} />
             <div className="grow" style={{ minWidth: 0 }}>
               <b style={{ wordBreak: 'break-word' }}>{b.title}</b>
@@ -61,17 +65,46 @@ export default function Library() {
               </div>
             </div>
           </button>
+          <AddToList catalogId={b.id} mine={isMine(b)} onAdded={onAdded} />
+          </div>
         ))}
       </div>
       {lib.data && lib.data.total > items.length && <p className="small muted">İlk {items.length} kitap gösteriliyor ({lib.data.total} içinden). Aramayı daralt.</p>}
-      {openId && <BookDetail id={openId} onClose={() => setOpenId(null)} />}
+      {openId && <BookDetail id={openId} added={added.includes(openId)} onAdded={onAdded} onClose={() => setOpenId(null)} />}
     </>
   );
 }
 
-const READ_LABEL = { devam: 'okuyor', bitti: 'bitirdi', birakildi: 'bıraktı' };
+// Rafımda kaydı yoksa "Listeme ekle" (planlandı olarak); varsa hiçbir şey göstermez
+function AddToList({ catalogId, mine, onAdded }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  if (mine) return null;
+  const add = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.createEntry({ catalog_id: catalogId, status: 'planlandi' });
+      onAdded(catalogId);
+    } catch (x) {
+      setErr(x);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button className="btn small ghost" disabled={busy} onClick={add}>
+        ➕ Listeme ekle
+      </button>
+      <ErrorBox error={err} />
+    </div>
+  );
+}
 
-function BookDetail({ id, onClose }) {
+const READ_LABEL ={ devam: 'okuyor', bitti: 'bitirdi', birakildi: 'bıraktı' };
+
+function BookDetail({ id, added, onAdded, onClose }) {
   const d = useAsync(() => api.libraryItem(id), [id]);
   const comments = useAsync(() => api.libraryComments(id, { limit: 100 }), [id]);
   const questions = useAsync(() => api.libraryQuestions(id, { limit: 100 }), [id]);
@@ -98,6 +131,7 @@ function BookDetail({ id, onClose }) {
                   {(rating.metrics || []).map((m) => (rating.by_metric[m.key] != null ? `${m.name}: ${rating.by_metric[m.key]}` : null)).filter(Boolean).join(' · ')}
                 </div>
               )}
+              <AddToList catalogId={it.id} mine={!!it.my_status || added} onAdded={onAdded} />
             </div>
           </div>
           {d.data.readers?.length > 0 && (

@@ -65,7 +65,7 @@ export default async function routes(app) {
   // Listeye giren kitap: en az bir kullanicinin 'devam'/'bitti'/'birakildi' kaydi olan kitaplar (sadece planlananlar girmez)
   const LIB_FROM = `FROM catalog c JOIN entries e ON e.catalog_id=c.id AND e.status IN ('devam','bitti','birakildi') WHERE c.type='book'`;
   app.get('/api/library', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     const q = req.query;
     const where = [];
     const args = [];
@@ -79,16 +79,16 @@ export default async function routes(app) {
     const w = where.length ? ' AND ' + where.join(' AND ') : '';
     const total = db.prepare(`SELECT COUNT(DISTINCT c.id) c ${LIB_FROM}${w}`).get(...args).c;
     const order = { recent: 'MAX(e.updated_at) DESC', title: 'c.title COLLATE NOCASE ASC', rating: 'rating_avg IS NULL, rating_avg DESC, c.title', readers: 'readers_count DESC, c.title' }[sort];
-    const rows = db.prepare(`SELECT c.*, COUNT(DISTINCT e.user_id) readers_count,
+    const rows = db.prepare(`SELECT c.*, (SELECT status FROM entries WHERE user_id=? AND catalog_id=c.id ORDER BY id DESC LIMIT 1) my_status, COUNT(DISTINCT e.user_id) readers_count,
         COUNT(DISTINCT CASE WHEN e.status='devam' THEN e.user_id END) reading_count,
         COUNT(DISTINCT CASE WHEN e.status='bitti' THEN e.user_id END) finished_count,
         (SELECT AVG(score) FROM book_ratings r WHERE r.catalog_id=c.id) rating_avg,
         (SELECT COUNT(DISTINCT user_id) FROM book_ratings r WHERE r.catalog_id=c.id) rating_count
-      ${LIB_FROM}${w} GROUP BY c.id ORDER BY ${order} LIMIT ? OFFSET ?`).all(...args, limit, offset);
+      ${LIB_FROM}${w} GROUP BY c.id ORDER BY ${order} LIMIT ? OFFSET ?`).all(me.id, ...args, limit, offset);
     return { items: rows.map(libOut), total };
   });
   const libOut = (r) => ({
-    ...catalogOut(r),
+    ...catalogOut(r), my_status: r.my_status ?? null, // kendi rafimdaki durum (hicbir kaydim yoksa null)
     readers_count: r.readers_count, reading_count: r.reading_count, finished_count: r.finished_count,
     rating_average: r.rating_avg == null ? null : Math.round(r.rating_avg * 100) / 100, rating_count: r.rating_count,
   });
@@ -106,7 +106,7 @@ export default async function routes(app) {
       WHERE e.catalog_id=? AND e.status IN ('devam','bitti','birakildi') ORDER BY e.updated_at DESC`).all(id)
       .map((r) => ({ entry_id: r.entry_id, status: r.status, user: publicUser({ id: r.user_id, display_name: r.display_name, avatar: r.avatar, color: r.color }) }));
     return {
-      item: libOut(row), readers, rating: ratingOut(me.id, row),
+      item: { ...libOut(row), my_status: db.prepare('SELECT status FROM entries WHERE user_id=? AND catalog_id=? ORDER BY id DESC LIMIT 1').get(me.id, id)?.status ?? null }, readers, rating: ratingOut(me.id, row),
       comment_count: db.prepare('SELECT COUNT(*) c FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=?').get(id).c,
       question_count: db.prepare('SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=?').get(id).c,
     }; // yorumlar / sorular: GET /api/library/:id/comments ve /questions (social.js)

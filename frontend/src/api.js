@@ -125,6 +125,7 @@ export const api = {
 
   stats: (userId, period, type) => request('GET', `/users/${userId}/stats${qs({ period, type })}`),
   heatmap: (userId, days) => request('GET', `/users/${userId}/heatmap${qs({ days })}`),
+  calendar: (userId, from, to) => request('GET', `/users/${userId}/calendar${qs({ from, to })}`),
   notifications: () => request('GET', '/notifications'),
   readNotifications: (data) => request('POST', '/notifications/read', data),
 
