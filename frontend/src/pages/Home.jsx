@@ -26,7 +26,7 @@ function describe(it) {
   }
 }
 
-function FeedItem({ it, color, onOpen }) {
+function FeedItem({ it, mine, color, onOpen }) {
   const book = it.catalog.type === 'book';
   return (
     <div>
@@ -150,7 +150,7 @@ export default function Home() {
               </p>
             )}
             {c.items.map((it) => (
-              <FeedItem key={it.entry_id} it={it} color={c.user.color} onOpen={setOpenId} />
+              <FeedItem key={it.entry_id} it={it} mine={c.user.id === me.id} color={c.user.color} onOpen={setOpenId} />
             ))}
             {c.more_count > 0 && (
               <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`}>
