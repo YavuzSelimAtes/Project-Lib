@@ -55,8 +55,9 @@ export default function Library() {
               <b style={{ wordBreak: 'break-word' }}>{b.title}</b>
               {b.author_or_creator && <div className="small muted">{b.author_or_creator}</div>}
               <div className="small" style={{ marginTop: 4 }}>
-                👥 {b.readers_count ?? 0} okuyan
-                {b.finished_count > 0 && ` · ${b.finished_count} bitirdi`}
+                👥{' '}
+                {[b.reading_count > 0 && `${b.reading_count} okuyan`, b.finished_count > 0 && `${b.finished_count} bitirdi`].filter(Boolean).join(' · ') ||
+                  `${b.readers_count ?? 0} kişi bıraktı`}
               </div>
               <div className="row" style={{ gap: 6, marginTop: 4 }}>
                 {b.rating_count > 0 ? <RatingBadge average={b.rating_average} count={b.rating_count} /> : <span className="small muted">Puan yok</span>}
