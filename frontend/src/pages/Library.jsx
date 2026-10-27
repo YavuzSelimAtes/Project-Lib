@@ -25,7 +25,7 @@ export default function Library() {
       <h1>Kitaplık</h1>
       <p className="sub">Ailenin okuduğu tüm kitaplar, puanlar ve yorumlar.</p>
       <div className="row" style={{ marginBottom: 12 }}>
-        <input type="search" className="grow" placeholder="Kitap veya yazar ara…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Kitap ara" />
+        <input type="search" className="grow" placeholder="Kitap adı + yazar ara (örn. Gora Tagore)…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Kitap ara" />
         <select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Tür">
           <option value="">Tüm türler</option>
           <option value="kurgu">Kurgu</option>

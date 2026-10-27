@@ -154,6 +154,7 @@ export const api = {
     if (!res.ok) throw new ApiError(j?.error || 'Katalog kaydı eklenemedi.', res.status, j?.fields);
     return j;
   },
+  adminMarkWrong: (id, wrong = true) => request('POST', `/admin/catalog/${id}/wrong`, { wrong }),
   adminImport: (type, query) => request('POST', '/admin/catalog/import', { type, query }),
   congrats: (id) => request('POST', `/entries/${id}/congrats`),
   bookMetrics: () => request('GET', '/book-metrics'),

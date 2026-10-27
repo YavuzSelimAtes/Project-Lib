@@ -229,6 +229,7 @@ const COLUMNS = [
   ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
   ['catalog', 'listed', 'INTEGER NOT NULL DEFAULT 1'],
   ['catalog', 'norm', "TEXT NOT NULL DEFAULT ''"],
+  ['catalog', 'wrong', 'INTEGER NOT NULL DEFAULT 0'], // admin 'yanlis kitap' isareti: aramada/ekleme cakismasinda yok sayilir
   ['reading_logs', 'estimated', 'INTEGER NOT NULL DEFAULT 0'],
   // v5 (YENI_ISTEKLER)
   ['users', 'name_changed', 'INTEGER NOT NULL DEFAULT 0'],

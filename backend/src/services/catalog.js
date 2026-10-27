@@ -14,7 +14,7 @@ const MAX_COVER = 5 * 1024 * 1024;
 export const catalogOut = (r) => r && ({
   id: r.id, type: r.type, title: r.title, author_or_creator: r.author_or_creator, year: r.year, pages: r.pages,
   description: r.description, cover_url: r.cover_url, external_id: r.external_id, source: r.source, seasons: r.seasons,
-  runtime: r.runtime ?? null, genre: r.genre ?? null, created_at: r.created_at,
+  runtime: r.runtime ?? null, genre: r.genre ?? null, created_at: r.created_at, listed: !!r.listed, wrong: !!r.wrong,
 });
 export const normOf = (title, author) => norm(`${title} ${author || ''}`);
 
@@ -137,7 +137,7 @@ export const markListed = (db, id) => db.prepare('UPDATE catalog SET listed=1 WH
 export function searchLocal(db, q, type, limit, offset = 0, { listedOnly = false } = {}) {
   const words = norm(q).split(' ').filter(Boolean);
   if (!words.length) return [];
-  const where = [listedOnly ? 'listed=1' : '1=1'];
+  const where = ['wrong=0', listedOnly ? 'listed=1' : '1=1'];
   const args = [];
   if (type) { where.push('type=?'); args.push(type); }
   // her kelime: baslik+yazar alaninda VEYA bir baskinin yayinevinde gecmeli
@@ -273,7 +273,7 @@ export function findExisting(db, it) {
   }
   // ayni tur + ayni baslik + ayni yazar/yonetmen (kaynaklar arasi tekrar onleme)
   const nt = norm(it.title);
-  const cands = db.prepare('SELECT * FROM catalog WHERE type=? AND norm LIKE ?').all(it.type, `${nt}%`);
+  const cands = db.prepare('SELECT * FROM catalog WHERE type=? AND wrong=0 AND norm LIKE ?').all(it.type, `${nt}%`);
   const na = norm(it.author_or_creator || '');
   for (const c of cands) {
     if (norm(c.title) !== nt) continue;

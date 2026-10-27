@@ -97,6 +97,7 @@ export default async function routes(app) {
     const seen = new Set(local.map((r) => r.id));
     for (const it of online.items) {
       const ex = findExisting(db, it);
+      if (ex?.wrong) continue; // admin 'yanlis kitap' dedi
       if (ex) {
         if (!seen.has(ex.id)) {
           const o = bookOut(ex);
@@ -214,8 +215,15 @@ export default async function routes(app) {
     const { fields, file } = await readBody(req);
     const data = parseCatalogFields(fields);
     const cover_url = (await resolveCover(fields, file)) ?? null;
-    if (db.prepare('SELECT 1 FROM catalog WHERE type=? AND norm=?').get(data.type, normOf(data.title, data.author_or_creator))) {
-      throw err(409, 'Bu kayit katalogda zaten var');
+    // 'yanlis' isaretliler cakisma sayilmaz. Listelenmemis onizleme kaydi varsa o, elle girilen bilgiyle kalici hale gelir.
+    const same = db.prepare('SELECT * FROM catalog WHERE type=? AND norm=? AND wrong=0').get(data.type, normOf(data.title, data.author_or_creator));
+    if (same?.listed) throw err(409, 'Bu kayit katalogda zaten var');
+    if (same) {
+      const n = { ...same, ...data, cover_url: cover_url ?? same.cover_url };
+      db.prepare('UPDATE catalog SET title=?,author_or_creator=?,year=?,pages=?,description=?,cover_url=?,seasons=?,listed=1 WHERE id=?')
+        .run(n.title, n.author_or_creator, n.year, n.pages, n.description, n.cover_url, n.seasons, same.id);
+      reply.code(201);
+      return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(same.id)) };
     }
     const row = insertCatalog(db, { ...data, cover_url, source: 'manual' });
     reply.code(201);
@@ -256,13 +264,24 @@ export default async function routes(app) {
     return { ok: true };
   });
 
+  // Yanlis kitap isareti: kayit aramadan/gezmeden kalkar, elle ekleme ve sonraki otomatik eklemelerde cakisma yaratmaz
+  app.post('/api/admin/catalog/:id/wrong', async (req) => {
+    requireAdmin(req);
+    const id = Number(req.params.id);
+    const cur = db.prepare('SELECT * FROM catalog WHERE id=?').get(id);
+    if (!cur) throw err(404, 'Katalog kaydi bulunamadi');
+    const wrong = (req.body || {}).wrong === false ? 0 : 1;
+    db.prepare('UPDATE catalog SET wrong=?, listed=? WHERE id=?').run(wrong, wrong ? 0 : 1, id);
+    return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(id)) };
+  });
+
   app.post('/api/admin/catalog/import', async (req, reply) => {
     requireAdmin(req);
     const b = req.body || {};
     const type = oneOf(b.type, TYPES, { field: 'type', required: true });
     const query = str(b.query, { field: 'query', required: true, min: 2, max: 200 });
     const limit = Math.min(int(b.limit, { min: 1, max: 10, field: 'limit' }) || 1, 10);
-    const before = searchLocal(db, query, type, 50);
+    const before = searchLocal(db, query, type, 50, 0, { listedOnly: true });
     const online = await onlineSearch(query, type);
     if (online.errors.length && !online.items.length && !before.length) throw err(502, `Internetten aranamadi (${online.errors.join('; ')})`, undefined, 'UPSTREAM');
     const seen = new Set();
@@ -270,12 +289,14 @@ export default async function routes(app) {
     for (const r of before) if (items.length < limit && !seen.has(r.id)) { seen.add(r.id); items.push(r); }
     for (const it of online.items) { // sadece ihtiyac duyulan kadari kalici kataloga alinir
       if (items.length >= limit) break;
+      if (findExisting(db, it)?.wrong) continue; // yanlis isaretli kayit bir daha secilmez
       const r = persistOnline(db, it);
       if (!seen.has(r.id)) { seen.add(r.id); items.push(r); }
     }
     for (const r of items) await finishPick(db, r);
     reply.code(items.length ? 201 : 200);
-    return { items: items.map((r) => catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(r.id))), online: { ok: online.errors.length === 0, errors: online.errors } };
+    const preExisting = new Set(before.map((x) => x.id));
+    return { items: items.map((r) => ({ ...catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(r.id)), already_in_catalog: preExisting.has(r.id) })), online: { ok: online.errors.length === 0, errors: online.errors } };
   });
 
   // ---- admin: baskilar ----

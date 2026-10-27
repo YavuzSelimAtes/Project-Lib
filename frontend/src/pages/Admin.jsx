@@ -408,6 +408,7 @@ function CatalogForm({ onDone }) {
   const [okMsg, setOkMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [importQ, setImportQ] = useState('');
+  const [imported, setImported] = useState(null);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
 
   const submit = async (e) => {
@@ -436,13 +437,24 @@ function CatalogForm({ onDone }) {
       setBusy(false);
     }
   };
+  const markWrong = async (it, wrong) => {
+    setErr(null);
+    try {
+      await api.adminMarkWrong(it.id, wrong);
+      setImported((l) => l.map((x) => (x.id === it.id ? { ...x, wrong } : x)));
+    } catch (x) {
+      setErr(x);
+    }
+  };
   const doImport = async () => {
     setBusy(true);
     setErr(null);
     setOkMsg('');
+    setImported(null);
     try {
       const r = await api.adminImport(f.type, importQ.trim());
-      setOkMsg(r.items.length ? `İnternetten eklendi: ${r.items.map((i) => i.title).join(', ')}` : 'İnternette eşleşme bulunamadı.');
+      setImported(r.items);
+      if (!r.items.length) setOkMsg('İnternette eşleşme bulunamadı.');
     } catch (x) {
       setErr(x);
     } finally {
@@ -463,6 +475,20 @@ function CatalogForm({ onDone }) {
           <input type="text" className="grow" value={importQ} onChange={(e) => setImportQ(e.target.value)} placeholder="Adını yaz…" aria-label="İnternette ara" />
           <button className="btn" disabled={busy || importQ.trim().length < 2} onClick={doImport}>İçe aktar</button>
         </div>
+        {imported?.map((it) => (
+          <div key={it.id} className="row" style={{ marginTop: 10, alignItems: 'flex-start', opacity: it.wrong ? 0.6 : 1 }}>
+            <Cover src={it.cover_url} title={it.title} />
+            <div className="grow small">
+              <strong>{it.title}</strong>{it.author_or_creator ? <> — {it.author_or_creator}</> : null}
+              <div className="muted">
+                {[TYPE_LABEL[it.type], it.year, it.pages ? `${it.pages} sayfa` : null, it.source].filter(Boolean).join(' · ')}
+              </div>
+              {it.description && <div className="muted">{it.description.slice(0, 140)}{it.description.length > 140 ? '…' : ''}</div>}
+              <div className="muted">{it.already_in_catalog ? 'Zaten katalogdaydı' : 'Kataloğa eklendi'}{it.wrong ? ' · YANLIŞ KİTAP olarak işaretlendi (katalogdan kaldırıldı; elle ekleyebilirsin)' : ''}</div>
+            </div>
+            <button type="button" className="btn small ghost" onClick={() => markWrong(it, !it.wrong)}>{it.wrong ? 'Geri al' : 'Yanlış kitap'}</button>
+          </div>
+        ))}
       </div>
       <form className="card" onSubmit={submit}>
         <h2 style={{ marginTop: 0 }}>Elle ekle</h2>

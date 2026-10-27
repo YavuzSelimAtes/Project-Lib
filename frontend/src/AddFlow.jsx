@@ -89,7 +89,7 @@ export default function AddFlow({ onClose, onAdded, initialType = 'book' }) {
         type="search"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder={type === 'book' ? 'Kitap adı veya yazar…' : type === 'movie' ? 'Film adı…' : 'Dizi adı…'}
+        placeholder={type === 'book' ? 'Kitap adı + yazar (örn. Gora Tagore)…' : type === 'movie' ? 'Film adı…' : 'Dizi adı…'}
         aria-label="Ara"
         autoFocus
       />
