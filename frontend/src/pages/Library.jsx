@@ -19,7 +19,6 @@ export default function Library() {
   const items = lib.data?.items || [];
   const [added, setAdded] = useState([]); // bu oturumda listeme eklenenler
   const onAdded = (id) => setAdded((a) => [...a, id]);
-  const isMine = (b) => !!b.my_status || added.includes(b.id);
 
   return (
     <>
@@ -65,7 +64,6 @@ export default function Library() {
               </div>
             </div>
           </button>
-          <AddToList catalogId={b.id} mine={isMine(b)} onAdded={onAdded} />
           </div>
         ))}
       </div>
