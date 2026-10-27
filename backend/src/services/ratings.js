@@ -5,26 +5,26 @@ export const GENRES = {
   kurgu: {
     label: 'Kurgu',
     metrics: [
-      { key: 'senaryo', name: 'Senaryo', description: 'Olay orgusu, surprizler ve son ne kadar tutarli ve ilgi cekici?' },
-      { key: 'akicilik', name: 'Akicilik', description: 'Sayfalar kendiliginden akip gidiyor mu, yoksa okurken takiliyor muyum?' },
-      { key: 'karakterler', name: 'Karakterler', description: 'Karakterler inandirici, derin ve akilda kalici mi? Karakter gelisimi var mi? (Gelisim/degisim yoksa dusuk puan verilmeli)' },
-      { key: 'dil', name: 'Dil ve Anlatim', description: 'Uslup, kelime secimi ve betimlemelerin kalitesi.' },
-      { key: 'duygu', name: 'Duygusal Etki', description: 'Heyecan, huzun ya da kahkaha hissettirdi mi; bitince icimde iz birakti mi?' },
+      { key: 'senaryo', name: 'Senaryo', description: 'Olay örgüsü, sürprizler ve son ne kadar tutarlı ve ilgi çekici?' },
+      { key: 'akicilik', name: 'Akıcılık', description: 'Sayfalar kendiliğinden akıp gidiyor mu, yoksa okurken takılıyor muyum?' },
+      { key: 'karakterler', name: 'Karakterler', description: 'Karakterler inandırıcı, derin ve akılda kalıcı mı? Karakter gelişimi var mı?' },
+      { key: 'dil', name: 'Dil ve Anlatım', description: 'Üslup, kelime seçimi ve betimlemelerin kalitesi.' },
+      { key: 'duygu', name: 'Duygusal Etki', description: 'Heyecan, hüzün ya da kahkaha hissettirdi mi; bitince içimde iz bıraktı mı?' },
     ],
   },
   felsefe: {
     label: 'Felsefe',
     metrics: [
-      { key: 'onem', name: 'Fikrin Onemi', description: 'Tartisilan dusunce felsefe ve insanlik icin ne kadar temel ve onemli?' },
-      { key: 'anlasilirlik', name: 'Anlasilirlik', description: 'Zor konuyu rahatca takip edebildim mi?' },
-      { key: 'arguman', name: 'Arguman Gucu', description: 'Savundugu seyi tutarli ve ikna edici sekilde temellendiriyor mu?' },
-      { key: 'ornek', name: 'Ornek ve Anlatim', description: 'Ornekler, benzetmeler ve dil kalitesi.' },
-      { key: 'butunluk', name: 'Butunluk', description: 'Konularin sirasi ve kitabin tek parca gibi ilerlemesi.' },
+      { key: 'onem', name: 'Fikrin Önemi', description: 'Tartışılan düşünce felsefe ve insanlık için ne kadar temel ve önemli?' },
+      { key: 'anlasilirlik', name: 'Anlaşılırlık', description: 'Zor konuyu rahatça takip edebildim mi?' },
+      { key: 'arguman', name: 'Argüman Gücü', description: 'Savunduğu şeyi tutarlı ve ikna edici şekilde temellendiriyor mu?' },
+      { key: 'ornek', name: 'Örnek ve Anlatım', description: 'Örnekler, benzetmeler ve dil kalitesi.' },
+      { key: 'butunluk', name: 'Bütünlük', description: 'Konuların sırası ve kitabın tek parça gibi ilerlemesi.' },
     ],
   },
 };
 export const GENRE_KEYS = Object.keys(GENRES);
-export const SCALE = { 1: 'Cok kotu', 2: 'Kotu', 3: 'Idare eder', 4: 'Iyi', 5: 'Cok iyi' };
+export const SCALE = { 1: 'Çok kötü', 2: 'Kötü', 3: 'İdare eder', 4: 'İyi', 5: 'Çok iyi' };
 
 // Katalog turunu ayarla. Bu kitaba zaten puan verilmisse baska ture gecis 409 (metrikler uyusmaz).
 export function setGenre(db, catalogId, genre) {
@@ -70,8 +70,8 @@ export function ratingSummary(db, catalogId, meId = null) {
   };
 }
 
-// Puan verme kurali: kitap, kullanicinin kayitlarinda 'devam' / 'bitti' / 'birakildi' durumunda olmali (planlandi yetmez)
-export const canRate = (db, userId, catalogId) => !!db.prepare("SELECT 1 FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.catalog_id=? AND c.type='book' AND e.status IN ('devam','bitti','birakildi')").get(userId, catalogId);
+// Puan verme kurali: kitap, kullanicinin kayitlarinda 'bitti' / 'birakildi' durumunda olmali (planlandi ve devam yetmez)
+export const canRate = (db, userId, catalogId) => !!db.prepare("SELECT 1 FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.catalog_id=? AND c.type='book' AND e.status IN ('bitti','birakildi')").get(userId, catalogId);
 
 export function saveRatings(db, userId, catalogId, genre, scores) {
   const g = setGenre(db, catalogId, genre);

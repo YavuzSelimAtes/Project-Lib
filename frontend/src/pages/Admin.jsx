@@ -338,7 +338,9 @@ function LinkGroups({ users }) {
   const [sel, setSel] = useState([]);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  const candidates = users.filter((u) => u.role !== 'admin' && u.active !== false);
+  const candidates = users.filter((u) => u.active !== false);
+  const adminSel = sel.filter((id) => users.find((u) => u.id === id)?.role === 'admin').length;
+  const adminBad = adminSel > 0 && (adminSel > 1 || sel.length !== 2);
   const toggle = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const link = async () => {
@@ -367,7 +369,7 @@ function LinkGroups({ users }) {
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <h2 style={{ marginTop: 0 }}>Hesap bağlantıları</h2>
-      <p className="small muted">Bağlı hesaplar birbirine şifresiz, tek dokunuşla geçebilir. Yönetici hesaplar bağlanamaz.</p>
+      <p className="small muted">Bağlı hesaplar birbirine şifresiz, tek dokunuşla geçebilir. Yönetici hesap yalnızca kendi kullanıcı hesabıyla (tam 2 hesap) bağlanabilir.</p>
       {groups.loading && !groups.data && <Skeleton h={40} n={1} />}
       <ErrorBox error={groups.error} onRetry={groups.reload} />
       {groups.data?.groups.map((g) => (
@@ -389,8 +391,9 @@ function LinkGroups({ users }) {
           </label>
         ))}
       </fieldset>
+      {adminBad && <p className="small" style={{ color: 'var(--danger)' }}>Yönetici ile yalnızca bir kullanıcı hesabı bağlanabilir (toplam 2 hesap).</p>}
       <ErrorBox error={err} />
-      <button className="btn" disabled={busy || sel.length < 2} onClick={link}>
+      <button className="btn" disabled={busy || sel.length < 2 || adminBad} onClick={link}>
         Bağla
       </button>
     </div>

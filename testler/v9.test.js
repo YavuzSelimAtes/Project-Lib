@@ -51,6 +51,8 @@ describe('v9', () => {
     assert.equal((await a.c.put(`/api/catalog/${cat}/ratings`, { scores: { ...full(5), onem: 3 } })).status, 400);
     let r = await a.c.put(`/api/catalog/${cat}/ratings`, { scores: full(5) });
     assert.equal(r.status, 200, r.text); assert.equal(r.json.average, 5);
+    assert.equal((await b.c.put(`/api/catalog/${cat}/ratings`, { scores: full(3) })).status, 403); // devam ederken puan verilemez
+    assert.equal((await b.c.patch(`/api/entries/${entB}`, { status: 'bitti' })).status, 200);
     r = await b.c.put(`/api/catalog/${cat}/ratings`, { scores: { ...full(3), dil: 1 } });
     assert.equal(r.json.count, 2); assert.equal(r.json.average, 3.8); // (25 + 13) / 10
     r = await a.c.put(`/api/catalog/${cat}/ratings`, { scores: full(4) }); // guncelleme
@@ -87,7 +89,7 @@ describe('v9', () => {
     let r = await a.c.get('/api/library?q=caglar&limit=5'); // Turkce karakter duyarsiz (yazar adi)
     assert.equal(r.status, 200, r.text);
     const it = r.json.items.find((x) => x.id === cat);
-    assert.ok(it, 'kitap listede'); assert.equal(it.readers_count, 2); assert.equal(it.finished_count, 1); assert.equal(it.reading_count, 1);
+    assert.ok(it, 'kitap listede'); assert.equal(it.readers_count, 2); assert.equal(it.finished_count, 2); assert.equal(it.reading_count, 0);
     assert.equal(it.rating_average, 3.3); assert.equal(it.genre, 'kurgu');
     assert.equal((await a.c.get('/api/library?q=yokboylekitap' + RUN)).json.total, 0);
     r = await a.c.get(`/api/library/${cat}`);

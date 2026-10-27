@@ -50,7 +50,7 @@ export default async function routes(app) {
     const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id));
     if (e.user_id !== me.id) targets.add(e.user_id);
     for (const uid of targets) {
-      const title = uid === e.user_id ? `${me.display_name}, "${entryTitle(e)}" kaydina yorum yazdi` : `${me.display_name}, yorum yazdigin "${entryTitle(e)}" kaydina yeni yorum yazdi`;
+      const title = uid === e.user_id ? `${me.display_name}, "${entryTitle(e)}" kaydına yorum yazdı` : `${me.display_name}, yorum yazdığın "${entryTitle(e)}" kaydına yeni yorum yazdı`;
       notify(db, uid, { kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
     }
     reply.code(201);

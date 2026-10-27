@@ -261,12 +261,14 @@ export default async function routes(app) {
     if (uniq.some((n) => !Number.isInteger(n) || n <= 0)) throw bad('user_ids gecersiz', { user_ids: 'gecersiz' });
     if (uniq.length < 2) throw bad('En az 2 hesap secin', { user_ids: 'en az 2' });
     const get = db.prepare('SELECT * FROM users WHERE id=?');
+    let admins = 0;
     for (const n of uniq) {
       const u = get.get(n);
       if (!u) throw err(404, 'Kullanici bulunamadi');
-      if (u.role === 'admin') throw bad('Yonetici hesaplar baglanamaz', { user_ids: 'yonetici' });
+      if (u.role === 'admin') admins++;
       if (!u.active) throw bad('Pasif hesaplar baglanamaz', { user_ids: 'pasif' });
     }
+    if (admins && (admins > 1 || uniq.length !== 2)) throw bad('Yonetici yalnizca kendi kullanici hesabiyla (tam 2 hesap) baglanabilir', { user_ids: 'yonetici' });
     db.exec('BEGIN IMMEDIATE');
     try {
       const gid = (db.prepare('SELECT COALESCE(MAX(group_id),0)+1 g FROM account_links').get().g);

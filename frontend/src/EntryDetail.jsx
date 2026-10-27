@@ -69,7 +69,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
                 {e.start_date && `Başlangıç: ${fmtDate(e.start_date)}`} {e.end_date && ` · Bitiş: ${fmtDate(e.end_date)}`}
               </div>
               {e.type === 'book' && <EditionRow e={e} mine={mine} onChanged={changed} />}
-              {mine && e.status !== 'bitti' && (e.type === 'book' || e.type === 'series') && (
+              {mine && e.status !== 'bitti' && (e.type === 'series' || (e.type === 'book' && e.status !== 'devam')) && (
                 <QuickUpdate
                   key={e.updated_at}
                   entry={e}
