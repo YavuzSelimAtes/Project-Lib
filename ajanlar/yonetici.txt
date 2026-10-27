@@ -1,61 +1,95 @@
 =====================================================================
- YONETICI NOTLARI - PWA ISI
+ YONETICI NOTLARI - KUTUPHANEM
 =====================================================================
-SON GUNCELLEME: 2026-10-25
+SON GUNCELLEME: 2026-10-27
 
-AMAC
-----
-Kutuphanem web uygulamasini PWA yapmak: linkten/QR'dan "Ana Ekrana Ekle"
-ile uygulama gibi kurulsun. Mağaza yok, ucretsiz, hesap gerekmez.
+YONETICININ GOREVLERI (sirayla, oncelik sirasi budur)
+-----------------------------------------------------
+ 1) AZ TOKEN HARCA. En onemli gorev.
+    - Is kucukse oturum ACMA, kendin yap. Oturum acmak baglami bastan
+      yuklemek demek; kucuk is icin pahali.
+    - Gereksiz dosya okuma yok. Once grep/sed ile ilgili satirlari bul,
+      tum dosyayi okuma. Bu dosya disindaki ajanlar/*.txt dosyalari sadece
+      isin gerektirdigi kadar okunur.
+    - Sonsuz dongu yok. ajanlar/0_ORTAK.txt'deki "ikna olana kadar dongu"
+      kurali GECERSIZ; is bitince dur.
+    - Dogrulama ucuz yoldan: build + node --check + ilgili test + curl.
+      Tarayici screenshot dongusu yok (yalnizca arayuz isi bittiginde
+      bir-iki kontrol). Test sunucusu: node testler/start-backend.js --fresh
+      (PORT 4100); isin bitince kapat.
+    - Cikti kisa olsun: ne yapildi, ne dogrulandi, ne dogrulanamadi.
 
-TOKEN KURALI (proje sahibinden)
--------------------------------
-Onceki yonetici kucuk bir is icin tum tokeni tuketti. Bu is KUCUK tutulur:
- - Sonsuz dongu yok. ajanlar/0_ORTAK.txt'deki "ikna olana kadar dongu"
-   kurali BU ISTE GECERSIZ. Is bitince oturum durur.
- - Gereksiz dosya okuma yok; 0_ORTAK.txt ve 2_FRONTEND.txt'yi okumak gerekmez.
- - Oturum sayisi: 1 (FRONTEND/PWA). Backend, test, elestirmen, fikir
-   ajanlari acilmadi; gereksiz. Backend'e dokunulacak tek sey: sw.js ve
-   manifest icin cache basliklari (cok kucuk, PWA oturumu yapabilir).
- - Dogrulamayi yonetici (bu oturum) ucuz yoldan yapar: build + curl + dosya
-   kontrolu. Tarayici screenshot dongusu YOK.
+ 2) OTURUM AC, GERI DONUSLERLE GELISTIR. Is gercekten buyukse:
+    - Birbirinden bagimsiz parcalari ayri oturumlara (FRONTEND, BACKEND,
+      TEST, ELESTIRMEN vb.) bol; her oturuma KISA bir brif ver: hangi
+      dosyalar, "bitti" neye benzer, neye dokunmayacak.
+    - Ayni dosyalara dokunan iki yazici oturum ayni anda calismaz.
+    - Oturum bitince raporunu dogrula (diff, build, test) - rapor kanit
+      degildir. Eksik/yanlis varsa AYNI oturuma geri donus ver (yeni
+      oturum acma), duzelttirmeden isi kapatma.
+    - Her oturumun durumunu asagidaki OTURUMLAR bolumune yaz.
+    - Kullaniciya birakilanlari (asagiya bak) oturumlara birakma.
 
-PROJE SAHIBININ KARARLARI
--------------------------
- 1) Ikon : C:\Users\yavuz\Downloads\image-Photoroom.png (509x514, kare degil,
-           kare tuvale ortala/pad et; 192, 512, maskable 512, apple-touch 180).
- 2) Cevrimdisi: internet yokken yapilan guncelleme (gunluk sayfa ilerlemesi)
-           kuyruga alinsin, internet gelince ARKA PLANDA otomatik gonderilsin.
-           Arayuz her halukarda internetsiz acilsin (uygulama kabugu onbellek).
-           /api GET verisi onbelleklenmez (eski veri gostermeyelim) - kullanici
-           isterse "veri de onbellek" ayri istenir.
- 3) Isim : "Aile Kutuphanesi" (kisa ad: "Kutuphane"), tr dili.
+ 3) KULLANICIYA DON, KARARLARI ONA BIRAK, SOR.
+    - Urun/tasarim karari, kapsam belirsizligi, geri alinmasi zor ya da
+      disariya giden her sey kullanicinin: SOR, varsayilan secip gitme.
+      Ornekler: kural suresi (kac gun gorunsun), hangi stil/kutuphane,
+      bildirim metni, veri silme, lisans/atif gerektiren icerik.
+    - Soruyu kisa sor, en fazla 2-3 secenek sun, kendi onerini belirt.
+    - COMMIT / PUSH / MAIN'E MERGE sadece kullanici "pushla" dediginde.
+      Onay o is icindir, sonraki isleri kapsamaz. Commit mesaji kisa,
+      sonuna Co-Authored-By satiri eklenir.
+    - Sunucuya alma notunu her isin sonunda soyle (npm install, build,
+      backend yeniden baslatma, yeni env degiskeni var mi).
+    - Yapamadigini/dogrulayamadigini acikca soyle (gercek cihaz, gercek
+      push, canli veri vb.); "oldu" deme.
 
-OTURUMLAR
----------
- [FRONTEND-PWA] (oturum: pwa-frontend, local_e3fd1bb0-3af2-4b4d-af37-1f1e72780443) -> durum: BITTI 2026-10-25 (build gecti, dist'te PWA dosyalari var; commit YOK)
- [WEB-PUSH] (oturum: push-notifications) -> durum: BITTI 2026-10-25 (frontend build gecti, backend node --check gecti, calistirilamadi: Node 20; commit YOK)
- [BAGLI-HESAPLAR] (oturum: baglı hesaplar yan oturumu) -> durum: BITTI 2026-10-25 (frontend build + backend node --check gecti, calistirilamadi: Node 20; commit YOK)
+KULLANICIYA AIT KARARLAR (ornekler)
+-----------------------------------
+ - Ana ekranda biten kitap/dizi gorunme suresi: 3 gun (feed.js doneFrom).
+ - Filmler: eklenmeden 48 saat.
+ - Resim avatar stilleri: lorelei, openPeeps, notionists, pixelArt
+   (hepsi CC0, atif gerekmez). Atif gerektiren stil eklenecekse once sor.
+ - Bos gunlere sayfa dagitilmaz; arada atlanan gunler 0 kalir, fark
+   guncelleme gunune yazilir ve "tahmini" sayilir (rekora/seriye girmez).
+ - Yeni kitap bildirimi: 'devam' + sayfa 0 -> "basladi"; 'devam' + sayfa>0
+   -> "okuyor"; bitti/planlandi icin bildirim yok.
 
-RAPOR
------
-[FRONTEND-PWA] Eklenen: frontend/public/{manifest.webmanifest, sw.js, icon-192/512, icon-maskable-512, apple-touch-icon}, frontend/src/offlineQueue.js.
- Degisen: index.html (manifest/theme/apple meta), src/main.jsx (SW sadece PROD'da), src/api.js (ag hatasinda kuyruga alma), src/QuickUpdate.jsx (mesaj), src/App.jsx (rozet + flush).
- SW: kabuk onbellegi 'kutuphane-v1' (surum arttirinca eski silinir), navigasyon agdan, cevrimdisi index.html; /api/* asla onbelleklenmez.
- Kuyruk kapsami: BookQuick'in kullandigi PUT /entries/:id/day-logs (add:true, tarih korunur), series-progress, ve POST /progress (UI'da su an kuyruga bagli degil; EntryDetail'deki ilerleme normal hata verir).
- Gonderim: acilis/giris + 'online' + (destekleniyorsa) SW Background Sync; Web Locks ile cift gonderim engeli; 401/5xx/ag hatasinda dur, diger 4xx'te ogeyi at+logla. Ust barda "N bekleyen guncelleme" rozeti.
- Kisitlar: iOS'ta Background Sync yok (yalnizca uygulama acikken online/acilis); iOS'ta kurulum Safari 'Ana Ekrana Ekle'; SW/PWA icin HTTPS sart (localhost haric); kuyruk gonderildikten sonra liste otomatik yenilenmez; gercek tarayicida denenmedi.
+CALISMA KURALLARI / TUZAKLAR
+----------------------------
+ - Ortam Windows: Bash aracinda ters egik cizgi (\) komuta girerken
+   kaybolabilir; regex/escape yazarken String.fromCharCode(92) kullan ya
+   da Edit aracini kullan. Python yok; duzenleme icin node betigi ya da
+   Edit kullan.
+ - Testler ayni test.db uzerinde ust uste calisirsa sahte hata verir;
+   her seferinde start-backend.js --fresh ile temiz baslat.
+ - Bilinen eski hata: testler/v5-2.test.js 'pick/listed' testi; api.test.js
+   bu sekilde calismiyor. Bunlar bizim degisikliklerimizden degil.
+ - Frontend stil paketleri (DiceBear) buyuk: tembel yuklenir (dynamic
+   import); ana paketi sisirme (su an ~374 KB).
+
+PROJE DURUMU (ozet)
+-------------------
+ Yayinda/main: PWA (cevrimdisi kuyruk), web push (VAPID), bagli hesaplar,
+ baskilar (editions) + baskiya gore kapak, Turkce yayinevi duzeltme,
+ resim avatar (DiceBear), yeni kitap bildirimi, gun gun okuma.
+ Push icin sunucuda VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
+ gerekir; yoksa push sessizce kapali.
+
+ESKI OTURUMLAR (2026-10-25, PWA isi) - hepsi BITTI, arsiv
+---------------------------------------------------------
+ [FRONTEND-PWA] manifest, sw.js, ikonlar, offlineQueue.js. SW kabuk
+   onbellegi; /api asla onbelleklenmez. Kuyruk: day-logs, series-progress,
+   POST /progress. iOS'ta Background Sync yok. HTTPS sart (localhost haric).
+ [WEB-PUSH] services/push.js, routes/push.js, PushSettings.jsx,
+   pushClient.js. Zamanlayici 10 dk; aksam hatirlaticisi (REMINDER_HOUR,
+   vars. 20); REMINDERS=0 / NODE_ENV=test kapatir. iOS 16.4+ ve ana ekran.
+ [BAGLI-HESAPLAR] links.js, AccountSwitch.jsx, admin 'Hesap baglantilari'.
+   Admin gruba eklenemez; gecis sunucuda yetki kontrollu; bekleyen kuyruk
+   varsa gecis engellenir.
+
+YENI OTURUM KAYDI
+-----------------
+ (Yeni oturum acilirsa buraya: ad, kapsam, durum, tarih. Su an acik
+  oturum yok.)
 =====================================================================
-
-[WEB-PUSH] Yeni: backend/src/services/push.js, routes/push.js, frontend/src/{PushSettings.jsx,pushClient.js}. Degisen: db.js (3 tablo), notify.js (kanca), app.js, routes/entries.js, routes/auth.js (pasife alinca abonelik silinir), sw.js (push+notificationclick, CACHE v3), api.js, Profile.jsx, App.jsx (cikista abonelik kaldirilir). Paket: web-push.
- SUNUCUYA EKLE: npx web-push generate-vapid-keys  ->  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT=mailto:... (+ npm ci/ yeniden build). Anahtar yoksa push sessizce kapali, arayuzde bolum gizli.
- Davranis: notify() olaylari (own_events), aile ilerleme push'u (kisi basina 2 saatte 1, bellekte; yalniz tarihi bugun olan gercek ilerleme), bitirme push'u (throttle yok; kitap/film/dizi). Gecmis gun/backfill/cevrimdisi eski kayit push gondermez.
- Zamanlayici: 10 dk'da bir (ilk tur 60 sn sonra), TZ_NAME saatine gore; aksam REMINDER_HOUR (vars. 20) 'bugun okuma yok + devam eden kitap' (seri varsa 'N gunluk serin'), saat>=10 doldurulmamis gun hatirlaticisi; push_log ile gunde bir kez. REMINDERS=0 / NODE_ENV=test kapatir.
- iOS: yalnizca 16.4+ ve ana ekrana eklenmis PWA'da calisir; Safari sekmesinde arayuz kurulum yonergesi gosterir. Tikla-ac url'si simdilik '/' (uygulamada entry detay rotasi yok).
- Test edilemedi: gercek push gonderimi/cihaz, backend calistirma (node:sqlite -> Node 24), SQL sorgulari yalnizca incelendi.
-
-[BAGLI-HESAPLAR] Eklenen: backend/src/links.js, frontend/src/AccountSwitch.jsx. Degisen: db.js (account_links tablosu), routes/auth.js (linked, switch, admin link-groups, pasif/silme/admin yapma temizligi), api.js, pushClient.js (moveSubscriptionToCurrentUser), App.jsx (ust bar menu), pages/Admin.jsx (Hesap baglantilari bolumu), API_SOZLESMESI.txt.
- Guvenlik: admin gruba eklenemez (PUT 400) ve rol admin yapilinca gruptan duser; gecis yalnizca oturumdaki kullanicinin kendi grubundaki aktif+admin-olmayan uyeye (sunucuda kontrol, aksi 403); kendine gecis 400; pasif/silinen gruptan duser, tek kisi kalan grup silinir; gecista eski oturum silinir.
- Cevrimdisi kuyruk: gecis oncesi flushQueue(), bekleyen varsa gecis engellenir (mesaj). Cikis akisi ayni riski tasiyor (bekleyen kuyruk sonraki girisin kullanicisina gider) - degistirilmedi.
- Push: gecis sonrasi cihazdaki abonelik yeni hesaba POST /push/subscribe ile tasinir; bildirimler cihazda yalniz en son secili hesaba gider.
- Kisit/test edilemeyen: backend Node 20 ile calistirilamadi (yalniz node --check), uctan uca gecis ve push tasima elle denenmeli.

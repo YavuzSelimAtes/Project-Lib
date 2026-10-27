@@ -1,7 +1,7 @@
 // Aile Kutuphanesi service worker: uygulama kabugu onbellegi + cevrimdisi yazma kuyrugu (Background Sync).
 // Surum degisince CACHE adini arttir; eski onbellekler activate'te silinir.
-const CACHE = 'kutuphane-v3';
-const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/brand.png', '/favicon-32.png'];
+const CACHE = 'kutuphane-v4';
+const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/badge-96.png', '/icon-512.png', '/apple-touch-icon.png', '/brand.png', '/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -112,7 +112,7 @@ self.addEventListener('push', (e) => {
     self.registration.showNotification(d.title || 'Aile Kütüphanesi', {
       body: d.body || '',
       icon: '/icon-192.png',
-      badge: '/favicon-48.png',
+      badge: '/badge-96.png',
       tag: d.tag || undefined,
       data: { url: d.url || '/' },
     }),

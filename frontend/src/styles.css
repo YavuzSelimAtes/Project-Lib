@@ -204,6 +204,20 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
 .login { width: min(400px, 100%); }
 .login h1 { text-align: center; margin: 0 0 4px; }
 
+/* Bildirim paneli */
+.bell-panel { position: absolute; right: 0; top: 48px; width: min(340px, 86vw); max-height: 380px; overflow: auto; z-index: 40; }
+.bell-head { display: none; align-items: center; justify-content: space-between; margin-bottom: 6px; position: sticky; top: 0; background: var(--surface); }
+.bell-backdrop { display: none; }
+@media (max-width: 640px) {
+  .bell-backdrop { display: block; position: fixed; inset: 0; z-index: 69; background: rgba(0, 0, 0, 0.4); }
+  .bell-panel {
+    position: fixed; left: 8px; right: 8px; top: calc(56px + env(safe-area-inset-top)); width: auto; max-width: none;
+    max-height: min(80vh, calc(100dvh - 140px - env(safe-area-inset-bottom))); overflow-y: auto; overscroll-behavior: contain; z-index: 70;
+    box-sizing: border-box; padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .bell-head { display: flex; }
+  .bell-head .icon-btn { width: 40px; height: 40px; font-size: 1.1rem; }
+}
 @media (max-width: 640px) {
   /* backdrop-filter fixed alt cubugun referansini bozar */
   .topbar { backdrop-filter: none; background: var(--bg); }
@@ -219,6 +233,7 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
   .page { padding-bottom: 110px; }
   .icon-btn { width: 34px; height: 34px; font-size: 1rem; }
   .topbar .btn.small { padding: 6px 10px; font-size: 0.8rem; }
+  .acc-label { max-width: 70px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; display: inline-block; }
   .podium { gap: 6px; }
   .pod .val { font-size: 1.2rem; }
   .fab { right: 12px; bottom: 76px; }
@@ -296,3 +311,17 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
 .dice-opt[aria-pressed='true'] { border-color: var(--accent); }
 .dice-pal { display: grid; gap: 4px; }
 .swatch.none { background: var(--surface-2); color: var(--muted); font-size: 0.9rem; }
+
+/* v9: tepkiler, puanlama, kitaplik */
+.reactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.react { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 0.95rem; }
+.react.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.react:disabled { opacity: 0.7; }
+.metric { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 6px; }
+.scale-b { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 0.7rem; line-height: 1.15; text-align: center; }
+.scale-b b { font-size: 1rem; }
+.scale-b.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.lib-card { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); cursor: pointer; }
+.lib-card:hover { border-color: var(--accent); }

@@ -154,4 +154,16 @@ export const api = {
     return j;
   },
   adminImport: (type, query) => request('POST', '/admin/catalog/import', { type, query }),
+  congrats: (id) => request('POST', `/entries/${id}/congrats`),
+  bookMetrics: () => request('GET', '/book-metrics'),
+  ratings: (cid) => request('GET', `/catalog/${cid}/ratings`),
+  saveRatings: (cid, genre, scores) => request('PUT', `/catalog/${cid}/ratings`, { ...(genre ? { genre } : {}), scores }),
+  deleteRatings: (cid) => request('DELETE', `/catalog/${cid}/ratings`),
+  react: (cid, emoji) => request('PUT', `/comments/${cid}/reaction`, { emoji }),
+  library: (params) => request('GET', '/library' + qs(params)),
+  libraryItem: (id) => request('GET', `/library/${id}`),
+  libraryComments: (id, params) => request('GET', `/library/${id}/comments` + qs(params)),
+  libraryQuestions: (id, params) => request('GET', `/library/${id}/questions` + qs(params)),
+  adminReadingStatus: (all) => request('GET', '/admin/reading-status' + qs({ all: all ? 1 : '' })),
+  adminNudge: (id) => request('POST', `/admin/users/${id}/nudge`),
 };

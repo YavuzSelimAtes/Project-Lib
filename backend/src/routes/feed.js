@@ -12,7 +12,7 @@ export default async function routes(app) {
   const db = app.db;
 
   app.get('/api/feed', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     const today = todayStr();
     const movieFrom = new Date(Date.now() - 48 * 3600 * 1000).toISOString(); // EKLENME zamanindan 48 saat
     const doneFrom = addDays(today, -2); // biten kitap/dizi: son 3 gun
@@ -25,6 +25,7 @@ export default async function routes(app) {
          OR (e.type='movie' AND e.status='bitti' AND e.created_at>=?)`).all(doneFrom, movieFrom);
     const pagesToday = db.prepare('SELECT entry_id, SUM(pages_read) p FROM reading_logs WHERE date=? GROUP BY entry_id').all(today);
     const ptMap = new Map(pagesToday.map((r) => [r.entry_id, r.p]));
+    const cg = new Map(db.prepare('SELECT entry_id, COUNT(*) n, SUM(sender_id=?) mine FROM congrats GROUP BY entry_id').all(me.id).map((r) => [r.entry_id, r]));
     const byUser = new Map(users.map((u) => [u.id, []]));
     for (const e of entries) {
       let kind;
@@ -41,6 +42,7 @@ export default async function routes(app) {
         pages_today: e.type === 'book' ? (ptMap.get(e.id) || 0) : null,
         avg_pages_per_day: e.type === 'book' ? entryAvg(db, e, today).avg : null,
         updated_at: e.updated_at,
+        ...(e.status === 'bitti' ? { congrats_count: cg.get(e.id)?.n || 0, i_congratulated: !!cg.get(e.id)?.mine } : {}),
         edition: e.edition_id ? editionBrief(getEdition(db, e.edition_id)) : null,
         ...(e.type === 'series' ? seriesExtras(db, e.cid, e.season) : {}),
       };

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, int, oneOf, publicUser } from '../util.js';
 import { markListed, catalogOut, searchLocal, onlineSearch, persistOnline, pickByKey, findExisting, insertCatalog, downloadCover, saveUploadedCover, coverFileFromUrl, normOf, finishPick } from '../services/catalog.js';
+import { setGenre, ratingSummary } from '../services/ratings.js';
 import { bookWorkDescription } from '../services/sources.js';
 import { entryOut } from '../services/entries.js';
 import { bookExtras, editionOut, ensureEditions, listEditions, insertEdition, findEdition } from '../services/editions.js';
@@ -148,7 +149,8 @@ export default async function routes(app) {
     }
     const entries = db.prepare('SELECT * FROM entries WHERE catalog_id=? ORDER BY updated_at DESC').all(row.id);
     const editions = row.type === 'book' ? listEditions(db, row.id).editions : [];
-    return { item: { ...catalogOut(row), editions }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false })), editions };
+    const rs = row.type === 'book' ? ratingSummary(db, row.id, req.user.id) : null;
+    return { item: { ...catalogOut(row), editions, ...(rs ? { rating_average: rs.average, rating_count: rs.count } : {}) }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false })), editions };
   });
 
   // Baskilar: yerelde yoksa/eskiyse Open Library + Google Books'tan doldurulur (7 gun onbellek)
@@ -232,6 +234,7 @@ export default async function routes(app) {
     const next = { ...cur, ...data, ...(cover !== undefined ? { cover_url: cover } : {}) };
     db.prepare(`UPDATE catalog SET type=?,title=?,author_or_creator=?,year=?,pages=?,description=?,cover_url=?,seasons=?,norm=? WHERE id=?`)
       .run(next.type, next.title, next.author_or_creator, next.year, next.pages, next.description, next.cover_url, next.seasons, normOf(next.title, next.author_or_creator), id);
+    if (fields.genre !== undefined && cur.type === 'book') setGenre(db, id, fields.genre);
     markListed(db, id); // admin duzenlediyse kalici
     // Tutarlilik: sayfa sayisi duzeltilirse eski degeri aynen kopyalamis kayitlarin total_pages'i de guncellenir
     // (elle degistirilmis olanlara ve yeni degerin altina dusen current_page'e dokunulmaz).

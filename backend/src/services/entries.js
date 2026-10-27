@@ -150,19 +150,21 @@ export const LATE_DAYS = 7; // bu kadar gunden eski gunlere sonradan girilen say
 // tahmini ('estimated') gunler. 'Okumadim' (0) ve gercek girilmis gunler listelenmez.
 export function openDays(db, e, today = todayStr()) {
   if (e.type !== 'book' || e.status === 'planlandi') return [];
-  const rows = db.prepare('SELECT date,pages_read,estimated FROM reading_logs WHERE entry_id=?').all(e.id);
+  const rows = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=?').all(e.id);
   const byDate = new Map(rows.map((r) => [r.date, r]));
   const first = rows.length ? rows.map((r) => r.date).sort()[0] : null;
   let from = e.start_date || first || today;
   if (first && first < from) from = first;
-  const to = e.status === 'devam' ? today : (e.end_date || today);
+  const yesterday = addDays(today, -1); // BUGUN asla acik gun sayilmaz (bugun sayfa numarasi guncellenerek okunur)
+  let to = e.status === 'devam' ? today : (e.end_date || today);
+  if (to > yesterday) to = yesterday;
   if (diffDays(from, to) < 0) return [];
   if (diffDays(from, to) + 1 > OPEN_WINDOW) from = addDays(to, -(OPEN_WINDOW - 1));
   const out = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const r = byDate.get(d);
     if (!r) out.push({ date: d, state: 'open', pages: 0 });
-    else if (r.estimated) out.push({ date: d, state: 'estimated', pages: r.pages_read });
+    else if (r.estimated && !r.no_streak) out.push({ date: d, state: 'estimated', pages: r.pages_read });
   }
   return out;
 }
@@ -247,7 +249,11 @@ export function backfillLogs(db, e, mode, days) {
     const n = dates.length;
     const base = Math.floor(cur / n);
     const rest = cur % n;
-    dates.forEach((d, i) => { const p = base + (i >= n - rest ? 1 : 0); if (p > 0) put(d, p, true); });
+    dates.forEach((d, i) => {
+      const p = base + (i >= n - rest ? 1 : 0);
+      if (p > 0) put(d, p, true, 1); // no_streak=1: esit dagitilan gun acik gun listesine girmez
+      else { ins.run(e.id, e.user_id, d, page, page, 0, 0, 0); rows++; } // 0 sayfa dusen gun de "atanmis" sayilir (acik gun olmaz)
+    });
     return { rows };
   }
   const given = new Map();

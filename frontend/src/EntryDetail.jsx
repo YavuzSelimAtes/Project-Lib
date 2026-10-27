@@ -5,6 +5,7 @@ import { useAuth } from './auth.js';
 import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, langLabel, timeAgo, useAsync } from './ui.jsx';
 import EditionPicker from './Editions.jsx';
 import QuickUpdate, { OpenDays } from './QuickUpdate.jsx';
+import { CongratsButton, RatingPanel, Reactions } from './Rating.jsx';
 
 const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı', planlandi: 'Planlandı' };
 
@@ -87,6 +88,9 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
             </p>
           )}
 
+          {!mine && e.status === 'bitti' && <CongratsButton key={e.id} entryId={e.id} count={e.congrats_count || 0} sent={!!e.i_congratulated} />}
+          {e.type === 'book' && <RatingPanel catalogId={cat.id} genre={cat.genre} />}
+
           <Others catalogId={cat.id} selfEntryId={e.id} onOpen={onClose} />
 
           <h3>❓ Sorular</h3>
@@ -144,7 +148,7 @@ function EditionRow({ e, mine, onChanged }) {
   );
 }
 
-// Sayfa numarasini duzelt ("su an X. sayfadayim")
+// Kacinci sayfadasin? Guncelle ("su an X. sayfadayim")
 function PageFix({ e, onChanged }) {
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState(e.current_page ?? '');
@@ -153,7 +157,7 @@ function PageFix({ e, onChanged }) {
   if (!open) {
     return (
       <button className="btn small ghost" style={{ marginTop: 6 }} onClick={() => setOpen(true)}>
-        ✏️ Sayfa numarasını düzelt
+        ✏️ Kaçıncı sayfadasın? Güncelle
       </button>
     );
   }
@@ -337,6 +341,7 @@ function Comments({ state, entryId }) {
             )}
           </div>
           <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.body}</div>
+          <Reactions comment={c} />
         </div>
       ))}
       <form onSubmit={send} className="row" style={{ marginTop: 8, flexWrap: 'nowrap' }}>

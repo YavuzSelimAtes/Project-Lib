@@ -605,3 +605,42 @@ GET    /api/admin/link-groups     [A] -> { groups:[{id, users:[{id,display_name,
 PUT    /api/admin/link-groups     [A] { user_ids:[>=2] } -> yeni grup (eski gruplardan tasinir) -> { groups }. 400 admin/pasif/<2
 DELETE /api/admin/link-groups/:id [A] -> { ok:true } / 404
 Kullanici pasife alininca, silinince veya admin yapilinca gruptan duser; 1 kisi kalan grup silinir.
+
+[v9] TEBRIK / PUANLAMA / TEPKI / GENEL KITAPLIK / NEDEN OKUMUYORSUN   ([U]=giris, [A]=admin)
+TEBRIK
+   POST /api/entries/:id/congrats [U] (govde yok) -> {ok, already_sent, message?, congrats_count, i_congratulated:true}
+        Sadece BITMIS ve BASKASININ kaydi (kendi kaydi 400, bitmemis 400). Ayni gonderen+kayit ikinci kez: 200, already_sent:true ("Zaten tebrik gonderdin").
+        Sahibine bildirim (kind 'congrats') + push: "<ad> kitabini bitirdigin icin seni tebrik etti 🎉" (dizi/film icin metin uyarlanir).
+   GET /api/feed: status 'bitti' olan her oge (items + activity) ayrica {congrats_count, i_congratulated}. Kendi kartinda butonu gizleyin.
+KITAP TURU + PUANLAMA (tur KATALOG seviyesindedir: catalog.genre = 'kurgu' | 'felsefe' | null; catalogOut / entry.catalog.genre'de doner)
+   Tur secimi: POST /api/entries {..., genre} ve PATCH /api/entries/:id {genre} (sadece kitap; gecersiz 400). Admin: PATCH /api/admin/catalog/:id {genre}.
+   Kitaba puan verilmisse tur degistirilemez (409).
+   GET /api/book-metrics [U] -> {scale:{1:'Cok kotu',..5:'Cok iyi'}, genres:{kurgu:{label,metrics:[{key,name,description}]}, felsefe:{...}}}
+   GET /api/catalog/:id/ratings [U] -> {catalog_id, genre, metrics:[...], average (tum puanlarin ort., 2 hane), count (puanlayan kisi),
+        by_user:[{user,scores:{key:n},average}], by_metric:{key:ort}, mine:{scores,average}|null, can_rate}
+   PUT /api/catalog/:id/ratings [U] {genre?, scores:{<TUM metrik anahtarlari>:1..5}} -> ayni sekil. Tekrar gonderim gunceller.
+        Kural: kullanicinin o kitapta 'devam'/'bitti'/'birakildi' kaydi olmali (yalniz 'planlandi' yetmez) -> aksi 403. Kitabin turu yoksa genre zorunlu (400).
+        Eksik/fazla metrik, 1-5 disi -> 400.
+   DELETE /api/catalog/:id/ratings [U] -> kendi puanini siler, guncel ozet.
+   GET /api/catalog/:id -> item.rating_average / item.rating_count (kitaplarda) eklendi.
+YORUM TEPKILERI
+   Izinli emojiler: ❤️ 👍 😂 😮 🔥.  PUT /api/comments/:id/reaction [U] {emoji} -> {comment_id, reactions:{emoji:sayi}, my_reaction}
+        Ayni emoji = kaldirir, farkli emoji = degistirir, emoji:null = kaldirir. Gecersiz emoji 400.
+   Yorum nesnesi (GET /api/entries/:id/comments, POST yorum, kitaplik yorumlari) artik {reactions:{emoji:sayi}, my_reaction} icerir.
+   Bildirim (kind 'comment_reaction'): yorum sahibine, kendi yorumuna yok, ayni kisi+yorum icin yalniz ilk tepkide.
+YORUM BILDIRIMI (kind 'comment'): yeni yorumda kayit sahibine + o kayitta daha once yorum yazmis diger kisilere (yazar haric). Soru/cevap bildirimleri zaten vardi (question_asked / question_answered).
+GENEL KITAPLIK (sadece kitaplar; en az bir kullanicinin 'devam'/'bitti'/'birakildi' kaydi olanlar)
+   GET /api/library?q=&genre=kurgu|felsefe&sort=recent|title|rating|readers&limit(<=100, vars.30)&offset [U]
+        -> {items:[{...catalog (cover_url,author_or_creator,genre..), readers_count, reading_count, finished_count, rating_average, rating_count}], total}
+        q: ad+yazar, Turkce karakter/buyuk-kucuk harf duyarsiz, tum kelimeler eslesmeli.
+   GET /api/library/:catalogId [U] -> {item (ayni alanlar), readers:[{entry_id,status,user}], rating:{...ratings ozeti, can_rate}, comment_count, question_count}
+   GET /api/library/:catalogId/comments?limit(<=100)&offset [U] -> {comments:[{..., user, entry_id, reactions, my_reaction}], total}  (tum kayitlar, yeni -> eski)
+   GET /api/library/:catalogId/questions?limit&offset [U] -> {questions:[{..., asker, entry:{id,user,catalog}}], total}
+YONETICI: NEDEN OKUMUYORSUN
+   GET  /api/admin/reading-status?all=1 [A] -> {date, users:[{user, bugun_okumadi, aktif_kitap_yok, kitap_eklemedi, active_books, last_read_date, nudged_today}]}
+        Varsayilan: sadece bugun_okumadi VEYA aktif_kitap_yok olanlar (aktif, admin olmayan kullanicilar); all=1 hepsi.
+        bugun_okumadi: bugun pages_read>0 satiri yok. aktif_kitap_yok: 'devam' kitabi yok. kitap_eklemedi: hic kitap kaydi yok.
+   POST /api/admin/users/:id/nudge [A] -> {ok:true,sent:true}; bildirim+push "Neden okumuyorsun? Bir sayfa bile olur 📖" (kind 'nudge').
+        Kisi basina gunde 1 kez: ikinci deneme 409 {code:'ALREADY_SENT'}. Pasif kullanici 400, yok 404.
+ACIK GUNLER (degisti): GET /api/entries/:id/open-days ve skip_open artik BUGUNU hic icermez (sadece gecmis gunler).
+   backfill:"spread" ile atanan gunler (sayfasi 0 dusenler dahil) 'open' olmaz; spread gunleri 'estimated' durumunda kalir. Push "doldurulmamis gun" hatirlaticisi ayni openDays'i kullanir (tutarli).

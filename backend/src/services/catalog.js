@@ -14,7 +14,7 @@ const MAX_COVER = 5 * 1024 * 1024;
 export const catalogOut = (r) => r && ({
   id: r.id, type: r.type, title: r.title, author_or_creator: r.author_or_creator, year: r.year, pages: r.pages,
   description: r.description, cover_url: r.cover_url, external_id: r.external_id, source: r.source, seasons: r.seasons,
-  runtime: r.runtime ?? null, created_at: r.created_at,
+  runtime: r.runtime ?? null, genre: r.genre ?? null, created_at: r.created_at,
 });
 export const normOf = (title, author) => norm(`${title} ${author || ''}`);
 

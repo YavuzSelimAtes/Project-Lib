@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
 import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom';
 import { api } from './api.js';
 import { Avatar, Skeleton } from './ui.jsx';
@@ -7,6 +7,7 @@ import Home from './pages/Home.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
 import Shelf from './pages/Shelf.jsx';
 import Admin from './pages/Admin.jsx';
+const Library = lazy(() => import('./pages/Library.jsx'));
 import Bell from './Bell.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import ChangePassword from './ChangePassword.jsx';
@@ -125,6 +126,7 @@ export default function App() {
             </NavLink>
             <NavLink to="/liderlik">Liderlik</NavLink>
             <NavLink to="/rafim">Rafım</NavLink>
+            <NavLink to="/library">Kitaplık</NavLink>
             {isAdmin && <NavLink to="/yonetim">Yönetim</NavLink>}
           </nav>
           <span className="spacer" />
@@ -148,6 +150,8 @@ export default function App() {
           <Route path="/liderlik" element={<Leaderboard />} />
           <Route path="/rafim" element={<Shelf />} />
           <Route path="/uye/:id" element={<Shelf />} />
+          <Route path="/library" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Library /></Suspense>} />
+          <Route path="/kutuphane" element={<Navigate to="/library" replace />} />
           <Route path="/yonetim" element={isAdmin ? <Admin /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

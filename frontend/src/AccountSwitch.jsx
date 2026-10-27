@@ -55,18 +55,27 @@ export default function AccountSwitch({ userId }) {
     }
   };
 
+  const single = accounts.length === 1 ? accounts[0] : null;
   return (
     <div ref={box} style={{ position: 'relative' }}>
       <button
         className="btn small ghost"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="true"
-        aria-expanded={open}
+        onClick={() => (single ? go(single) : setOpen((o) => !o))}
+        disabled={busy}
+        title={single ? `${single.display_name} hesabına geç` : 'Hesap değiştir'}
+        aria-label={single ? `${single.display_name} hesabına geç` : 'Hesap değiştir'}
+        aria-haspopup={single ? undefined : 'true'}
+        aria-expanded={single ? undefined : open}
         style={{ minHeight: 36, whiteSpace: 'nowrap' }}
       >
-        🔁 Hesap değiştir
+        🔁 <span className="acc-label">{single ? single.display_name : 'Hesap değiştir'}</span>
       </button>
-      {open && (
+      {single && msg && (
+        <p className="small" role="alert" style={{ position: 'absolute', right: 0, top: '100%', margin: '4px 0 0', padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, width: 220, zIndex: 60, color: 'var(--danger)' }}>
+          {msg}
+        </p>
+      )}
+      {open && !single && (
         <div
           role="menu"
           aria-label="Bağlı hesaplar"

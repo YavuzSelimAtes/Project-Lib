@@ -16,12 +16,15 @@ export default function Bell() {
   useEffect(() => {
     if (!open) return;
     const away = (e) => !box.current?.contains(e.target) && setOpen(false);
+    const prev = document.body.style.overflow;
+    if (window.matchMedia('(max-width: 640px)').matches) document.body.style.overflow = 'hidden';
     const esc = (e) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', away);
+    document.addEventListener('pointerdown', away);
     document.addEventListener('keydown', esc);
     return () => {
-      document.removeEventListener('mousedown', away);
+      document.removeEventListener('pointerdown', away);
       document.removeEventListener('keydown', esc);
+      document.body.style.overflow = prev;
     };
   }, [open]);
 
@@ -40,8 +43,13 @@ export default function Bell() {
           <span style={{ position: 'absolute', top: -4, right: -4, background: 'var(--danger)', color: '#fff', borderRadius: 99, fontSize: 11, fontWeight: 800, padding: '1px 6px' }}>{unread}</span>
         )}
       </button>
+      {open && <div className="bell-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />}
       {open && (
-        <div className="card" style={{ position: 'absolute', right: 0, top: 48, width: 'min(340px, 86vw)', maxHeight: 380, overflow: 'auto', zIndex: 40 }} role="region" aria-label="Bildirimler">
+        <div className="card bell-panel" role="region" aria-label="Bildirimler">
+          <div className="bell-head">
+            <b>Bildirimler</b>
+            <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Kapat">✕</button>
+          </div>
           {!data?.notifications?.length ? (
             <p className="muted" style={{ margin: 0 }}>Henüz bildirim yok.</p>
           ) : (

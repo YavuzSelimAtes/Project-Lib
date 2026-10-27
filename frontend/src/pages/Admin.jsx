@@ -22,6 +22,9 @@ export default function Admin() {
         <button role="tab" className="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')}>
           👥 Kullanıcılar
         </button>
+        <button role="tab" className="tab" aria-selected={tab === 'reading'} onClick={() => setTab('reading')}>
+          📖 Okuma durumu
+        </button>
         <button role="tab" className="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>
           ➕ Katalog ekle
         </button>
@@ -31,6 +34,7 @@ export default function Admin() {
       </div>
       {tab === 'inbox' && <Inbox state={inbox} />}
       {tab === 'users' && <Users />}
+      {tab === 'reading' && <ReadingStatus />}
       {tab === 'catalog' && <CatalogForm onDone={inbox.reload} />}
       {tab === 'list' && <CatalogList />}
     </>
@@ -677,6 +681,67 @@ function EditionsAdmin({ catalogId }) {
         <ErrorBox error={err} />
         <button className="btn small" disabled={busy}>Baskıyı ekle</button>
       </form>
+    </div>
+  );
+}
+
+/* ---------- neden okumuyorsun ---------- */
+function ReadingStatus() {
+  const [all, setAll] = useState(false);
+  const st = useAsync(() => api.adminReadingStatus(all), [all]);
+  const [sent, setSent] = useState({}); // id -> 'ok' | 'dup'
+  const [err, setErr] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const nudge = async (u) => {
+    setBusyId(u.id);
+    setErr(null);
+    try {
+      await api.adminNudge(u.id);
+      setSent((s) => ({ ...s, [u.id]: 'ok' }));
+    } catch (x) {
+      if (x.status === 409) setSent((s) => ({ ...s, [u.id]: 'dup' }));
+      else setErr(x);
+    } finally {
+      setBusyId(null);
+    }
+  };
+  const users = st.data?.users || [];
+  return (
+    <div className="card">
+      <div className="row">
+        <h2 className="grow" style={{ margin: 0 }}>Okuma durumu</h2>
+        <label className="small row" style={{ gap: 6 }}>
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Hepsini göster
+        </label>
+      </div>
+      {st.loading && !st.data && <Skeleton h={50} n={2} />}
+      <ErrorBox error={st.error} onRetry={st.reload} />
+      <ErrorBox error={err} />
+      {st.data && users.length === 0 && <p className="muted small">Bugün herkes okumuş görünüyor 🎉</p>}
+      {users.map((r) => {
+        const u = r.user;
+        const flag = sent[u.id];
+        const done = r.nudged_today || flag;
+        return (
+          <div className="lrow" key={u.id}>
+            <Avatar user={u} size="sm" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>{u.display_name}</b>
+              <div className="row" style={{ gap: 6, marginTop: 2 }}>
+                {r.bugun_okumadi && <span className="chip">Bugün okumadı</span>}
+                {r.aktif_kitap_yok && <span className="chip">{r.kitap_eklemedi ? 'Hiç kitap eklemedi' : 'Aktif kitap yok'}</span>}
+                <span className="small muted">Son okuma: {r.last_read_date ? timeAgo(r.last_read_date) : 'hiç'}</span>
+              </div>
+              {flag === 'dup' && <div className="small muted">Bugün zaten gönderildi</div>}
+              {flag === 'ok' && <div className="ok-note small">✅ Gönderildi</div>}
+            </div>
+            <button className="btn small" disabled={done || busyId === u.id} onClick={() => nudge(u)}>
+              Neden okumuyorsun? 📖
+            </button>
+          </div>
+        );
+      })}
+      {users.some((r) => r.nudged_today) && <p className="small muted">Bugün hatırlatma gönderilenlerin düğmesi devre dışıdır.</p>}
     </div>
   );
 }

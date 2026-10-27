@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import QuickUpdate from '../QuickUpdate.jsx';
+import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
 import { QA } from '../EntryDetail.jsx';
@@ -50,6 +51,7 @@ function FeedItem({ it, mine, color, onOpen, onSaved }) {
           {book && it.total_pages ? <Progress value={it.percent} color={color} /> : null}
         </div>
       </button>
+      {!mine && it.status === 'bitti' && <div style={{ paddingLeft: 6 }}><CongratsButton entryId={it.entry_id} count={it.congrats_count || 0} sent={!!it.i_congratulated} /></div>}
       {live && <div style={{ paddingLeft: 6 }}><QuickUpdate entry={entry} onSaved={onSaved} onOpen={() => onOpen(it.entry_id)} key={it.updated_at} /></div>}
     </div>
   );

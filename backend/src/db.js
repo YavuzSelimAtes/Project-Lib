@@ -188,6 +188,34 @@ CREATE TABLE IF NOT EXISTS push_log (
   day TEXT NOT NULL,
   PRIMARY KEY (user_id, kind, day)
 );
+CREATE TABLE IF NOT EXISTS book_ratings (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  metric TEXT NOT NULL,
+  score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, catalog_id, metric)
+);
+CREATE INDEX IF NOT EXISTS idx_book_ratings_cat ON book_ratings(catalog_id);
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (comment_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS comment_reaction_notified (
+  comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (comment_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS congrats (
+  sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (sender_id, entry_id)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -215,6 +243,8 @@ const COLUMNS = [
   ['entries', 'finished_pages', 'INTEGER'], // bitti kitapta bitis aninda sabitlenen okunan toplam (baski degisince gecmis istatistik oynamaz)
   ['entries', 'finished_episodes', 'INTEGER'], // bitti dizide bitis aninda sabitlenen bolum / dakika
   ['entries', 'finished_minutes', 'INTEGER'],
+  // v9
+  ['catalog', 'genre', 'TEXT'], // kitap turu: 'kurgu' | 'felsefe' (puanlama metrikleri bu ture gore)
   ['reading_logs', 'no_streak', 'INTEGER NOT NULL DEFAULT 0'], // gecmise dolgu satiri: ortalamaya girer, seri/rekora girmez
 ];
 function migrate(db) {

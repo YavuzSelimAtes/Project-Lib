@@ -5,6 +5,7 @@ import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs 
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
 import { userStats, backfillMediaInfo } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
+import { setGenre } from '../services/ratings.js';
 import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
 
@@ -70,6 +71,7 @@ export default async function routes(app) {
       if (!ed || ed.catalog_id !== catId) throw bad('Bu baski secilen kitaba ait degil', { edition_id: 'gecersiz' });
     }
     const today = todayStr();
+    if (b.genre !== undefined && b.genre !== null && b.genre !== '') setGenre(db, catId, b.genre); // kitap turu (katalog seviyesinde saklanir)
     const status = oneOf(b.status, STATUSES, { field: 'status' }) || (type === 'movie' ? 'bitti' : 'devam');
     if (status === 'devam' && db.prepare("SELECT 1 FROM entries WHERE user_id=? AND catalog_id=? AND status='devam'").get(me.id, catId)) {
       throw err(409, 'Bu kayit zaten "devam ediyor" olarak listenizde');
@@ -138,6 +140,7 @@ export default async function routes(app) {
       await ensureForPosition(db, db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id), ns, ne);
     }
     const today = todayStr();
+    if (has('genre')) { if (e.type !== 'book') throw bad('Tur sadece kitaplar icin secilir', { genre: 'gecersiz' }); setGenre(db, e.catalog_id, b.genre); }
     const out = tx(db, () => {
       let cur = getEntry(db, id);
       // baski degistirme / kaldirma (sadece kitap)
