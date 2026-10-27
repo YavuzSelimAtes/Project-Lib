@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
-import QuickUpdate from '../QuickUpdate.jsx';
 import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
@@ -27,10 +26,8 @@ function describe(it) {
   }
 }
 
-function FeedItem({ it, mine, color, onOpen, onSaved }) {
+function FeedItem({ it, color, onOpen }) {
   const book = it.catalog.type === 'book';
-  const entry = { ...it, id: it.entry_id, type: it.catalog.type };
-  const live = mine && it.status === 'devam';
   return (
     <div>
       <button className="item" onClick={() => onOpen(it.entry_id)} aria-label={`Detay: ${it.catalog.title}`}>
@@ -52,7 +49,6 @@ function FeedItem({ it, mine, color, onOpen, onSaved }) {
         </div>
       </button>
       {!mine && it.status === 'bitti' && <div style={{ paddingLeft: 6 }}><CongratsButton entryId={it.entry_id} count={it.congrats_count || 0} sent={!!it.i_congratulated} /></div>}
-      {live && <div style={{ paddingLeft: 6 }}><QuickUpdate entry={entry} onSaved={onSaved} onOpen={() => onOpen(it.entry_id)} key={it.updated_at} /></div>}
     </div>
   );
 }
@@ -154,7 +150,7 @@ export default function Home() {
               </p>
             )}
             {c.items.map((it) => (
-              <FeedItem key={it.entry_id} it={it} mine={c.user.id === me.id} color={c.user.color} onOpen={setOpenId} onSaved={reload} />
+              <FeedItem key={it.entry_id} it={it} color={c.user.color} onOpen={setOpenId} />
             ))}
             {c.more_count > 0 && (
               <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`}>
