@@ -182,7 +182,7 @@ export function openDays(db, e, today = userToday(db, e.user_id)) {
 // Tek gunun okunan sayfasini ayarla (pages>=0; 0 = okumadim). add=true ise mevcut gercek degere EKLER.
 // Gercek (estimated=0) satir yazilir. Tahmini bir satir degistiriliyorsa fark diger tahmini satirlara dagitilir
 // (kullanicinin "su an X. sayfadayim" bilgisi bozulmasin); dagitilacak satir yoksa current_page degisir.
-export function setDayPages(db, e, date, pages, { add = false } = {}) {
+export function setDayPages(db, e, date, pages, { add = false, keepCurrent = false } = {}) {
   const today = userToday(db, e.user_id);
   if (e.type !== 'book') throw bad('Gunluk sayfa kaydi sadece kitaplar icindir');
   if (!e.total_pages) throw bad('Once kitabin toplam sayfa sayisini girin', { total_pages: 'gerekli' });
@@ -215,6 +215,8 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
       diff = 0;
     }
   }
+  // keepCurrent: gunun sayfasi azaltilirken "su an X. sayfadayim" bilgisi ve diger gunlerin kayitlari AYNEN korunur (fazlalik baska gune dagitilmaz)
+  if (keepCurrent && diff < 0) diff = 0;
   current += diff;
   if (current < 0) throw bad('Sayfa sayisi 0\'in altina dusemez', { pages: 'cok dusuk' });
   if (current > e.total_pages) throw bad(`Toplam sayfa sayisini (${e.total_pages}) asiyor`, { pages: 'toplamdan buyuk' });

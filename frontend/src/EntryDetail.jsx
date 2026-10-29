@@ -4,7 +4,7 @@ import { api } from './api.js';
 import { useAuth } from './auth.js';
 import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, langLabel, timeAgo, useAsync } from './ui.jsx';
 import EditionPicker from './Editions.jsx';
-import QuickUpdate, { OpenDays } from './QuickUpdate.jsx';
+import QuickUpdate, { OpenDays, DayEditor } from './QuickUpdate.jsx';
 import { CongratsButton, RatingPanel, Reactions } from './Rating.jsx';
 
 const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı', planlandi: 'Planlandı' };
@@ -77,6 +77,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
                 />
               )}
               {mine && e.type === 'book' && e.status === 'devam' && <PageFix e={e} onChanged={changed} />}
+              {mine && e.type === 'book' && e.status !== 'planlandi' && <DayEditor entryId={e.id} onChanged={changed} />}
               {!mine && e.type !== 'movie' && <WishButton catalogId={cat.id} />}
               {mine && <OwnerActions e={e} onChanged={changed} onClose={onClose} />}
             </div>

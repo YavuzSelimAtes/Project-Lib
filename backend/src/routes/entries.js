@@ -266,6 +266,17 @@ export default async function routes(app) {
   });
 
   // Gun bazli sayfa girisi: { days:[{date, pages}], add?:true } ya da { skip_open:true } (acik gunlerin hepsi "okumadim")
+  // Kitabin gun gun kayitlari (son 90 gun): duzenleme penceresi icin
+  app.get('/api/entries/:id/day-rows', async (req) => {
+    const me = requireUser(req);
+    const e = getEntry(db, Number(req.params.id));
+    if (!e) throw err(404, 'Kayit bulunamadi');
+    if (e.user_id !== me.id) throw err(403, 'Sadece kendi kaydinizin gunlerini gorebilirsiniz');
+    const from = addDays(userToday(db, me.id), -89);
+    const days = db.prepare('SELECT date, SUM(pages_read) pages, MAX(estimated) estimated FROM reading_logs WHERE entry_id=? AND date>=? GROUP BY date ORDER BY date DESC').all(e.id, from).map((r) => ({ date: r.date, pages: Math.max(0, r.pages), estimated: !!r.estimated }));
+    return { days };
+  });
+
   app.put('/api/entries/:id/day-logs', async (req) => {
     const me = requireUser(req);
     const id = Number(req.params.id);
@@ -280,7 +291,7 @@ export default async function routes(app) {
       list = b.days.map((d) => ({ date: vdate(d?.date, { field: 'date', required: true }), pages: int(d?.pages, { min: 0, max: 20000, field: 'pages', required: true }) }));
     }
     list.sort((a, c) => a.date.localeCompare(c.date));
-    tx(db, () => { for (const d of list) setDayPages(db, getEntry(db, id), d.date, d.pages, { add: b.add === true }); });
+    tx(db, () => { for (const d of list) setDayPages(db, getEntry(db, id), d.date, d.pages, { add: b.add === true, keepCurrent: b.keep_current === true }); });
     const entry = entryOut(db, getEntry(db, id));
     return { entry, applied: list.length, open_days: openDays(db, getEntry(db, id)) };
   });

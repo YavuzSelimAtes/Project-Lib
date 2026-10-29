@@ -109,6 +109,7 @@ export const api = {
   progress: (id, current_page, date, confirm) =>
     request('POST', `/entries/${id}/progress`, { current_page, ...(date ? { date } : {}), ...(confirm ? { confirm: true } : {}) }),
   openDays: (id) => request('GET', `/entries/${id}/open-days`),
+  dayRows: (id) => request('GET', `/entries/${id}/day-rows`),
   dayLogs: (id, body) => request('PUT', `/entries/${id}/day-logs`, body, body?.add === true),
   adminCatalog: (params) => request('GET', '/admin/catalog' + qs(params)),
   adminUpdateCatalog: (id, data) => request('PATCH', `/admin/catalog/${id}`, data),

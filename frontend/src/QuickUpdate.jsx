@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { today } from './ui.jsx';
+import { Modal, today } from './ui.jsx';
 import SeasonPicker from './Seasons.jsx';
 
 const QUEUED_TEXT = 'Çevrimdışısın, internet gelince gönderilecek';
@@ -42,6 +42,7 @@ function BookQuick({ entry, id, onSaved, onOpen }) {
     e.preventDefault();
     const n = Number(pages);
     if (pages === '' || !Number.isInteger(n) || n < 1) return setMsg({ ok: false, text: 'O gün kaç sayfa okuduğunu yaz (en az 1).' });
+    if (n >= 100 && !window.confirm(`O gün ${n} sayfa okudun olarak kaydedilecek. Kaçıncı sayfada olduğunu yazmak istiyorsan “Kaçıncı sayfadasın? Güncelle”yi kullan. Devam edilsin mi?`)) return;
     setBusy(true);
     setMsg(null);
     try {
@@ -174,5 +175,67 @@ export function OpenDays({ entryId, onChanged }) {
       </div>
       {err && <div className="err" role="alert">{err.message}</div>}
     </div>
+  );
+}
+
+// Gunluk kayitlari duzelt: bir gunun sayfasini dogru degere ayarla. "Su an X. sayfadayim" korunur;
+// bir gun azaltilirsa fazlalik onceki bos/tahmini gunlere tahmini olarak dagitilir.
+export function DayEditor({ entryId, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState(null);
+  const [vals, setVals] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = () => api.dayRows(entryId).then((r) => setDays(r.days), (e) => setErr(e));
+  const show = () => {
+    setOpen(true);
+    setVals({});
+    setErr(null);
+    load();
+  };
+  const changed = (days || []).filter((d) => vals[d.date] !== undefined && vals[d.date] !== '' && Number(vals[d.date]) !== d.pages);
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.dayLogs(entryId, { days: changed.map((d) => ({ date: d.date, pages: Number(vals[d.date]) })), keep_current: true });
+      setOpen(false);
+      onChanged?.();
+    } catch (e) {
+      setErr(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button className="btn small ghost" style={{ marginTop: 6 }} onClick={show}>
+        🗓️ Günlük kayıtları düzelt
+      </button>
+      {open && (
+        <Modal title="Günlük kayıtları düzelt" onClose={() => setOpen(false)}>
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Yanlış girilen günün sayfasını doğru değerle değiştir. “Şu an X. sayfadayım” bilgin ve diğer günlerin kayıtları değişmez; sadece seçtiğin günün sayfası düzelir.
+          </p>
+          {!days && !err && <div className="skel" style={{ height: 120 }} />}
+          {days && days.length === 0 && <p className="muted small">Henüz günlük kayıt yok.</p>}
+          <div style={{ maxHeight: '50vh', overflow: 'auto' }}>
+            {(days || []).map((d) => (
+              <div className="row" key={d.date} style={{ marginBottom: 6, flexWrap: 'nowrap' }}>
+                <span style={{ width: 92 }}>{d.date.split('-').reverse().join('.')}</span>
+                <input type="number" min="0" inputMode="numeric" className="grow" value={vals[d.date] ?? ''} placeholder={`${d.estimated ? '~' : ''}${d.pages}`} onChange={(e) => setVals((v) => ({ ...v, [d.date]: e.target.value }))} aria-label={`${d.date} okunan sayfa`} />
+              </div>
+            ))}
+          </div>
+          {err && <div className="err" role="alert">{err.message}</div>}
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="btn ghost" onClick={() => setOpen(false)}>Vazgeç</button>
+            <button className="btn" disabled={busy || changed.length === 0} onClick={save}>Kaydet</button>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
