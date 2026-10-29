@@ -3,7 +3,8 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import fstatic from '@fastify/static';
 import multipart from '@fastify/multipart';
-import { openDb, COVERS_DIR } from './db.js';
+import { openDb, tx, COVERS_DIR } from './db.js';
+import { autoZeroDays } from './services/entries.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -137,8 +138,14 @@ export async function buildApp({ logger = true } = {}) {
     try { db.prepare('DELETE FROM sessions WHERE expires_at<?').run(nowIso()); } catch { /* onemsiz */ }
     try { cleanupUnlisted(db, 14); } catch { /* onemsiz */ } // kullanilmayan onizleme (pick) kayitlari 14 gunde silinir
   };
+  const zeroFill = () => { // 5 gundur girilmeyen gunler otomatik 0 + not
+    try {
+      for (const e of db.prepare("SELECT * FROM entries WHERE type='book' AND status='devam'").all()) tx(db, () => autoZeroDays(db, e));
+    } catch { /* onemsiz */ }
+  };
   housekeeping();
-  const timer = setInterval(housekeeping, 12 * 3600 * 1000);
+  zeroFill();
+  const timer = setInterval(() => { housekeeping(); zeroFill(); }, 12 * 3600 * 1000);
   timer.unref();
   initPush(app.log);
   const stopReminders = startReminders(db, app.log);

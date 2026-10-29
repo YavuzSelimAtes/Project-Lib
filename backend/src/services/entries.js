@@ -146,6 +146,17 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
 const OPEN_WINDOW = 90;
 export const LATE_DAYS = 7; // bu kadar gunden eski gunlere sonradan girilen sayfalar seri/rekora sayilmaz
 
+export const AUTO_ZERO_DAYS = 5; // bu kadar gun icinde girilmeyen gun otomatik 0 yazilir
+export const AUTO_ZERO_NOTE = `${AUTO_ZERO_DAYS} gün içinde giriş yapılmadı, otomatik 0 yazıldı`;
+
+// Satiri hic olmayan ve AUTO_ZERO_DAYS gunden eski gunlere 'okumadim' (0) satiri + not yazar. Eklenen gun sayisini dondurur.
+export function autoZeroDays(db, e, today = userToday(db, e.user_id)) {
+  const todo = openDays(db, e, today).filter((d) => d.state === 'open' && diffDays(d.date, today) >= AUTO_ZERO_DAYS);
+  const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,no_streak,note) VALUES (?,?,?,?,?,0,0,0,?)');
+  for (const d of todo) ins.run(e.id, e.user_id, d.date, e.current_page, e.current_page, AUTO_ZERO_NOTE);
+  return todo.length;
+}
+
 // Kullanicinin "kac sayfa okudun?" diye sorulabilecek gunleri: satiri hic olmayan ('open') ve
 // tahmini ('estimated') gunler. 'Okumadim' (0) ve gercek girilmis gunler listelenmez.
 export function openDays(db, e, today = userToday(db, e.user_id)) {

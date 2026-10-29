@@ -129,7 +129,7 @@ export default function Calendars({ uid, filter, rev = 0 }) {
 function dayText(cfg, c) {
   const when = fmtDayLong(c.key);
   if (c.future) return `${when} - Henüz gelmedi`;
-  if (!c.n) return `${when} - ${cfg.zero}`;
+  if (!c.n) return `${when} - ${cfg.zero}${c.note ? ` (${c.note})` : ''}`;
   return `${when} - ${c.est ? '~' : ''}${c.n} ${cfg.unit}`;
 }
 function commentOf(cfg, c) {
@@ -169,6 +169,7 @@ function Calendar({ type, mode, keys, todayKey, data, loading, error, onRetry })
       return {
         key, n, future, day: dd,
         est: type === 'book' && !!d?.estimated && n > 0,
+        note: type === 'book' && n === 0 ? d?.note || '' : '',
         tier: n > 0 ? tierOf(cfg, n) : -1,
         // kirmizi: gecmis, kayitsiz ve ilk kayit tarihinden sonra (bugun kirmizi olmaz)
         miss: !future && key < todayKey && n === 0 && !!first && key > first,

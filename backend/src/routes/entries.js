@@ -1,7 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, int, date as vdate, oneOf, userToday, nowIso, addDays, diffDays } from '../util.js';
 import { tx } from '../db.js';
-import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs } from '../services/entries.js';
+import { getEntry, entryOut, applyProgress, openDays, autoZeroDays, setDayPages, backfillLogs } from '../services/entries.js';
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
 import { userStats, backfillMediaInfo } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
@@ -260,6 +260,7 @@ export default async function routes(app) {
     const e = getEntry(db, Number(req.params.id));
     if (!e) throw err(404, 'Kayit bulunamadi');
     if (e.user_id !== me.id) throw err(403, 'Sadece kendi kaydinizin gunlerini gorebilirsiniz');
+    tx(db, () => autoZeroDays(db, e));
     const days = openDays(db, e);
     return { days, count: days.length };
   });
@@ -363,6 +364,7 @@ export default async function routes(app) {
     for (const r of db.prepare("SELECT end_date date, COUNT(*) n FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date>=? AND end_date<=? GROUP BY end_date").all(id, from, to)) {
       day(r.date).movies = r.n;
     }
+    for (const r of db.prepare('SELECT date, MAX(note) note FROM reading_logs WHERE user_id=? AND date>=? AND date<=? AND note IS NOT NULL GROUP BY date').all(id, from, to)) day(r.date).note = r.note;
     const days = [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
     const first = {
       book: db.prepare('SELECT MIN(date) d FROM reading_logs WHERE user_id=?').get(id).d || null,
