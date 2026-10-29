@@ -216,11 +216,6 @@ CREATE TABLE IF NOT EXISTS congrats (
   created_at TEXT NOT NULL,
   PRIMARY KEY (sender_id, entry_id)
 );
-CREATE TABLE IF NOT EXISTS streak_days (
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  date TEXT NOT NULL,
-  PRIMARY KEY (user_id, date)
-);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -264,6 +259,11 @@ function migrate(db) {
   if (!db.prepare("SELECT 1 FROM meta WHERE key='runtime_v2'").get()) {
     db.exec("UPDATE catalog SET runtime=NULL, runtime_checked=NULL WHERE type='movie' AND source='wikipedia'");
     db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('runtime_v2', ?)").run(new Date().toISOString());
+  }
+  // Gec girilen gunler artik seriye sayilir: eski 'gec' isaretleri bir kez kaldirilir (kayit acilisindaki 'kalan sayfa' satirlari, kayit tarihinden +-1 gun icinde olanlar, korunur)
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='late_streak_v1'").get()) {
+    db.exec("UPDATE reading_logs SET no_streak=0 WHERE no_streak=1 AND estimated=0 AND entry_id IN (SELECT id FROM entries WHERE ABS(julianday(reading_logs.date) - julianday(substr(entries.created_at,1,10))) > 1)");
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('late_streak_v1', ?)").run(new Date().toISOString());
   }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {

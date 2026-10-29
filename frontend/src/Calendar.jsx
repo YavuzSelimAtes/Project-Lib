@@ -129,7 +129,7 @@ export default function Calendars({ uid, filter, rev = 0 }) {
 function dayText(cfg, c) {
   const when = fmtDayLong(c.key);
   if (c.future) return `${when} - Henüz gelmedi`;
-  if (!c.n) return `${when} - ${cfg.zero}${c.note ? ` (${c.note})` : ''}`;
+  if (!c.n) return c.note ? `${when} - 0 ${cfg.unit}` : `${when} - ${cfg.zero}`;
   return `${when} - ${c.est ? '~' : ''}${c.n} ${cfg.unit}`;
 }
 function commentOf(cfg, c) {

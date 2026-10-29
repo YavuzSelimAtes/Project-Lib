@@ -101,3 +101,5 @@ YENI OTURUM KAYDI
  3) Bozulan seriyi uye kendi takviminden gunleri isaretleyerek duzeltir (veriyi tahminle degistirmedik).
  Sunucuya alma: yeni kolon/tablo otomatik migrate olur; frontend build gerekir (npm install: @dicebear paketleri).
  Test: frontend build + node --check gecti; backend Node 20'de calistirilamadi (node:sqlite).
+ [2026-10-30 guncelleme] Seri takvimden ELLE secilmez (streak_days, /me/streak-calendar, /me/streak-days, StreakCalendar.jsx kaldirildi). Seri sadece takvimdeki gercek okuma gunlerinden otomatik hesaplanir. Otomatik 0 gunlerinin takvim ipucu sadece "0 sayfa" yazar (note kolonu DB'de duruyor).
+ [2026-10-30] "Gec girilen gun seriye girmez" (LATE_DAYS=7) kurali KALDIRILDI: elle girilen eski gunler de seriye/rekora sayilir. Eski isaretler db.js migrate'te (meta late_streak_v1) bir kez temizlenir; kayit acilisindaki 'kalan sayfa' (no_streak) satirlari korunur. Tahmini (esit bolunen) gunler ve 0 gunler seriye sayilmaya devam etmez.

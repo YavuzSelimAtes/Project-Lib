@@ -5,7 +5,6 @@ import { Avatar, ErrorBox, Modal } from './ui.jsx';
 import PushSettings from './PushSettings.jsx';
 import DiceAvatarPicker from './DiceAvatarPicker.jsx';
 import { isDice } from './diceAvatar.js';
-import StreakCalendar from './StreakCalendar.jsx';
 
 export const COLORS = ['#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#22c55e', '#eab308', '#64748b', '#a16207'];
 
@@ -129,7 +128,6 @@ export default function ProfileEdit({ onClose }) {
   const [color, setColor] = useState(user.color || COLORS[0]);
   const [name, setName] = useState(user.display_name || '');
   const [tz, setTz] = useState(user.tz || DEFAULT_TZ);
-  const [calOpen, setCalOpen] = useState(false);
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -235,13 +233,6 @@ export default function ProfileEdit({ onClose }) {
           </p>
         </div>
 
-        <div className="field" style={{ marginTop: 12 }}>
-          <span>Seri</span>
-          <div>
-            <button type="button" className="btn small ghost" onClick={() => setCalOpen(true)}>📅 Seriyi takvimden düzenle</button>
-          </div>
-        </div>
-
         <PushSettings uid={user.id} />
 
         <ErrorBox error={error} />
@@ -255,7 +246,6 @@ export default function ProfileEdit({ onClose }) {
           </button>
         </div>
       </form>
-      {calOpen && <StreakCalendar onClose={() => setCalOpen(false)} />}
     </Modal>
   );
 }

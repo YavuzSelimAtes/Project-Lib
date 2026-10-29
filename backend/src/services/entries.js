@@ -144,7 +144,6 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
 
 // ---------- gun gun okuma kaydi ----------
 const OPEN_WINDOW = 90;
-export const LATE_DAYS = 7; // bu kadar gunden eski gunlere sonradan girilen sayfalar seri/rekora sayilmaz
 
 export const AUTO_ZERO_DAYS = 5; // bu kadar gun icinde girilmeyen gun otomatik 0 yazilir
 export const AUTO_ZERO_NOTE = `${AUTO_ZERO_DAYS} gün içinde giriş yapılmadı, otomatik 0 yazıldı`;
@@ -219,8 +218,7 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
   current += diff;
   if (current < 0) throw bad('Sayfa sayisi 0\'in altina dusemez', { pages: 'cok dusuk' });
   if (current > e.total_pages) throw bad(`Toplam sayfa sayisini (${e.total_pages}) asiyor`, { pages: 'toplamdan buyuk' });
-  // 7 gunden eski gunlere sonradan girilen sayfalar ortalamaya girer ama seri/rekora girmez (liderlik tek istekle sismesin)
-  const late = diffDays(date, today) > LATE_DAYS ? 1 : 0;
+  const late = 0; // sonradan girilen gunler de seri/rekora sayilir
   if (row) db.prepare('UPDATE reading_logs SET pages_read=?, page_from=?, page_to=?, estimated=0, no_streak=? WHERE id=?').run(next, Math.max(0, current - next), current, late, row.id);
   else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,no_streak) VALUES (?,?,?,?,?,?,0,?)').run(e.id, e.user_id, date, Math.max(0, current - next), current, next, late);
   db.prepare('DELETE FROM reading_logs WHERE entry_id=? AND estimated=1 AND pages_read=0').run(e.id);
@@ -276,7 +274,7 @@ export function backfillLogs(db, e, mode, days) {
   if (sum > cur) throw bad(`Girdiginiz gunluk sayfalarin toplami (${sum}), su an bulundugunuz sayfayi (${cur}) asiyor`, { days: 'toplam fazla' });
   for (const d of dates) { // bos birakilan gun = okumadim (0, gercek satir)
     const p = given.get(d) || 0;
-    if (p > 0) put(d, p, false, diffDays(d, today) > LATE_DAYS ? 1 : 0);
+    if (p > 0) put(d, p, false);
     else { ins.run(e.id, e.user_id, d, page, page, 0, 0, 0); rows++; }
   }
   if (cur - sum > 0) put(today, cur - sum, false, 1); // 'kalan' sayfalar bugunun okumasi degil: ortalamaya girer, rekora girmez

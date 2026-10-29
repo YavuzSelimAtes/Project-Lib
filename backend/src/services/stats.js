@@ -58,9 +58,9 @@ export function recordOf(model) {
   return best;
 }
 
-// Seri gunleri: gercek (tahmini/dolgu olmayan) okuma gunleri + kisinin takvimden elle isaretledigi gunler
+// Seri gunleri: takvimdeki gercek (tahmini/dolgu olmayan) okuma gunleri; otomatik hesaplanir
 export function streakDates(db, userId) {
-  return db.prepare('SELECT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 AND no_streak=0 UNION SELECT date FROM streak_days WHERE user_id=? ORDER BY date').all(userId, userId).map((r) => r.date);
+  return db.prepare('SELECT DISTINCT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 AND no_streak=0 ORDER BY date').all(userId).map((r) => r.date);
 }
 
 export function streaksOf(db, userId, today = userToday(db, userId)) {
