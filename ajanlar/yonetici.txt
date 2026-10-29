@@ -93,3 +93,11 @@ YENI OTURUM KAYDI
  (Yeni oturum acilirsa buraya: ad, kapsam, durum, tarih. Su an acik
   oturum yok.)
 =====================================================================
+
+[SAAT-DILIMI-VE-SERI-TAKVIMI] 2026-10-29
+ Sorun: Almanya'daki uye gece 22:00'de sayfa girince sunucu (Istanbul) ertesi gune yaziyordu; duzeltince seri sifirlandi.
+ 1) users.tz (IANA, bos = TZ_NAME/Istanbul). Profil > Saat dilimi (cihaz saatini kullan dugmesi). Backend "bugun"u kisiye gore hesaplar (util.userToday); frontend ui.setTimeZone.
+ 2) streak_days tablosu + GET /api/me/streak-calendar, PUT /api/me/streak-days {date, marked}. Seri = gercek okuma gunleri + elle isaretlenen gunler; otomatik esit dagitilan (estimated) ve gec girilen (no_streak) gunler OTOMATIK sayilmaz. Son 62 gun. Profil > "Seriyi takvimden duzenle".
+ 3) Bozulan seriyi uye kendi takviminden gunleri isaretleyerek duzeltir (veriyi tahminle degistirmedik).
+ Sunucuya alma: yeni kolon/tablo otomatik migrate olur; frontend build gerekir (npm install: @dicebear paketleri).
+ Test: frontend build + node --check gecti; backend Node 20'de calistirilamadi (node:sqlite).

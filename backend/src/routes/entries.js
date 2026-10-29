@@ -1,5 +1,5 @@
 import { requireUser } from '../auth.js';
-import { err, bad, int, date as vdate, oneOf, todayStr, nowIso, addDays, diffDays } from '../util.js';
+import { err, bad, int, date as vdate, oneOf, userToday, nowIso, addDays, diffDays } from '../util.js';
 import { tx } from '../db.js';
 import { getEntry, entryOut, applyProgress, openDays, setDayPages, backfillLogs } from '../services/entries.js';
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
@@ -70,7 +70,7 @@ export default async function routes(app) {
       ed = getEdition(db, int(b.edition_id, { field: 'edition_id', min: 1 }));
       if (!ed || ed.catalog_id !== catId) throw bad('Bu baski secilen kitaba ait degil', { edition_id: 'gecersiz' });
     }
-    const today = todayStr();
+    const today = userToday(db, me.id);
     if (b.genre !== undefined && b.genre !== null && b.genre !== '') setGenre(db, catId, b.genre); // kitap turu (katalog seviyesinde saklanir)
     const status = oneOf(b.status, STATUSES, { field: 'status' }) || (type === 'movie' ? 'bitti' : 'devam');
     if (status === 'devam' && db.prepare("SELECT 1 FROM entries WHERE user_id=? AND catalog_id=? AND status='devam'").get(me.id, catId)) {
@@ -139,7 +139,7 @@ export default async function routes(app) {
       const ne = has('episode') ? int(b.episode, { min: 1, max: 5000, field: 'episode' }) : e.episode;
       await ensureForPosition(db, db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id), ns, ne);
     }
-    const today = todayStr();
+    const today = userToday(db, e.user_id);
     if (has('genre')) { if (e.type !== 'book') throw bad('Tur sadece kitaplar icin secilir', { genre: 'gecersiz' }); setGenre(db, e.catalog_id, b.genre); }
     const out = tx(db, () => {
       let cur = getEntry(db, id);
@@ -239,14 +239,15 @@ export default async function routes(app) {
     if (e.type !== 'book') throw bad('Sayfa ilerlemesi sadece kitaplar icindir; diziler icin series-progress kullanin');
     const b = req.body || {};
     const cp = int(b.current_page, { min: 1, field: 'current_page', required: true });
-    const d = vdate(b.date, { field: 'date' }) || todayStr();
+    const today = userToday(db, me.id);
+    const d = vdate(b.date, { field: 'date' }) || today;
     if (cp < e.current_page && b.confirm !== true) {
       throw err(400, `Sayfa ${e.current_page}'den ${cp}'e geriye gidiyor. Duzeltmek istiyorsaniz confirm:true gonderin`, { confirm: 'onay gerekli' }, 'CONFIRM_REQUIRED');
     }
     if (!e.total_pages) throw bad('Bu kitabin toplam sayfa sayisi yok. Once toplam sayfayi girin (PATCH total_pages)', { total_pages: 'gerekli' });
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
-    if (d === todayStr()) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
+    if (d === today) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
       if (r.finished) familyFinishedPush(db, entry);
       else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
     }
@@ -297,11 +298,12 @@ export default async function routes(app) {
     validateSeriesPosition(db, cat, season, episode);
     let { status, start_date, end_date } = e;
     if (status === 'planlandi' || status === 'birakildi' || status === 'bitti') { status = 'devam'; end_date = null; }
-    start_date = start_date || todayStr();
+    const today = userToday(db, me.id);
+    start_date = start_date || today;
     db.prepare('UPDATE entries SET season=?, episode=?, status=?, start_date=?, end_date=?, updated_at=? WHERE id=?').run(season, episode, status, start_date, end_date, nowIso(), e.id);
     const after = getEntry(db, e.id);
     pinSeriesFinish(db, e.id);
-    logSeriesProgress(db, e, after, todayStr());
+    logSeriesProgress(db, e, after, today);
     return { entry: entryOut(db, getEntry(db, e.id)) };
   });
 
@@ -320,7 +322,7 @@ export default async function routes(app) {
     const id = Number(req.params.id);
     if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(id)) throw err(404, 'Kullanici bulunamadi');
     const n = Math.min(int(req.query.days, { min: 1, max: 730, field: 'days' }) || 90, 730);
-    const from = addDays(todayStr(), -(n - 1));
+    const from = addDays(userToday(db, id), -(n - 1));
     // Ayni gunde gercek + tahmini sayfa varsa: pages = GERCEK sayfa (estimated:false), tahmini kisim estimated_pages'te ayri doner.
     // Yalniz tahmini varsa: pages = tahmini sayfa, estimated:true. (Negatif duzeltme satirlari gercek toplamdan duser.)
     const days = db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? GROUP BY date HAVING real_p + est_p > 0 ORDER BY date').all(id, from).map((r) => {

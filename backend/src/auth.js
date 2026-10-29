@@ -31,7 +31,7 @@ export function userFromToken(db, token) {
   if (!token) return null;
   return db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').get(sha(token), nowIso()) || null;
 }
-export const toUser = (u) => u && ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, avatar: u.avatar, color: u.color, must_change_pw: !!u.must_change, active: !!u.active, name_changed: !!u.name_changed, created_at: u.created_at });
+export const toUser = (u) => u && ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, avatar: u.avatar, color: u.color, must_change_pw: !!u.must_change, active: !!u.active, name_changed: !!u.name_changed, tz: u.tz || null, created_at: u.created_at });
 
 export function requireUser(req) {
   if (!req.user) throw err(401, 'Giris yapmaniz gerekiyor');

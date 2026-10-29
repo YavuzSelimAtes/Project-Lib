@@ -40,7 +40,7 @@ export default async function routes(app) {
         percent: e.type === 'book' && e.total_pages > 0 ? (e.status === 'bitti' ? 100 : Math.min(100, round1((e.current_page / e.total_pages) * 100))) : null,
         season: e.season, episode: e.episode, start_date: e.start_date, end_date: e.end_date, rating: e.rating,
         pages_today: e.type === 'book' ? (ptMap.get(e.id) || 0) : null,
-        avg_pages_per_day: e.type === 'book' ? entryAvg(db, e, today).avg : null,
+        avg_pages_per_day: e.type === 'book' ? entryAvg(db, e).avg : null,
         updated_at: e.updated_at,
         ...(e.status === 'bitti' ? { congrats_count: cg.get(e.id)?.n || 0, i_congratulated: !!cg.get(e.id)?.mine } : {}),
         edition: e.edition_id ? editionBrief(getEdition(db, e.edition_id)) : null,
@@ -50,7 +50,7 @@ export default async function routes(app) {
     }
     const cards = users.map((u) => {
       const items = byUser.get(u.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-      return { user: publicUser(u), current_streak: streaksOf(db, u.id, today).current, last_activity: items[0]?.updated_at || null, items: items.slice(0, CARD_MAX), more_count: Math.max(0, items.length - CARD_MAX) };
+      return { user: publicUser(u), current_streak: streaksOf(db, u.id).current, last_activity: items[0]?.updated_at || null, items: items.slice(0, CARD_MAX), more_count: Math.max(0, items.length - CARD_MAX) };
     });
     cards.sort((a, b) => (b.last_activity || '').localeCompare(a.last_activity || '') || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
     const activity = cards.flatMap((c) => c.items.map((i) => ({ user: c.user, ...i }))).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 30);

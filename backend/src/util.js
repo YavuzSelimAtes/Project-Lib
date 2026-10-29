@@ -12,8 +12,22 @@ export const err = (status, message, fields, code) => new HttpError(status, mess
 export const bad = (message, fields) => err(400, message, fields);
 
 export const TZ = process.env.TZ_NAME || 'Europe/Istanbul';
-const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-export const todayStr = (d = new Date()) => fmt.format(d);
+const fmts = new Map();
+const fmtFor = (tz) => {
+  if (!fmts.has(tz)) fmts.set(tz, new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }));
+  return fmts.get(tz);
+};
+// tz verilmezse sunucu saat dilimi (TZ_NAME); kisiye ozel gun icin userToday(db, userId) kullan
+export const todayStr = (d = new Date(), tz = TZ) => fmtFor(tz || TZ).format(d);
+export const validTz = (tz) => {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return false;
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); return true; } catch { return false; }
+};
+// Kullanicinin kendi saat dilimine gore bugun (profilde ayarli degilse sunucu saat dilimi)
+export const userToday = (db, userId, d = new Date()) => {
+  const r = db.prepare('SELECT tz FROM users WHERE id=?').get(userId);
+  return todayStr(d, r?.tz);
+};
 
 export const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z')) && new Date(s + 'T00:00:00Z').toISOString().startsWith(s);
 const DAY = 86400000;

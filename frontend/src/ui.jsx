@@ -182,8 +182,10 @@ export function fmtDate(d) {
 
 export const TYPE_LABEL = { book: 'Kitap', movie: 'Film', series: 'Dizi' };
 export const TYPE_ICON = { book: '📖', movie: '🎬', series: '📺' };
-// Tarihler Europe/Istanbul'a gore (backend ile ayni)
-const ymd = (d) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(d);
+// Tarihler kullanicinin profilde sectigi saat dilimine gore (yoksa Europe/Istanbul, backend ile ayni)
+let tzName = 'Europe/Istanbul';
+export const setTimeZone = (tz) => { tzName = tz || 'Europe/Istanbul'; };
+const ymd = (d) => new Intl.DateTimeFormat('sv-SE', { timeZone: tzName }).format(d);
 export const today = () => ymd(new Date());
 export const yesterday = () => ymd(new Date(Date.now() - 86400000));
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
-import { err, bad, str, oneOf, nowIso, normalizeDisplayName } from '../util.js';
+import { err, bad, str, oneOf, nowIso, normalizeDisplayName, validTz, userToday, addDays, diffDays } from '../util.js';
+import { streakDates } from '../services/stats.js';
 import { AVATAR_GROUPS, canonAvatar, diceAvatar } from '../avatars.js';
 import { linkedUsers, pruneLinks, unlinkUser } from '../links.js';
 
@@ -126,9 +127,14 @@ export default async function routes(app) {
     const me = requireUser(req);
     const b = req.body || {};
     const has = (k) => b[k] !== undefined;
-    if (!has('avatar') && !has('color') && !has('display_name')) throw bad('Degistirilecek bir alan gonderin (avatar, color, display_name)');
+    if (!has('avatar') && !has('color') && !has('display_name') && !has('tz')) throw bad('Degistirilecek bir alan gonderin (avatar, color, display_name, tz)');
     const row = db.prepare('SELECT * FROM users WHERE id=?').get(me.id);
-    let { avatar, color, display_name, name_changed } = row;
+    let { avatar, color, display_name, name_changed, tz } = row;
+    if (has('tz')) {
+      if (b.tz === null || b.tz === '') tz = null;
+      else if (validTz(b.tz)) tz = b.tz;
+      else throw bad('Gecersiz saat dilimi', { tz: 'gecersiz' });
+    }
     if (has('avatar')) avatar = listedAvatar(b.avatar, row.avatar);
     if (has('color')) {
       const c = parseColor(b.color);
@@ -144,8 +150,39 @@ export default async function routes(app) {
         name_changed = 1;
       }
     }
-    db.prepare('UPDATE users SET avatar=?, color=?, display_name=?, name_changed=? WHERE id=?').run(avatar, color, display_name, name_changed, me.id);
+    db.prepare('UPDATE users SET avatar=?, color=?, display_name=?, name_changed=?, tz=? WHERE id=?').run(avatar, color, display_name, name_changed, tz, me.id);
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(me.id)) };
+  });
+
+  // Seri takvimi: son STREAK_WINDOW gun. state: real (gercek okuma), estimated (otomatik esit dagitilan / gec girilen: seriye sayilmaz), none.
+  // marked: kisinin elle isaretledigi gun (seriye sayilir). Elle isaret sadece bugunden en fazla STREAK_WINDOW gun geriye.
+  const STREAK_WINDOW = 62;
+  app.get('/api/me/streak-calendar', async (req) => {
+    const me = requireUser(req);
+    const today = userToday(db, me.id);
+    const from = addDays(today, -(STREAK_WINDOW - 1));
+    const logs = new Map();
+    for (const r of db.prepare('SELECT date, SUM(CASE WHEN estimated=0 AND no_streak=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 OR no_streak=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? GROUP BY date').all(me.id, from)) logs.set(r.date, r);
+    const marked = new Set(db.prepare('SELECT date FROM streak_days WHERE user_id=? AND date>=?').all(me.id, from).map((r) => r.date));
+    const days = [];
+    for (let i = 0; i < STREAK_WINDOW; i++) {
+      const date = addDays(from, i);
+      const l = logs.get(date);
+      days.push({ date, state: l && l.real_p > 0 ? 'real' : l && l.est_p > 0 ? 'estimated' : 'none', marked: marked.has(date) });
+    }
+    return { today, days };
+  });
+
+  app.put('/api/me/streak-days', async (req) => {
+    const me = requireUser(req);
+    const b = req.body || {};
+    if (typeof b.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.date)) throw bad('Tarih YYYY-AA-GG biciminde olmali', { date: 'gecersiz tarih' });
+    const today = userToday(db, me.id);
+    if (b.date > today) throw bad('Gelecek bir gun isaretlenemez', { date: 'gelecek tarih' });
+    if (diffDays(b.date, today) >= STREAK_WINDOW) throw bad(`En fazla son ${STREAK_WINDOW} gun duzenlenebilir`, { date: 'cok eski' });
+    if (b.marked === false) db.prepare('DELETE FROM streak_days WHERE user_id=? AND date=?').run(me.id, b.date);
+    else db.prepare('INSERT OR IGNORE INTO streak_days (user_id, date) VALUES (?,?)').run(me.id, b.date);
+    return { ok: true, date: b.date, marked: b.marked !== false, streak_dates: streakDates(db, me.id).length };
   });
 
   app.post('/api/auth/change-password', async (req) => {

@@ -1,6 +1,6 @@
 // Web Push (telefon bildirimleri). VAPID anahtari yoksa sessizce kapalidir; hicbir akis bozulmaz.
 import webpush from 'web-push';
-import { todayStr, addDays, TZ } from '../util.js';
+import { todayStr, userToday, addDays, TZ } from '../util.js';
 import { streaksOf } from './stats.js';
 import { openDays } from './entries.js';
 
@@ -85,7 +85,7 @@ export function familyProgressPush(db, e, { now = Date.now() } = {}) {
     if (now - last < THROTTLE_MS) return;
     const targets = familyTargets(db, e.user_id);
     if (!targets.length) return;
-    const total = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE user_id=? AND date=?').get(e.user_id, todayStr()).s;
+    const total = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE user_id=? AND date=?').get(e.user_id, userToday(db, e.user_id)).s;
     if (total <= 0) return;
     lastProgress.set(e.user_id, now);
     const body = `${nameOf(db, e.user_id)} bugün toplam ${total} sayfa okudu 📖 (${titleOf(db, e)})`;

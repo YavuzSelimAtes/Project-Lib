@@ -1,4 +1,4 @@
-import { addDays, diffDays, round1, todayStr, publicUser } from '../util.js';
+import { addDays, diffDays, round1, todayStr, userToday, publicUser } from '../util.js';
 import { entryDayModel } from './entries.js';
 import { seasonRows, watchedOf, ensureSeasons } from './seasons.js';
 import { queueMovieRuntimes } from './catalog.js';
@@ -13,7 +13,7 @@ export function periodRange(period, today = todayStr()) {
 const inRange = (d, r) => (!r.from || d >= r.from) && (!r.to || d <= r.to);
 
 // Bir kullanicinin kitaplarindan gun-bazli birlesik model
-export function userModel(db, userId, period = 'all', today = todayStr()) {
+export function userModel(db, userId, period = 'all', today = userToday(db, userId)) {
   const range = periodRange(period, today);
   const entries = db.prepare("SELECT * FROM entries WHERE user_id=? AND type='book' AND status<>'planlandi'").all(userId);
   const days = new Map(); // date -> {real, est, books:Set(title)}
@@ -58,8 +58,13 @@ export function recordOf(model) {
   return best;
 }
 
-export function streaksOf(db, userId, today = todayStr()) {
-  const rows = db.prepare('SELECT DISTINCT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 AND no_streak=0 ORDER BY date').all(userId).map((r) => r.date);
+// Seri gunleri: gercek (tahmini/dolgu olmayan) okuma gunleri + kisinin takvimden elle isaretledigi gunler
+export function streakDates(db, userId) {
+  return db.prepare('SELECT date FROM reading_logs WHERE user_id=? AND pages_read>0 AND estimated=0 AND no_streak=0 UNION SELECT date FROM streak_days WHERE user_id=? ORDER BY date').all(userId, userId).map((r) => r.date);
+}
+
+export function streaksOf(db, userId, today = userToday(db, userId)) {
+  const rows = streakDates(db, userId);
   let longest = 0;
   let run = 0;
   let prev = null;
@@ -131,7 +136,7 @@ export function backfillMediaInfo(db, userId) {
 }
 
 export function userStats(db, user, period = 'all') {
-  const today = todayStr();
+  const today = userToday(db, user.id);
   const m = userModel(db, user.id, period, today);
   const st = streaksOf(db, user.id, today);
   const range = m.range;

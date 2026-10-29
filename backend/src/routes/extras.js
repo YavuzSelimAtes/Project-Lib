@@ -1,5 +1,5 @@
 import { requireUser, requireAdmin } from '../auth.js';
-import { err, bad, int, oneOf, todayStr, publicUser } from '../util.js';
+import { err, bad, int, oneOf, todayStr, userToday, publicUser } from '../util.js';
 import { norm } from '../services/sources.js';
 import { notify } from '../services/notify.js';
 import { catalogOut } from '../services/catalog.js';
@@ -119,7 +119,7 @@ export default async function routes(app) {
     const all = req.query.all === '1' || req.query.all === 'true';
     const users = db.prepare("SELECT id,display_name,avatar,color FROM users WHERE active=1 AND role<>'admin' ORDER BY display_name COLLATE NOCASE").all();
     const out = users.map((u) => {
-      const readToday = !!db.prepare('SELECT 1 FROM reading_logs WHERE user_id=? AND date=? AND pages_read>0').get(u.id, today);
+      const readToday = !!db.prepare('SELECT 1 FROM reading_logs WHERE user_id=? AND date=? AND pages_read>0').get(u.id, userToday(db, u.id));
       const activeBooks = db.prepare("SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='book' AND status='devam'").get(u.id).c;
       const anyBook = !!db.prepare("SELECT 1 FROM entries WHERE user_id=? AND type='book'").get(u.id);
       return {

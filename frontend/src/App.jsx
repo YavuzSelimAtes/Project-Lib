@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
 import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom';
 import { api } from './api.js';
-import { Avatar, Skeleton } from './ui.jsx';
+import { Avatar, Skeleton, setTimeZone } from './ui.jsx';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
@@ -117,6 +117,7 @@ export default function App() {
     );
   }
 
+  setTimeZone(user.tz); // tarih islemleri (bugun/dun) kisinin saat dilimine gore
   const isAdmin = user.role === 'admin';
   return (
     <AuthCtx.Provider value={{ user, refresh, editProfile: () => setProfileOpen(true) }}>

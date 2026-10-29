@@ -364,3 +364,12 @@ table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px 
   .hm-grid.is-year { --hm: 12px; gap: 2px; }
   .hm-grid.is-month { --hm: auto; gap: 3px; }
 }
+
+/* seri takvimi */
+.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 8px 0; }
+.sc-dow { text-align: center; }
+.sc-cell { aspect-ratio: 1; border: 1px solid var(--border, rgba(128, 128, 128, 0.3)); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 0.78rem; font-weight: 700; padding: 0; cursor: pointer; }
+.sc-cell[data-state='estimated'] { background: repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 4px, transparent 4px, transparent 8px); }
+.sc-cell[data-counted='true'] { background: var(--accent); color: #fff; border-color: transparent; }
+.sc-cell[data-today='true'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.sc-cell:disabled { cursor: default; }

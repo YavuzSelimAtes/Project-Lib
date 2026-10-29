@@ -5,6 +5,7 @@ import { Avatar, ErrorBox, Modal } from './ui.jsx';
 import PushSettings from './PushSettings.jsx';
 import DiceAvatarPicker from './DiceAvatarPicker.jsx';
 import { isDice } from './diceAvatar.js';
+import StreakCalendar from './StreakCalendar.jsx';
 
 export const COLORS = ['#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#22c55e', '#eab308', '#64748b', '#a16207'];
 
@@ -108,11 +109,27 @@ export function validateName(raw) {
   return { norm, error };
 }
 
+const DEFAULT_TZ = 'Europe/Istanbul';
+const deviceTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const tzList = (cur) => {
+  let l = [];
+  try { l = Intl.supportedValuesOf('timeZone'); } catch { l = [DEFAULT_TZ, 'Europe/Berlin', 'Europe/London', 'UTC']; }
+  return l.includes(cur) ? l : [cur, ...l];
+};
+const nowIn = (tz) => {
+  try {
+    const d = new Date();
+    return `${new Intl.DateTimeFormat('tr-TR', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(d)} (${new Intl.DateTimeFormat('tr-TR', { timeZone: tz, day: 'numeric', month: 'long' }).format(d)})`;
+  } catch { return ''; }
+};
+
 export default function ProfileEdit({ onClose }) {
   const { user, refresh } = useAuth();
   const [avatar, setAvatar] = useState(user.avatar || '🙂');
   const [color, setColor] = useState(user.color || COLORS[0]);
   const [name, setName] = useState(user.display_name || '');
+  const [tz, setTz] = useState(user.tz || DEFAULT_TZ);
+  const [calOpen, setCalOpen] = useState(false);
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -124,7 +141,8 @@ export default function ProfileEdit({ onClose }) {
   const { norm, error: nameError } = validateName(name);
   const nameDirty = touched && norm !== user.display_name;
   const nameInvalid = touched && !!nameError;
-  const dirty = avatar !== user.avatar || color !== user.color || nameDirty;
+  const tzDirty = tz !== (user.tz || DEFAULT_TZ);
+  const dirty = avatar !== user.avatar || color !== user.color || nameDirty || tzDirty;
 
   const tryClose = () => {
     if (done || !dirty || window.confirm('Kaydedilmemiş değişiklikler var. Yine de kapatılsın mı?')) onClose();
@@ -141,6 +159,7 @@ export default function ProfileEdit({ onClose }) {
       if (avatar !== user.avatar) body.avatar = avatar;
       if (color !== user.color) body.color = color;
       if (nameDirty) body.display_name = norm;
+      if (tzDirty) body.tz = tz;
       await api.updateProfile(body);
       await refresh();
       setDone(true);
@@ -201,6 +220,28 @@ export default function ProfileEdit({ onClose }) {
           )}
         </div>
 
+        <div className="field" style={{ marginTop: 12 }}>
+          <label htmlFor="tz-sel"><span>Saat dilimi</span></label>
+          <select id="tz-sel" value={tz} onChange={(e) => setTz(e.target.value)}>
+            {tzList(tz).map((z) => (
+              <option key={z} value={z}>{z === DEFAULT_TZ ? `${z} (Türkiye, varsayılan)` : z}</option>
+            ))}
+          </select>
+          <p className="small muted" style={{ margin: '4px 0 0' }}>
+            Şu an senin için saat {nowIn(tz)}. “Bugün” ve serin bu saate göre hesaplanır.
+            {deviceTz() !== tz && (
+              <> <button type="button" className="btn small ghost" onClick={() => setTz(deviceTz())}>Cihazımın saatini kullan ({deviceTz()})</button></>
+            )}
+          </p>
+        </div>
+
+        <div className="field" style={{ marginTop: 12 }}>
+          <span>Seri</span>
+          <div>
+            <button type="button" className="btn small ghost" onClick={() => setCalOpen(true)}>📅 Seriyi takvimden düzenle</button>
+          </div>
+        </div>
+
         <PushSettings uid={user.id} />
 
         <ErrorBox error={error} />
@@ -214,6 +255,7 @@ export default function ProfileEdit({ onClose }) {
           </button>
         </div>
       </form>
+      {calOpen && <StreakCalendar onClose={() => setCalOpen(false)} />}
     </Modal>
   );
 }

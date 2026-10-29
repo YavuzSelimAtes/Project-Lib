@@ -216,6 +216,11 @@ CREATE TABLE IF NOT EXISTS congrats (
   created_at TEXT NOT NULL,
   PRIMARY KEY (sender_id, entry_id)
 );
+CREATE TABLE IF NOT EXISTS streak_days (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  PRIMARY KEY (user_id, date)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -247,6 +252,7 @@ const COLUMNS = [
   // v9
   ['catalog', 'genre', 'TEXT'], // kitap turu: 'kurgu' | 'felsefe' (puanlama metrikleri bu ture gore)
   ['reading_logs', 'no_streak', 'INTEGER NOT NULL DEFAULT 0'], // gecmise dolgu satiri: ortalamaya girer, seri/rekora girmez
+  ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
 ];
 function migrate(db) {
   for (const [table, col, def] of COLUMNS) {

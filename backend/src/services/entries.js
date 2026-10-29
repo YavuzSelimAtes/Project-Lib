@@ -1,4 +1,4 @@
-import { addDays, diffDays, nowIso, round1, todayStr, publicUser, bad, err } from '../util.js';
+import { addDays, diffDays, nowIso, round1, todayStr, userToday, publicUser, bad, err } from '../util.js';
 import { catalogOut } from './catalog.js';
 import { editionBrief, getEdition } from './editions.js';
 import { seriesExtras } from './seasons.js';
@@ -13,7 +13,7 @@ export const pagesReadOf = (db, e) => {
 };
 
 // Bir kitap kaydinin gun-bazli sayfa modeli: Map(date -> {real, est}) + aralik + kaynak
-export function entryDayModel(db, e, today = todayStr()) {
+export function entryDayModel(db, e, today = userToday(db, e.user_id)) {
   const logs = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id);
   const days = new Map();
   let sumLogs = 0;
@@ -55,7 +55,7 @@ export function entryDayModel(db, e, today = todayStr()) {
   return { days, from, to, spanDays, pagesRead, remainder: Math.max(0, remainder), hasEst, hasLogs: logs.length > 0, excluded };
 }
 
-export function entryAvg(db, e, today = todayStr()) {
+export function entryAvg(db, e, today = userToday(db, e.user_id)) {
   if (e.type !== 'book') return { avg: null, source: null };
   const m = entryDayModel(db, e, today);
   if (e.status === 'planlandi' || !m.pagesRead) return { avg: null, source: null };
@@ -90,7 +90,7 @@ export function entryOut(db, e, { withCatalog = true, withUser = true } = {}) {
 
 // Gunluk ilerleme uygular (islem icinde cagrilmali). Entry satirini gunceller, sonuc dondurur.
 export function applyProgress(db, e, currentPage, date, { estimate = false } = {}) {
-  const today = todayStr();
+  const today = userToday(db, e.user_id);
   if (date > today) throw bad('Gelecek bir tarih icin ilerleme girilemez', { date: 'gelecek tarih' });
   if (e.start_date && date < e.start_date) throw bad('Tarih baslangic tarihinden once olamaz', { date: 'baslangictan once' });
   if (currentPage < 0) throw bad('Sayfa negatif olamaz', { current_page: 'negatif' });
@@ -148,7 +148,7 @@ export const LATE_DAYS = 7; // bu kadar gunden eski gunlere sonradan girilen say
 
 // Kullanicinin "kac sayfa okudun?" diye sorulabilecek gunleri: satiri hic olmayan ('open') ve
 // tahmini ('estimated') gunler. 'Okumadim' (0) ve gercek girilmis gunler listelenmez.
-export function openDays(db, e, today = todayStr()) {
+export function openDays(db, e, today = userToday(db, e.user_id)) {
   if (e.type !== 'book' || e.status === 'planlandi') return [];
   const rows = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=?').all(e.id);
   const byDate = new Map(rows.map((r) => [r.date, r]));
@@ -173,7 +173,7 @@ export function openDays(db, e, today = todayStr()) {
 // Gercek (estimated=0) satir yazilir. Tahmini bir satir degistiriliyorsa fark diger tahmini satirlara dagitilir
 // (kullanicinin "su an X. sayfadayim" bilgisi bozulmasin); dagitilacak satir yoksa current_page degisir.
 export function setDayPages(db, e, date, pages, { add = false } = {}) {
-  const today = todayStr();
+  const today = userToday(db, e.user_id);
   if (e.type !== 'book') throw bad('Gunluk sayfa kaydi sadece kitaplar icindir');
   if (!e.total_pages) throw bad('Once kitabin toplam sayfa sayisini girin', { total_pages: 'gerekli' });
   if (date > today) throw bad('Gelecek bir gun icin kayit girilemez', { date: 'gelecek tarih' });
@@ -234,7 +234,7 @@ export function setDayPages(db, e, date, pages, { add = false } = {}) {
 //  mode 'spread': current_page, baslangic..dun gunlerine esit bolunur (artan son gunlere), TAHMINI (rekor/seri yok).
 // Baslangic bugunse tek gercek satir bugune yazilir.
 export function backfillLogs(db, e, mode, days) {
-  const today = todayStr();
+  const today = userToday(db, e.user_id);
   const cur = e.current_page;
   if (!(cur > 0)) return { rows: 0 };
   const ins = db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,no_streak) VALUES (?,?,?,?,?,?,?,?)');
