@@ -266,6 +266,13 @@ function migrate(db) {
     db.exec("UPDATE reading_logs SET no_streak=0 WHERE no_streak=1 AND estimated=0 AND entry_id IN (SELECT id FROM entries WHERE ABS(julianday(reading_logs.date) - julianday(substr(entries.created_at,1,10))) > 1)");
     db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('late_streak_v1', ?)").run(new Date().toISOString());
   }
+  // Veri duzeltmeleri (bir kez): (1) 'Sayfa guncelle' ile geri gidilince bugune yazilan negatif duzeltme satiri, geri kalan kayitlar zaten sayfa numarasina esitse silinir
+  // (yanlis girilen gun duzeltilince okunan toplam sayfa sayisi bozulmasin). (2) Tek basina duran tahmini gunler (kullanicinin kendi guncelledigi gun) seriye sayilir.
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='fix_neg_touched_v1'").get()) {
+    db.exec("DELETE FROM reading_logs WHERE pages_read<0 AND (SELECT COALESCE(SUM(r2.pages_read),0) FROM reading_logs r2 WHERE r2.entry_id=reading_logs.entry_id AND r2.id<>reading_logs.id) = (SELECT e.current_page-e.base_page FROM entries e WHERE e.id=reading_logs.entry_id AND e.status='devam')");
+    db.exec("UPDATE reading_logs SET touched=1 WHERE estimated=1 AND touched=0 AND no_streak=0 AND pages_read>0 AND NOT EXISTS (SELECT 1 FROM reading_logs r2 WHERE r2.entry_id=reading_logs.entry_id AND r2.estimated=1 AND r2.id<>reading_logs.id AND ABS(julianday(r2.date)-julianday(reading_logs.date))=1)");
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('fix_neg_touched_v1', ?)").run(new Date().toISOString());
+  }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {
     const upd = db.prepare('UPDATE catalog SET norm=? WHERE id=?');
