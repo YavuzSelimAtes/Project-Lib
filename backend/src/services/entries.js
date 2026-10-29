@@ -112,8 +112,9 @@ export function applyProgress(db, e, currentPage, date, { estimate = false } = {
       // Arada guncellenmemis gun varsa toplu sayfa bugune yazilir ama tahmini sayilir (rekor/seri sismesin)
       const gap = lastLog ? date > addDays(lastLog, 1) : !!(e.start_date && e.start_date < date);
       const est = estimate || gap || (!lastLog && !e.start_date) ? 1 : 0; // 'bitti' isaretiyle kapatilan kalan sayfalar tahmini sayilir (rekor sismesin)
-      if (row) db.prepare('UPDATE reading_logs SET pages_read=pages_read+?, page_to=?, estimated=MAX(estimated,?) WHERE id=?').run(delta, currentPage, est, row.id);
-      else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated) VALUES (?,?,?,?,?,?,?)').run(e.id, e.user_id, date, e.current_page, currentPage, delta, est);
+      const touched = estimate ? 0 : 1; // kullanici o gun kendisi guncelledi: tahmini satir da seriye sayilir ('bitti' ile kapatilan kalan sayfalar hariç)
+      if (row) db.prepare('UPDATE reading_logs SET pages_read=pages_read+?, page_to=?, estimated=MAX(estimated,?), touched=MAX(touched,?) WHERE id=?').run(delta, currentPage, est, touched, row.id);
+      else db.prepare('INSERT INTO reading_logs (entry_id,user_id,date,page_from,page_to,pages_read,estimated,touched) VALUES (?,?,?,?,?,?,?,?)').run(e.id, e.user_id, date, e.current_page, currentPage, delta, est, touched);
       estimated = !!est;
     }
   } else if (delta < 0) {
@@ -215,8 +216,13 @@ export function setDayPages(db, e, date, pages, { add = false, keepCurrent = fal
       diff = 0;
     }
   }
-  // keepCurrent: gunun sayfasi azaltilirken "su an X. sayfadayim" bilgisi ve diger gunlerin kayitlari AYNEN korunur (fazlalik baska gune dagitilmaz)
-  if (keepCurrent && diff < 0) diff = 0;
+  // keepCurrent: gunun sayfasi azaltilirken "su an X. sayfadayim" bilgisi ve diger gunlerin kayitlari AYNEN korunur (fazlalik baska gune dagitilmaz); toplam okunan sayfa azalir
+  if (keepCurrent && diff < 0) {
+    // toplam okunan sayfa da azalsin: azalan kadar sayfa 'kayittan once okunmus' (base_page) sayilir; sayfa numarasi ve diger gunler aynen kalir
+    const bump = Math.min(-diff, Math.max(0, current - (e.base_page || 0)));
+    if (bump > 0) db.prepare('UPDATE entries SET base_page=base_page+? WHERE id=?').run(bump, e.id);
+    diff = 0;
+  }
   current += diff;
   if (current < 0) throw bad('Sayfa sayisi 0\'in altina dusemez', { pages: 'cok dusuk' });
   if (current > e.total_pages) throw bad(`Toplam sayfa sayisini (${e.total_pages}) asiyor`, { pages: 'toplamdan buyuk' });
