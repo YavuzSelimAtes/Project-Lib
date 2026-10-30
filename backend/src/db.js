@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { norm } from './services/sources.js';
@@ -171,6 +172,12 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   user_agent TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_push_sub_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invite_token TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS account_links (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   group_id INTEGER NOT NULL
@@ -249,6 +256,7 @@ const COLUMNS = [
   ['reading_logs', 'no_streak', 'INTEGER NOT NULL DEFAULT 0'], // gecmise dolgu satiri: ortalamaya girer, seri/rekora girmez
   ['reading_logs', 'touched', 'INTEGER NOT NULL DEFAULT 0'], // kullanici o gun sayfa guncelledi (satir tahmini olsa bile seriye sayilir)
   ['reading_logs', 'note', 'TEXT'], // otomatik 0 gibi satirlara dusulen not
+  ['users', 'group_id', 'INTEGER'], // kullanicinin kutuphane grubu (groups.id)
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
 ];
 function migrate(db) {
@@ -272,6 +280,16 @@ function migrate(db) {
     db.exec("DELETE FROM reading_logs WHERE pages_read<0 AND (SELECT COALESCE(SUM(r2.pages_read),0) FROM reading_logs r2 WHERE r2.entry_id=reading_logs.entry_id AND r2.id<>reading_logs.id) = (SELECT e.current_page-e.base_page FROM entries e WHERE e.id=reading_logs.entry_id AND e.status='devam')");
     db.exec("UPDATE reading_logs SET touched=1 WHERE estimated=1 AND touched=0 AND no_streak=0 AND pages_read>0 AND NOT EXISTS (SELECT 1 FROM reading_logs r2 WHERE r2.entry_id=reading_logs.entry_id AND r2.estimated=1 AND r2.id<>reading_logs.id AND ABS(julianday(r2.date)-julianday(reading_logs.date))=1)");
     db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('fix_neg_touched_v1', ?)").run(new Date().toISOString());
+  }
+  // Gruplar (bir kez): her yoneticiye bir grup + katilim linki; mevcut tum uyeler ilk yoneticinin grubuna alinir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='groups_v1'").get()) {
+    const ins = db.prepare('INSERT INTO groups (owner_id,invite_token,created_at) VALUES (?,?,?)');
+    for (const a of db.prepare("SELECT id FROM users WHERE role='admin' ORDER BY id").all()) {
+      const g = ins.run(a.id, crypto.randomBytes(18).toString('base64url'), new Date().toISOString());
+      db.prepare('UPDATE users SET group_id=? WHERE id=?').run(g.lastInsertRowid, a.id);
+    }
+    db.exec('UPDATE users SET group_id=(SELECT MIN(id) FROM groups) WHERE group_id IS NULL');
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('groups_v1', ?)").run(new Date().toISOString());
   }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {

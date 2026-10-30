@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, oneOf, nowIso, normalizeDisplayName, validTz } from '../util.js';
 import { AVATAR_GROUPS, canonAvatar, diceAvatar } from '../avatars.js';
@@ -94,6 +94,52 @@ export default async function routes(app) {
 
   app.get('/api/auth/me', async (req) => ({ user: toUser(requireUser(req)) }));
 
+  // ---- katilim linki (grup) ----
+  const groupOf = (u) => {
+    let g = db.prepare('SELECT * FROM groups WHERE owner_id=?').get(u.id);
+    if (!g) {
+      const r = db.prepare('INSERT INTO groups (owner_id,invite_token,created_at) VALUES (?,?,?)').run(u.id, randomBytes(18).toString('base64url'), nowIso());
+      g = db.prepare('SELECT * FROM groups WHERE id=?').get(r.lastInsertRowid);
+    }
+    if (u.group_id !== g.id) db.prepare('UPDATE users SET group_id=? WHERE id=?').run(g.id, u.id);
+    return g;
+  };
+  app.get('/api/admin/invite', async (req) => ({ token: groupOf(requireAdmin(req)).invite_token }));
+  app.post('/api/admin/invite/regenerate', async (req) => {
+    const g = groupOf(requireAdmin(req));
+    const token = randomBytes(18).toString('base64url');
+    db.prepare('UPDATE groups SET invite_token=? WHERE id=?').run(token, g.id);
+    return { token };
+  });
+  const groupByToken = (t) => {
+    const g = typeof t === 'string' && t.length >= 16 && t.length <= 64
+      ? db.prepare('SELECT g.*, u.display_name owner_name FROM groups g JOIN users u ON u.id=g.owner_id WHERE g.invite_token=? AND u.active=1').get(t) : null;
+    if (!g) throw err(404, 'Davet linki gecersiz ya da yenilenmis');
+    return g;
+  };
+  app.get('/api/join/:token', async (req) => ({ owner_name: groupByToken(req.params.token).owner_name }));
+  app.post('/api/join/:token', async (req, reply) => {
+    const ipKey = `join|${req.ip}`;
+    checkRate(ipKey, ipKey);
+    const g = groupByToken(req.params.token);
+    const b = req.body || {};
+    const username = (str(b.username, { field: 'username', required: true, max: 32 }) || '').toLowerCase();
+    if (!USERNAME_RE.test(username)) throw bad('Kullanici adi 3-32 karakter, sadece a-z 0-9 . _ - olabilir', { username: 'gecersiz' });
+    if (b.display_name === undefined || b.display_name === null || b.display_name === '') throw bad('Hesap adi zorunludur', { display_name: 'zorunlu' });
+    const display_name = normalizeDisplayName(b.display_name, { min: 1 });
+    const password = parsePassword(b.password);
+    const avatar = listedAvatar(b.avatar);
+    const color = parseColor(b.color)?.toLowerCase() || PALETTE[0];
+    if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw err(409, 'Bu kullanici adi zaten alinmis', { username: 'alinmis' });
+    failRate(ipKey); // her kayit sayaci artirir: ayni IP'den 5 dk'da en fazla 10 kayit
+    const info = db.prepare("INSERT INTO users (username,display_name,password_hash,role,avatar,color,group_id,created_at) VALUES (?,?,?,'member',?,?,?,?)")
+      .run(username, display_name, await hashPassword(password), avatar, color, g.id, nowIso());
+    const { token, maxAge } = createSession(db, info.lastInsertRowid);
+    reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
+    reply.code(201);
+    return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
+  });
+
   // ---- bagli hesaplar ----
   const linkedOut = (u) => ({ id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color });
   app.get('/api/auth/linked', async (req) => {
@@ -116,8 +162,7 @@ export default async function routes(app) {
     return { user: toUser(target) };
   });
 
-  app.get('/api/avatars', async (req) => {
-    requireUser(req);
+  app.get('/api/avatars', async () => {
     return { groups: AVATAR_GROUPS };
   });
 
@@ -175,7 +220,7 @@ export default async function routes(app) {
   });
 
   app.post('/api/admin/users', async (req, reply) => {
-    requireAdmin(req);
+    const adm = requireAdmin(req);
     const b = req.body || {};
     const username = (str(b.username, { field: 'username', required: true, max: 32 }) || '').toLowerCase();
     if (!USERNAME_RE.test(username)) throw bad('Kullanici adi 3-32 karakter, sadece a-z 0-9 . _ - olabilir', { username: 'gecersiz' });
@@ -187,8 +232,8 @@ export default async function routes(app) {
     const avatar = b.avatar !== undefined && b.avatar !== null && b.avatar !== '' ? listedAvatar(b.avatar) : EMOJIS[n % EMOJIS.length];
     const color = parseColor(b.color) || PALETTE[n % PALETTE.length];
     if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw err(409, 'Bu kullanici adi zaten alinmis', { username: 'alinmis' });
-    const info = db.prepare('INSERT INTO users (username,display_name,password_hash,role,avatar,color,created_at) VALUES (?,?,?,?,?,?,?)')
-      .run(username, display_name, await hashPassword(password), role, avatar, color, nowIso());
+    const info = db.prepare('INSERT INTO users (username,display_name,password_hash,role,avatar,color,group_id,created_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(username, display_name, await hashPassword(password), role, avatar, color, groupOf(adm).id, nowIso());
     reply.code(201);
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
   });

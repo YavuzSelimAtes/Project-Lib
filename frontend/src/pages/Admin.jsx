@@ -175,6 +175,45 @@ function RequestCard({ r, reload }) {
 }
 
 /* ---------- kullanicilar ---------- */
+function InviteLink() {
+  const inv = useAsync(() => api.adminInvite(), []);
+  const [msg, setMsg] = useState('');
+  const url = inv.data ? `${window.location.origin}/katil/${inv.data.token}` : '';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setMsg('Kopyalandı');
+    } catch {
+      setMsg('Kopyalanamadı, linki elle seç');
+    }
+  };
+  const regen = async () => {
+    if (!window.confirm('Eski link çalışmaz olur. Yeni link oluşturulsun mu?')) return;
+    try {
+      await api.adminInviteRegen();
+      inv.reload();
+      setMsg('Yeni link oluşturuldu');
+    } catch (x) {
+      setMsg(x.message);
+    }
+  };
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Katılım linki</h2>
+      <p className="muted small">Bu linki paylaştığın kişi hesap açıp senin grubuna katılır.</p>
+      <ErrorBox error={inv.error} onRetry={inv.reload} />
+      {url && (
+        <div className="row">
+          <input type="text" readOnly value={url} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0 }} />
+          <button type="button" className="btn small" onClick={copy}>📋 Kopyala</button>
+          <button type="button" className="btn small ghost" onClick={regen}>Yenile</button>
+        </div>
+      )}
+      {msg && <p className="muted small" role="status">{msg}</p>}
+    </div>
+  );
+}
+
 function Users() {
   const { user: me } = useAuth();
   const users = useAsync(() => api.adminUsers(), []);
@@ -245,6 +284,7 @@ function Users() {
 
   return (
     <>
+      <InviteLink />
       <form className="card" onSubmit={add} style={{ marginBottom: 16 }}>
         <h2 style={{ marginTop: 0 }}>Kullanıcı ekle</h2>
         <div className="row" style={{ alignItems: 'stretch' }}>

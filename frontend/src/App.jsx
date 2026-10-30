@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom';
 import { api } from './api.js';
 import { Avatar, Skeleton, setTimeZone } from './ui.jsx';
 import Login from './pages/Login.jsx';
+import Join from './pages/Join.jsx';
 import Home from './pages/Home.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
 import Shelf from './pages/Shelf.jsx';
@@ -61,6 +62,7 @@ export default function App() {
   const [user, setUser] = useState(undefined); // undefined = yukleniyor, null = giris yok
   const [dark, toggleTheme] = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
+  const joinToken = (window.location.pathname.match(/^\/katil\/([\w-]+)\/?$/) || [])[1];
 
   // Cevrimdisi kuyruk: giris yapildiginda/acilista ve internet gelince gonder
   const loggedIn = !!user;
@@ -111,7 +113,7 @@ export default function App() {
   if (!user) {
     return (
       <>
-        <Login onLogin={setUser} />
+        {joinToken ? <Join token={joinToken} onLogin={setUser} /> : <Login onLogin={setUser} />}
         <ThemeBtn dark={dark} toggle={toggleTheme} floating />
       </>
     );
