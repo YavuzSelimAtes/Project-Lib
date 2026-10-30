@@ -257,6 +257,7 @@ const COLUMNS = [
   ['reading_logs', 'no_streak', 'INTEGER NOT NULL DEFAULT 0'], // gecmise dolgu satiri: ortalamaya girer, seri/rekora girmez
   ['reading_logs', 'touched', 'INTEGER NOT NULL DEFAULT 0'], // kullanici o gun sayfa guncelledi (satir tahmini olsa bile seriye sayilir)
   ['reading_logs', 'note', 'TEXT'], // otomatik 0 gibi satirlara dusulen not
+  ['groups', 'invite_name', 'TEXT'], // katilim sayfasinda 'X seni davet etti' adi (bos = yonetici hesap adi)
   ['groups', 'name', 'TEXT'], // grubun gorunen adi (bos = Aile Kutuphanesi)
   ['users', 'group_id', 'INTEGER'], // kullanicinin kutuphane grubu (groups.id)
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)

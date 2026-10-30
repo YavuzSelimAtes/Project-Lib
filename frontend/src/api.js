@@ -98,6 +98,7 @@ export const api = {
   joinInfo: (t) => request('GET', '/join/' + encodeURIComponent(t)),
   join: (t, body) => request('POST', '/join/' + encodeURIComponent(t), body),
   adminGroupName: (name) => request('PUT', '/admin/group-name', { name }),
+  adminInviteName: (name) => request('PUT', '/admin/invite-name', { name }),
   adminInvite: () => request('GET', '/admin/invite'),
   adminInviteRegen: () => request('POST', '/admin/invite/regenerate'),
   avatars: () => request('GET', '/avatars'),

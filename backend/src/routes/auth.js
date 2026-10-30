@@ -107,7 +107,16 @@ export default async function routes(app) {
     if (u.group_id !== g.id) db.prepare('UPDATE users SET group_id=? WHERE id=?').run(g.id, u.id);
     return g;
   };
-  app.get('/api/admin/invite', async (req) => ({ token: groupOf(requireAdmin(req)).invite_token }));
+  app.get('/api/admin/invite', async (req) => {
+    const g = groupOf(requireAdmin(req));
+    return { token: g.invite_token, invite_name: g.invite_name || '' };
+  });
+  app.put('/api/admin/invite-name', async (req) => {
+    const g = groupOf(requireAdmin(req));
+    const name = str((req.body || {}).name, { field: 'name', max: 40 });
+    db.prepare('UPDATE groups SET invite_name=? WHERE id=?').run(name || null, g.id);
+    return { invite_name: name || '' };
+  });
   app.post('/api/admin/invite/regenerate', async (req) => {
     const g = groupOf(requireAdmin(req));
     const token = randomBytes(18).toString('base64url');
@@ -120,7 +129,7 @@ export default async function routes(app) {
     if (!g) throw err(404, 'Davet linki gecersiz ya da yenilenmis');
     return g;
   };
-  app.get('/api/join/:token', async (req) => ({ owner_name: groupByToken(req.params.token).owner_name }));
+  app.get('/api/join/:token', async (req) => { const g = groupByToken(req.params.token); return { owner_name: g.invite_name || g.owner_name }; });
   app.post('/api/join/:token', async (req, reply) => {
     const ipKey = `join|${req.ip}`;
     checkRate(ipKey, ipKey);

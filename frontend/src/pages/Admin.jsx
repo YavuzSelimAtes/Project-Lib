@@ -229,8 +229,32 @@ function InviteLink() {
           <button type="button" className="btn small ghost" onClick={regen}>Yenile</button>
         </div>
       )}
+      {inv.data && <InviteName key={inv.data.invite_name} initial={inv.data.invite_name} fallback={user.display_name} setMsg={setMsg} />}
       {msg && <p className="muted small" role="status">{msg}</p>}
     </div>
+  );
+}
+
+function InviteName({ initial, fallback, setMsg }) {
+  const [v, setV] = useState(initial);
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api.adminInviteName(v.trim());
+      setV(r.invite_name);
+      setMsg('Davet eden adı kaydedildi');
+    } catch (x) {
+      setMsg(x.message);
+    }
+  };
+  return (
+    <form className="row" onSubmit={save} style={{ marginTop: 12 }}>
+      <label className="field grow" style={{ margin: 0 }}>
+        <span>Davet eden adı (katılım sayfasında "… seni davet etti")</span>
+        <input type="text" maxLength={40} value={v} placeholder={fallback} onChange={(e) => setV(e.target.value)} />
+      </label>
+      <button className="btn small" style={{ alignSelf: 'flex-end' }}>Kaydet</button>
+    </form>
   );
 }
 
