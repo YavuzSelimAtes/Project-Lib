@@ -97,6 +97,7 @@ export const api = {
   catalogSeasons: (id, refresh) => request('GET', `/catalog/${id}/seasons${qs({ refresh: refresh ? 1 : '' })}`),
   joinInfo: (t) => request('GET', '/join/' + encodeURIComponent(t)),
   join: (t, body) => request('POST', '/join/' + encodeURIComponent(t), body),
+  adminGroupName: (name) => request('PUT', '/admin/group-name', { name }),
   adminInvite: () => request('GET', '/admin/invite'),
   adminInviteRegen: () => request('POST', '/admin/invite/regenerate'),
   avatars: () => request('GET', '/avatars'),

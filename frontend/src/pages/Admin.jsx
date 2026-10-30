@@ -197,8 +197,28 @@ function InviteLink() {
       setMsg(x.message);
     }
   };
+  const { user, refresh } = useAuth();
+  const [gname, setGname] = useState(user.group_name || '');
+  const saveName = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api.adminGroupName(gname.trim());
+      setGname(r.group_name);
+      await refresh();
+      setMsg('Ad kaydedildi');
+    } catch (x) {
+      setMsg(x.message);
+    }
+  };
   return (
     <div className="card" style={{ marginBottom: 16 }}>
+      <form className="row" onSubmit={saveName} style={{ marginBottom: 12 }}>
+        <label className="field grow" style={{ margin: 0 }}>
+          <span>Kütüphane adı (sol üstte görünür)</span>
+          <input type="text" maxLength={40} value={gname} onChange={(e) => setGname(e.target.value)} />
+        </label>
+        <button className="btn small" style={{ alignSelf: 'flex-end' }}>Kaydet</button>
+      </form>
       <h2 style={{ marginTop: 0 }}>Katılım linki</h2>
       <p className="muted small">Bu linki paylaştığın kişi hesap açıp senin grubuna katılır.</p>
       <ErrorBox error={inv.error} onRetry={inv.reload} />

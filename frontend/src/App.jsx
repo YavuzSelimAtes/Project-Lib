@@ -126,7 +126,7 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-in">
           <Link to="/" className="brand">
-            <img src="/brand.png" alt="" width="28" height="28" /> <span>Aile Kütüphanesi</span>
+            <img src="/brand.png" alt="" width="28" height="28" /> <span>{user.group_name || 'Aile Kütüphanesi'}</span>
           </Link>
           <nav className="nav" aria-label="Ana menü">
             <NavLink to="/" end>

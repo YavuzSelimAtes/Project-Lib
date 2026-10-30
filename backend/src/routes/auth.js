@@ -62,6 +62,9 @@ function parseColor(v) {
 export default async function routes(app) {
   const db = app.db;
 
+  const DEFAULT_GROUP = 'Aile Kütüphanesi';
+  const withGroup = (u) => ({ ...toUser(u), group_name: (u.group_id && db.prepare('SELECT name FROM groups WHERE id=?').get(u.group_id)?.name) || DEFAULT_GROUP });
+
   app.post('/api/auth/login', async (req, reply) => {
     const b = req.body || {};
     const username = typeof b.username === 'string' ? b.username.trim().toLowerCase() : '';
@@ -81,7 +84,7 @@ export default async function routes(app) {
     attempts.delete(key);
     const { token, maxAge } = createSession(db, u.id);
     reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
-    return { user: toUser(u) };
+    return { user: withGroup(u) };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
@@ -92,7 +95,7 @@ export default async function routes(app) {
     return { ok: true };
   });
 
-  app.get('/api/auth/me', async (req) => ({ user: toUser(requireUser(req)) }));
+  app.get('/api/auth/me', async (req) => ({ user: withGroup(requireUser(req)) }));
 
   // ---- katilim linki (grup) ----
   const groupOf = (u) => {
@@ -137,7 +140,14 @@ export default async function routes(app) {
     const { token, maxAge } = createSession(db, info.lastInsertRowid);
     reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
     reply.code(201);
-    return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
+    return { user: withGroup(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
+  });
+
+  app.put('/api/admin/group-name', async (req) => {
+    const g = groupOf(requireAdmin(req));
+    const name = str((req.body || {}).name, { field: 'name', max: 40 });
+    db.prepare('UPDATE groups SET name=? WHERE id=?').run(name || null, g.id);
+    return { group_name: name || DEFAULT_GROUP };
   });
 
   // ---- bagli hesaplar ----
@@ -159,7 +169,7 @@ export default async function routes(app) {
     const { token, maxAge } = createSession(db, target.id);
     if (old) destroySession(db, old);
     reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
-    return { user: toUser(target) };
+    return { user: withGroup(target) };
   });
 
   app.get('/api/avatars', async () => {
