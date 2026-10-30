@@ -13,6 +13,8 @@ import { COOKIE, userFromToken, hashPassword } from './auth.js';
 import { HttpError, nowIso } from './util.js';
 import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
+import groupRoutes from './routes/groups.js';
+import meRoutes from './routes/me.js';
 import catalogRoutes from './routes/catalog.js';
 import requestRoutes from './routes/requests.js';
 import entryRoutes from './routes/entries.js';
@@ -118,7 +120,7 @@ export async function buildApp({ logger = true } = {}) {
   });
 
   app.get('/api/health', async () => ({ ok: true, time: nowIso() }));
-  for (const r of [adminRoutes, authRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes]) await app.register(r);
+  for (const r of [adminRoutes, authRoutes, groupRoutes, meRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes]) await app.register(r);
 
   await seedAdmin(db, app.log);
   // Kurator listesi (aranan ama bulunamayan kitaplar): veritabani kismi aninda, kapaklar arka planda. SEED_EXTRA=0 ile kapatilir.

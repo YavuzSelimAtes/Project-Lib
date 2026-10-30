@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from './api.js';
-import { useAuth } from './auth.js';
+import { useAuth, useGroup } from './auth.js';
+import { GroupPicker, VisEditor, visBody } from './Visibility.jsx';
 import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, langLabel, timeAgo, useAsync } from './ui.jsx';
 import EditionPicker from './Editions.jsx';
 import QuickUpdate, { OpenDays, DayEditor } from './QuickUpdate.jsx';
@@ -11,14 +12,17 @@ const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı
 
 export default function EntryDetail({ entryId, onClose, onChanged }) {
   const { user: me } = useAuth();
-  const detail = useAsync(() => api.entry(entryId), [entryId]);
-  const comments = useAsync(() => api.comments(entryId), [entryId]);
-  const questions = useAsync(() => api.questions(entryId), [entryId]);
+  const gid = useGroup();
+  const detail = useAsync(() => api.entry(entryId, gid), [entryId, gid]);
+  const comments = useAsync(() => api.comments(entryId, gid), [entryId, gid]);
+  const questions = useAsync(() => api.questions(entryId, gid), [entryId, gid]);
   const [version, setVersion] = useState(0);
 
   const e = detail.data?.entry;
   const mine = e && e.user_id === me.id;
   const cat = e?.catalog;
+  const vis = useAsync(() => (mine && me.groups?.length ? api.entryGroups(entryId) : Promise.resolve(null)), [entryId, mine]);
+  const visGroups = (vis.data?.groups || []).filter((g) => g.visible).map((g) => ({ id: g.id, name: g.name }));
 
   const changed = useCallback(() => {
     detail.reload();
@@ -79,6 +83,15 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
               {mine && e.type === 'book' && e.status === 'devam' && <PageFix e={e} onChanged={changed} />}
               {mine && e.type === 'book' && e.status !== 'planlandi' && <DayEditor entryId={e.id} onChanged={changed} />}
               {!mine && e.type !== 'movie' && <WishButton catalogId={cat.id} />}
+              {mine && vis.data && (
+                <VisEditor
+                  label="Kimler görsün"
+                  groups={vis.data.groups.map((g) => ({ id: g.id, name: g.name }))}
+                  ids={visGroups.map((g) => g.id)}
+                  save={(body) => api.setEntryGroups(entryId, body)}
+                  onSaved={() => { vis.reload(); onChanged?.(); comments.reload(); }}
+                />
+              )}
               {mine && <OwnerActions e={e} onChanged={changed} onClose={onClose} />}
             </div>
           </div>
@@ -97,7 +110,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
           <h3>❓ Sorular</h3>
           <Questions key={'q' + version} state={questions} entryId={entryId} mine={mine} />
           <h3>💬 Yorumlar</h3>
-          <Comments state={comments} entryId={entryId} />
+          <Comments state={comments} entryId={entryId} visGroups={mine ? visGroups : null} />
         </>
       )}
     </Modal>
@@ -220,6 +233,8 @@ function WishButton({ catalogId }) {
 
 // ayni eseri okuyan / izleyen diger aile uyeleri
 function Others({ catalogId, selfEntryId, onOpen }) {
+  const { user: me } = useAuth();
+  const gid = useGroup() ?? me.groups?.[0]?.id;
   const { data } = useAsync(() => api.catalogItem(catalogId), [catalogId]);
   const list = (data?.entries || []).filter((x) => x.id !== selfEntryId);
   if (!list.length) return null;
@@ -229,7 +244,7 @@ function Others({ catalogId, selfEntryId, onOpen }) {
       <b className="small">Ailede bunu da:</b>
       <div className="row" style={{ marginTop: 4 }}>
         {list.map((x) => (
-          <Link key={x.id} to={`/uye/${x.user.id}`} onClick={onOpen} className="chip" style={{ textDecoration: 'none' }}>
+          <Link key={x.id} to={gid ? `/g/${gid}/uye/${x.user.id}` : '/ben'} onClick={onOpen} className="chip" style={{ textDecoration: 'none' }}>
             <Avatar user={x.user} size="xs" /> {x.user.display_name} · {label[x.status]}
             {x.rating ? ` ${'⭐'.repeat(x.rating)}` : ''}
           </Link>
@@ -292,9 +307,11 @@ function OwnerActions({ e, onChanged, onClose }) {
   );
 }
 
-function Comments({ state, entryId }) {
+function Comments({ state, entryId, visGroups }) {
   const { user: me } = useAuth();
   const [text, setText] = useState('');
+  const [pick, setPick] = useState(null); // null = hepsi (varsayilan)
+  const sel = pick ?? (visGroups || []).map((g) => g.id);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const list = state.data?.comments || [];
@@ -304,7 +321,7 @@ function Comments({ state, entryId }) {
     setBusy(true);
     setErr(null);
     try {
-      await api.addComment(entryId, text.trim());
+      await api.addComment(entryId, text.trim(), visBody(visGroups, sel));
       setText('');
       state.reload();
     } catch (x) {
@@ -343,6 +360,9 @@ function Comments({ state, entryId }) {
           </div>
           <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.body}</div>
           <Reactions comment={c} />
+          {c.user_id === me.id && c.group_ids && visGroups?.length > 0 && (
+            <VisEditor label="Yorumu görenler" groups={visGroups} ids={c.group_ids} save={(b) => api.setCommentGroups(c.id, b)} onSaved={state.reload} />
+          )}
         </div>
       ))}
       <form onSubmit={send} className="row" style={{ marginTop: 8, flexWrap: 'nowrap' }}>
@@ -351,6 +371,12 @@ function Comments({ state, entryId }) {
           Gönder
         </button>
       </form>
+      {visGroups?.length > 1 && (
+        <div style={{ marginTop: 6 }}>
+          <span className="small muted">Bu yorumu görecek gruplar:</span>
+          <GroupPicker groups={visGroups} value={sel} onChange={setPick} />
+        </div>
+      )}
       <ErrorBox error={err} />
     </div>
   );

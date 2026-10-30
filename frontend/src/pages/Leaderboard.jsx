@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
+import { useGroup } from '../auth.js';
 import { Avatar, CountUp, Empty, ErrorBox, Skeleton, fmtDate, useAsync } from '../ui.jsx';
 
 const BOARDS = [
@@ -30,7 +31,8 @@ function detailText(kind, d) {
 
 // Seri sekmesi: buton eklemeden iki sıralama alt alta (güncel seri + en uzun seri)
 function StreakBoard({ kind, title, note }) {
-  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind), [kind]);
+  const gid = useGroup();
+  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind, undefined, gid), [kind, gid]);
   const list = data?.entries || [];
   return (
     <>
@@ -65,11 +67,12 @@ function StreakBoard({ kind, title, note }) {
 }
 
 export default function Leaderboard() {
+  const gid = useGroup();
   const [kind, setKind] = useState('record');
   const [period, setPeriod] = useState('all');
   const board = BOARDS.find((b) => b.key === kind);
   const isStreak = kind === 'streak';
-  const { data, error, loading, reload } = useAsync(() => (isStreak ? Promise.resolve(null) : api.leaderboard(kind, period)), [kind, period]);
+  const { data, error, loading, reload } = useAsync(() => (isStreak ? Promise.resolve(null) : api.leaderboard(kind, period, gid)), [kind, period, gid]);
   const list = data?.entries || [];
   const top = list.filter((e) => e.rank <= 3).slice(0, 3);
   const rest = list.filter((e) => !top.includes(e));

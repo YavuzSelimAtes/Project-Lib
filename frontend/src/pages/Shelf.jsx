@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../auth.js';
+import { useAuth, useGroup } from '../auth.js';
 import { CountUp, Cover, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
 import Calendars from '../Calendar.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
@@ -24,16 +24,17 @@ const fmt = (n, d = 0) => (n ?? 0).toLocaleString('tr-TR', { maximumFractionDigi
 export default function Shelf() {
   const { user: me, editProfile } = useAuth();
   const params = useParams();
-  const uid = params.id ? Number(params.id) : me.id;
+  const gid = useGroup();
+  const uid = params.userId ? Number(params.userId) : me.id;
   const own = uid === me.id;
   const [filter, setFilter] = useState('all');
   const [period, setPeriod] = useState('all');
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
 
-  const stats = useAsync(() => api.stats(uid, period), [uid, period]);
+  const stats = useAsync(() => api.stats(uid, period, undefined, gid), [uid, period, gid]);
   const [calRev, setCalRev] = useState(0);
-  const entries = useAsync(() => api.entries({ user_id: uid, type: filter === 'all' ? '' : filter, limit: 200 }), [uid, filter]);
+  const entries = useAsync(() => api.entries({ user_id: uid, type: filter === 'all' ? '' : filter, limit: 200, group: gid }), [uid, filter, gid]);
   const pending = useAsync(() => (own ? api.pending() : Promise.resolve(null)), [own]);
   const requests = useAsync(() => (own ? api.myRequests() : Promise.resolve(null)), [own]);
 
@@ -55,7 +56,7 @@ export default function Shelf() {
     return (
       <Empty icon="🔍" title="Bu üye bulunamadı">
         <div style={{ marginTop: 12 }}>
-          <Link className="btn" to="/">Ana sayfaya dön</Link>
+          <Link className="btn" to={gid ? `/g/${gid}` : '/ben'}>Geri dön</Link>
         </div>
       </Empty>
     );
@@ -65,12 +66,12 @@ export default function Shelf() {
     <>
       <div className="shelf-head">
         <div className="grow">
-          <h1>{own ? 'Benim rafım' : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}</h1>
+          <h1>{own ? (gid ? 'Rafım' : 'Hesabım') : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}</h1>
           <p className="sub" style={{ marginBottom: 8 }}>
-            {own ? 'Okuduklarım, izlediklerim ve rakamlarım.' : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
+            {own ? (gid ? 'Bu grupta görünen kayıtlarım.' : 'Okuduklarım, izlediklerim ve rakamlarım; kimlerin göreceğini buradan ayarlarsın.') : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
           </p>
         </div>
-        {own && (
+        {own && !gid && (
           <div className="shelf-actions">
             <button className="btn ghost" onClick={editProfile}>
               ✏️ Profili düzenle
@@ -107,7 +108,7 @@ export default function Shelf() {
         )
       )}
 
-      <Calendars uid={uid} filter={filter} rev={calRev} />
+      <Calendars uid={uid} filter={filter} rev={calRev} group={gid} />
 
       {own && pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -151,6 +152,8 @@ export default function Shelf() {
           </button>
         ))}
       </div>
+
+      {own && !gid && me.groups?.length > 0 && entries.data?.entries.length > 0 && <BulkVisibility entries={entries.data.entries} onDone={entries.reload} />}
 
       {own && requests.data?.requests?.length > 0 && (
         <>
@@ -259,5 +262,34 @@ function StatCards({ s, type, animate }) {
       <div className="stats fade-in">{cards.filter(Boolean)}</div>
       {epUnk && (type === 'series' || type === 'all') && <p className="small muted" style={{ marginTop: -8 }}>Sezon bilgisi olmayan dizilerde bölümler sayılamadı; gerçek sayı daha yüksek olabilir.</p>}
     </>
+  );
+}
+
+// Gorunen tum kayitlarin gruplarini tek seferde ac/kapat
+function BulkVisibility({ entries, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const run = async (all) => {
+    const text = all ? 'Listedeki ' + entries.length + ' kaydın hepsi tüm gruplarına açılsın mı?' : 'Listedeki ' + entries.length + ' kaydın hepsi gruplardan gizlensin mi? (Sadece sen görürsün; serin ve istatistiklerin etkilenmez.)';
+    if (!window.confirm(text)) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      for (const e of entries) await api.setEntryGroups(e.id, all ? { all: true } : { none: true });
+      setMsg(all ? 'Hepsi gruplarına açıldı.' : 'Hepsi gizlendi.');
+      onDone();
+    } catch (x) {
+      setMsg(x.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="small row" style={{ margin: '10px 0' }}>
+      <span className="muted">Toplu görünürlük:</span>
+      <button className="btn small ghost" disabled={busy} onClick={() => run(true)}>Hepsi gruplarıma açık</button>
+      <button className="btn small ghost" disabled={busy} onClick={() => run(false)}>Hiçbiri (sadece ben)</button>
+      <span role="status">{msg}</span>
+    </div>
   );
 }

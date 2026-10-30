@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { useGroup } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, Modal, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { RatingBadge, Reactions, genreLabel } from '../Rating.jsx';
 
@@ -15,15 +16,16 @@ export default function Library() {
     const t = setTimeout(() => setDq(q.trim()), 350);
     return () => clearTimeout(t);
   }, [q]);
-  const lib = useAsync(() => api.library({ q: dq, genre, sort, limit: 60 }), [dq, genre, sort]);
+  const gid = useGroup();
+  const lib = useAsync(() => api.library({ q: dq, genre, sort, limit: 60, group: gid }), [dq, genre, sort, gid]);
   const items = lib.data?.items || [];
   const [added, setAdded] = useState([]); // bu oturumda listeme eklenenler
   const onAdded = (id) => setAdded((a) => [...a, id]);
 
   return (
     <>
-      <h1>Kitaplık</h1>
-      <p className="sub">Ailenin okuduğu tüm kitaplar, puanlar ve yorumlar.</p>
+      {!gid && <h1>Kitaplık</h1>}
+      <p className="sub">{gid ? 'Bu gruptaki üyelerin okuduğu ve izlediği her şey.' : 'Uygulamadaki tüm kitaplar, puanlar ve yorumlar.'}</p>
       <div className="row" style={{ marginBottom: 12 }}>
         <input type="search" className="grow" placeholder="Kitap adı + yazar ara (örn. Gora Tagore)…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Kitap ara" />
         <select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Tür">
@@ -104,9 +106,10 @@ function AddToList({ catalogId, mine, onAdded }) {
 const READ_LABEL ={ devam: 'okuyor', bitti: 'bitirdi', birakildi: 'bıraktı' };
 
 function BookDetail({ id, added, onAdded, onClose }) {
-  const d = useAsync(() => api.libraryItem(id), [id]);
-  const comments = useAsync(() => api.libraryComments(id, { limit: 100 }), [id]);
-  const questions = useAsync(() => api.libraryQuestions(id, { limit: 100 }), [id]);
+  const gid = useGroup();
+  const d = useAsync(() => api.libraryItem(id, gid), [id, gid]);
+  const comments = useAsync(() => api.libraryComments(id, { limit: 100, group: gid }), [id, gid]);
+  const questions = useAsync(() => api.libraryQuestions(id, { limit: 100, group: gid }), [id, gid]);
   const it = d.data?.item;
   const rating = d.data?.rating;
   const cl = comments.data?.comments || [];

@@ -70,9 +70,12 @@ export function pushOwnEvent(db, userId, { title, body }) {
 const THROTTLE_MS = 2 * 3600 * 1000;
 const lastProgress = new Map(); // userId -> son push zamani (bellekte; yeniden baslayinca sifirlanir)
 
-function familyTargets(db, exceptUserId) {
-  return db.prepare(`SELECT u.id FROM users u LEFT JOIN push_prefs p ON p.user_id=u.id
-    WHERE u.active=1 AND u.id<>? AND COALESCE(p.family_updates,1)=1 AND EXISTS (SELECT 1 FROM push_subscriptions s WHERE s.user_id=u.id)`).all(exceptUserId);
+// Yalniz kaydin gorunur oldugu gruplarin uyeleri; gids: o kisiyle kaydin ortak gruplari
+function familyTargets(db, e) {
+  return db.prepare(`SELECT u.id, GROUP_CONCAT(eg.group_id) gids FROM users u JOIN group_members m ON m.user_id=u.id JOIN entry_groups eg ON eg.group_id=m.group_id AND eg.entry_id=?
+    LEFT JOIN push_prefs p ON p.user_id=u.id
+    WHERE u.active=1 AND u.id<>? AND COALESCE(p.family_updates,1)=1 AND EXISTS (SELECT 1 FROM push_subscriptions s WHERE s.user_id=u.id) GROUP BY u.id`).all(e.id, e.user_id)
+    .map((r) => ({ id: r.id, gids: String(r.gids).split(',').map(Number) }));
 }
 const nameOf = (db, id) => db.prepare('SELECT display_name FROM users WHERE id=?').get(id)?.display_name || 'Biri';
 const titleOf = (db, e) => db.prepare('SELECT title FROM catalog WHERE id=?').get(e.catalog_id)?.title || 'bir kayıt';
@@ -83,13 +86,18 @@ export function familyProgressPush(db, e, { now = Date.now() } = {}) {
   try {
     const last = lastProgress.get(e.user_id) || 0;
     if (now - last < THROTTLE_MS) return;
-    const targets = familyTargets(db, e.user_id);
+    const targets = familyTargets(db, e);
     if (!targets.length) return;
-    const total = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE user_id=? AND date=?').get(e.user_id, userToday(db, e.user_id)).s;
-    if (total <= 0) return;
+    const day = userToday(db, e.user_id);
+    // toplam: yalniz hedefle ortak gruplarda gorunen kayitlardaki sayfalar
+    const totalFor = (gids) => db.prepare(`SELECT COALESCE(SUM(l.pages_read),0) s FROM reading_logs l WHERE l.user_id=? AND l.date=? AND EXISTS (SELECT 1 FROM entry_groups eg WHERE eg.entry_id=l.entry_id AND eg.group_id IN (${gids.join(',')}))`).get(e.user_id, day).s;
+    if (totalFor(targets.flatMap((t) => t.gids)) <= 0) return;
     lastProgress.set(e.user_id, now);
-    const body = `${nameOf(db, e.user_id)} bugün toplam ${total} sayfa okudu 📖 (${titleOf(db, e)})`;
-    for (const t of targets) sendPush(db, t.id, { title: 'Aile Kütüphanesi', body, url: '/', tag: `progress-${e.user_id}` });
+    for (const t of targets) {
+      const total = totalFor(t.gids);
+      if (total <= 0) continue;
+      sendPush(db, t.id, { title: 'Aile Kütüphanesi', body: `${nameOf(db, e.user_id)} bugün toplam ${total} sayfa okudu 📖 (${titleOf(db, e)})`, url: '/', tag: `progress-${e.user_id}` });
+    }
   } catch { /* onemsiz */ }
 }
 
@@ -97,7 +105,7 @@ export function familyProgressPush(db, e, { now = Date.now() } = {}) {
 export function familyStartedPush(db, e) {
   if (!enabled) return;
   try {
-    const targets = familyTargets(db, e.user_id);
+    const targets = familyTargets(db, e);
     if (!targets.length) return;
     const who = nameOf(db, e.user_id);
     const t = titleOf(db, e);
@@ -110,7 +118,7 @@ export function familyStartedPush(db, e) {
 export function familyFinishedPush(db, e) {
   if (!enabled) return;
   try {
-    const targets = familyTargets(db, e.user_id);
+    const targets = familyTargets(db, e);
     if (!targets.length) return;
     const t = titleOf(db, e);
     const who = nameOf(db, e.user_id);

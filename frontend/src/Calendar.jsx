@@ -80,12 +80,12 @@ function prefersReducedMotion() {
 }
 
 // Gorunum secici + (secili turler icin) takvimler. Tek istekle aralik verisi gelir.
-export default function Calendars({ uid, filter, rev = 0 }) {
+export default function Calendars({ uid, filter, rev = 0, group = null }) {
   const todayKey = today();
   const [ty, tm] = todayKey.split('-').map(Number);
   const [view, setView] = useState({ mode: '3m', year: ty, month: tm - 1 });
   const { keys, from, to } = useMemo(() => buildRange(view, todayKey), [view, todayKey]);
-  const cal = useAsync(() => api.calendar(uid, from, to), [uid, from, to, rev]);
+  const cal = useAsync(() => api.calendar(uid, from, to, group), [uid, from, to, rev, group]);
 
   const atMax = view.mode === 'month' ? view.year * 12 + view.month >= ty * 12 + tm - 1 : view.year >= ty;
   const step = (dir) =>

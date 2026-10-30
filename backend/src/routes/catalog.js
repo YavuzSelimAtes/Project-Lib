@@ -1,5 +1,6 @@
 import fs from 'node:fs';
-import { requireUser, requireAdmin } from '../auth.js';
+import { requireUser, requireCatalogEditor } from '../auth.js';
+import { scopeGroup, viewerGroups, entryVisibleSql } from '../groups.js';
 import { err, bad, str, int, oneOf, publicUser } from '../util.js';
 import { markListed, catalogOut, searchLocal, onlineSearch, persistOnline, pickByKey, findExisting, insertCatalog, downloadCover, saveUploadedCover, coverFileFromUrl, normOf, finishPick } from '../services/catalog.js';
 import { setGenre, ratingSummary } from '../services/ratings.js';
@@ -139,7 +140,7 @@ export default async function routes(app) {
   });
 
   app.get('/api/catalog/:id', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     let row = db.prepare('SELECT * FROM catalog WHERE id=?').get(Number(req.params.id));
     if (!row) throw err(404, 'Katalog kaydi bulunamadi');
     if (row.type === 'book' && !row.description && row.source === 'openlibrary' && row.external_id) {
@@ -148,9 +149,11 @@ export default async function routes(app) {
         if (d) { db.prepare('UPDATE catalog SET description=? WHERE id=?').run(d, row.id); row = { ...row, description: d }; }
       } catch { /* aciklama yoksa sorun degil */ }
     }
-    const entries = db.prepare('SELECT * FROM entries WHERE catalog_id=? ORDER BY updated_at DESC').all(row.id);
+    // girdiler: yalniz bakanin gorebildikleri (kendi + uyesi oldugu gruplarda gorunenler; ?group= ile tek grup)
+    const groupId = scopeGroup(db, me, req.query.group);
+    const entries = db.prepare(`SELECT e.* FROM entries e WHERE e.catalog_id=? AND ${entryVisibleSql(me.id, viewerGroups(db, me.id, groupId), { own: !groupId })} ORDER BY e.updated_at DESC`).all(row.id);
     const editions = row.type === 'book' ? listEditions(db, row.id).editions : [];
-    const rs = row.type === 'book' ? ratingSummary(db, row.id, req.user.id) : null;
+    const rs = row.type === 'book' ? ratingSummary(db, row.id, req.user.id, groupId ? [groupId] : null) : null;
     return { item: { ...catalogOut(row), editions, ...(rs ? { rating_average: rs.average, rating_count: rs.count } : {}) }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false })), editions };
   });
 
@@ -187,7 +190,7 @@ export default async function routes(app) {
 
   // ---- admin ----
   app.get('/api/admin/catalog', async (req) => {
-    requireAdmin(req);
+    requireCatalogEditor(req);
     const type = oneOf(req.query.type, TYPES, { field: 'type' });
     const q = str(req.query.q, { field: 'q' });
     const limit = Math.min(int(req.query.limit, { min: 1, max: 200, field: 'limit' }) || 50, 200);
@@ -211,7 +214,7 @@ export default async function routes(app) {
   });
 
   app.post('/api/admin/catalog', async (req, reply) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
     const { fields, file } = await readBody(req);
     const data = parseCatalogFields(fields);
     const cover_url = (await resolveCover(fields, file)) ?? null;
@@ -220,18 +223,19 @@ export default async function routes(app) {
     if (same?.listed) throw err(409, 'Bu kayit katalogda zaten var');
     if (same) {
       const n = { ...same, ...data, cover_url: cover_url ?? same.cover_url };
-      db.prepare('UPDATE catalog SET title=?,author_or_creator=?,year=?,pages=?,description=?,cover_url=?,seasons=?,listed=1 WHERE id=?')
-        .run(n.title, n.author_or_creator, n.year, n.pages, n.description, n.cover_url, n.seasons, same.id);
+      db.prepare('UPDATE catalog SET title=?,author_or_creator=?,year=?,pages=?,description=?,cover_url=?,seasons=?,listed=1,created_by=COALESCE(created_by,?) WHERE id=?')
+        .run(n.title, n.author_or_creator, n.year, n.pages, n.description, n.cover_url, n.seasons, me.id, same.id);
       reply.code(201);
       return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(same.id)) };
     }
     const row = insertCatalog(db, { ...data, cover_url, source: 'manual' });
+    db.prepare('UPDATE catalog SET created_by=? WHERE id=?').run(me.id, row.id);
     reply.code(201);
     return { item: catalogOut(row) };
   });
 
   app.patch('/api/admin/catalog/:id', async (req) => {
-    requireAdmin(req);
+    requireCatalogEditor(req);
     const id = Number(req.params.id);
     const cur = db.prepare('SELECT * FROM catalog WHERE id=?').get(id);
     if (!cur) throw err(404, 'Katalog kaydi bulunamadi');
@@ -253,10 +257,12 @@ export default async function routes(app) {
   });
 
   app.delete('/api/admin/catalog/:id', async (req) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
     const id = Number(req.params.id);
     const cur = db.prepare('SELECT * FROM catalog WHERE id=?').get(id);
     if (!cur) throw err(404, 'Katalog kaydi bulunamadi');
+    // grup sahibi yalniz kendi ekledigini siler; eski/sistem kayitlarini sadece platform yoneticisi siler
+    if (me.role !== 'admin' && cur.created_by !== me.id) throw err(403, 'Bu katalog kaydini sadece ekleyen grup sahibi ya da platform yoneticisi silebilir');
     if (db.prepare('SELECT 1 FROM entries WHERE catalog_id=? LIMIT 1').get(id)) throw err(409, 'Bu kayda bagli kullanici girdileri var, silinemez');
     db.prepare('DELETE FROM catalog WHERE id=?').run(id);
     const f = coverFileFromUrl(cur.cover_url);
@@ -266,17 +272,18 @@ export default async function routes(app) {
 
   // Yanlis kitap isareti: kayit aramadan/gezmeden kalkar, elle ekleme ve sonraki otomatik eklemelerde cakisma yaratmaz
   app.post('/api/admin/catalog/:id/wrong', async (req) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
     const id = Number(req.params.id);
     const cur = db.prepare('SELECT * FROM catalog WHERE id=?').get(id);
     if (!cur) throw err(404, 'Katalog kaydi bulunamadi');
+    if (me.role !== 'admin' && cur.created_by !== me.id) throw err(403, 'Bu kaydi sadece ekleyen grup sahibi ya da platform yoneticisi isaretleyebilir');
     const wrong = (req.body || {}).wrong === false ? 0 : 1;
     db.prepare('UPDATE catalog SET wrong=?, listed=? WHERE id=?').run(wrong, wrong ? 0 : 1, id);
     return { item: catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(id)) };
   });
 
   app.post('/api/admin/catalog/import', async (req, reply) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
     const b = req.body || {};
     const type = oneOf(b.type, TYPES, { field: 'type', required: true });
     const query = str(b.query, { field: 'query', required: true, min: 2, max: 200 });
@@ -296,12 +303,13 @@ export default async function routes(app) {
     for (const r of items) await finishPick(db, r);
     reply.code(items.length ? 201 : 200);
     const preExisting = new Set(before.map((x) => x.id));
+    for (const r of items) if (!preExisting.has(r.id)) db.prepare('UPDATE catalog SET created_by=? WHERE id=? AND created_by IS NULL AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.catalog_id=catalog.id)').run(me.id, r.id);
     return { items: items.map((r) => ({ ...catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(r.id)), already_in_catalog: preExisting.has(r.id) })), online: { ok: online.errors.length === 0, errors: online.errors } };
   });
 
   // ---- admin: baskilar ----
   app.post('/api/admin/catalog/:id/editions', async (req, reply) => {
-    requireAdmin(req);
+    requireCatalogEditor(req);
     const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(Number(req.params.id));
     if (!cat) throw err(404, 'Katalog kaydi bulunamadi');
     if (cat.type !== 'book') throw bad('Baski sadece kitaplara eklenir');
@@ -322,7 +330,7 @@ export default async function routes(app) {
   });
 
   app.delete('/api/admin/editions/:id', async (req) => {
-    requireAdmin(req);
+    requireCatalogEditor(req);
     const id = Number(req.params.id);
     const ed = db.prepare('SELECT * FROM editions WHERE id=?').get(id);
     if (!ed) throw err(404, 'Baski bulunamadi');

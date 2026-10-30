@@ -3,11 +3,12 @@ import { err, bad, int, date as vdate, oneOf, userToday, nowIso, addDays, diffDa
 import { tx } from '../db.js';
 import { getEntry, entryOut, applyProgress, openDays, autoZeroDays, setDayPages, backfillLogs } from '../services/entries.js';
 import { pickByKey, finishPick, markListed } from '../services/catalog.js';
-import { userStats, backfillMediaInfo } from '../services/stats.js';
+import { userStats, backfillMediaInfo, groupScope } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
 import { setGenre } from '../services/ratings.js';
 import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
+import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql } from '../groups.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
 
@@ -25,12 +26,39 @@ function ratingOf(v) {
 export default async function routes(app) {
   const db = app.db;
 
+  // Baska kisinin verisine bakis kapsami: kendi verim -> null (tum kayitlar; ?group= verilirse o gruba acik olanlar);
+  // baskasi -> ortak grup gerekir (yoksa 403), yalniz o gruplarda gorunen kayitlar. Donus: scope fonksiyonu | null
+  const viewScope = (req, targetId) => {
+    const me = req.user;
+    const groupId = scopeGroup(db, me, req.query.group);
+    if (targetId === me.id) return groupId ? groupScope([groupId]) : null;
+    if (groupId) {
+      if (!memberRow(db, groupId, targetId)) throw err(403, 'Bu kisi bu grubun uyesi degil');
+      return groupScope([groupId]);
+    }
+    const common = commonGroups(db, me.id, targetId);
+    if (!common.length) throw err(403, 'Bu kisiyle ortak grubunuz yok');
+    return groupScope(common);
+  };
+
+  // user_id=ben -> tum kayitlarim (?group= ile o gruba acik olanlar); user_id=baska -> ortak gruplarda gorunenler;
+  // user_id yok -> ?group= varsa gruba acik tum kayitlar, yoksa benim kayitlarim
   app.get('/api/entries', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     const q = req.query;
     const where = [];
     const args = [];
-    if (q.user_id !== undefined) { where.push('user_id=?'); args.push(int(q.user_id, { field: 'user_id' })); }
+    const uid = q.user_id !== undefined ? int(q.user_id, { field: 'user_id' }) : null;
+    if (uid !== null) {
+      if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(uid)) throw err(404, 'Kullanici bulunamadi');
+      where.push('user_id=?'); args.push(uid);
+      const scope = viewScope(req, uid);
+      if (scope) where.push(scope('id'));
+    } else {
+      const groupId = scopeGroup(db, me, q.group);
+      if (groupId) where.push(entryVisibleSql(me.id, [groupId], { own: false, alias: 'entries' }));
+      else { where.push('user_id=?'); args.push(me.id); }
+    }
     if (q.type) { where.push('type=?'); args.push(oneOf(q.type, ['book', 'movie', 'series'], { field: 'type' })); }
     if (q.status) { where.push('status=?'); args.push(oneOf(q.status, STATUSES, { field: 'status' })); }
     const limit = Math.min(int(q.limit, { min: 1, max: 500, field: 'limit' }) || 100, 500);
@@ -42,14 +70,14 @@ export default async function routes(app) {
   });
 
   app.get('/api/entries/:id', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     const e = getEntry(db, Number(req.params.id));
-    if (!e) throw err(404, 'Kayit bulunamadi');
+    if (!e || !canSeeEntry(db, me.id, e, scopeGroup(db, me, req.query.group))) throw err(404, 'Kayit bulunamadi'); // ortak grupta gorunmuyorsa varligi sizdirilmaz
     const logs = db.prepare('SELECT date,pages_read,page_from,page_to,estimated FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id).map((l) => ({ ...l, estimated: !!l.estimated }));
     return {
       entry: entryOut(db, e),
       logs,
-      comment_count: db.prepare('SELECT COUNT(*) c FROM comments WHERE entry_id=?').get(e.id).c,
+      comment_count: db.prepare(`SELECT COUNT(*) c FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(me.id, viewerGroups(db, me.id, null))}`).get(e.id).c,
       question_count: db.prepare('SELECT COUNT(*) c FROM questions WHERE entry_id=?').get(e.id).c,
     };
   });
@@ -115,6 +143,7 @@ export default async function routes(app) {
     const now = nowIso();
     const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,season,episode,rating,created_at,updated_at,edition_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, season, episode, rating, now, now, ed ? ed.id : null);
+    defaultEntryGroups(db, info.lastInsertRowid, me.id); // varsayilan: kisinin tum gruplarinda gorunur
     if (backfill !== 'none') {
       try { backfillLogs(db, getEntry(db, info.lastInsertRowid), backfill, backDays); } catch (e) { db.prepare('DELETE FROM entries WHERE id=?').run(info.lastInsertRowid); throw e; }
     }
@@ -323,21 +352,23 @@ export default async function routes(app) {
     requireUser(req);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(Number(req.params.id));
     if (!u) throw err(404, 'Kullanici bulunamadi');
+    const scope = viewScope(req, u.id);
     const period = oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all';
     const type = oneOf(req.query.type, ['all', 'book', 'series', 'movie'], { field: 'type' }) || 'all';
     if (u.id === req.user.id) backfillMediaInfo(db, u.id); // sadece kendi rafinda (baskasinin rafi dis istek tetiklemesin) // eksik sezon bilgisi / film suresi arka planda doldurulur
-    return { type, period, ...userStats(db, u, period) };
+    return { type, period, ...userStats(db, u, period, scope) };
   });
 
   app.get('/api/users/:id/heatmap', async (req) => {
     requireUser(req);
     const id = Number(req.params.id);
     if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(id)) throw err(404, 'Kullanici bulunamadi');
+    const L = (col = 'entry_id') => { const sc = viewScope(req, id); return sc ? ` AND ${sc(col)}` : ''; };
     const n = Math.min(int(req.query.days, { min: 1, max: 730, field: 'days' }) || 90, 730);
     const from = addDays(userToday(db, id), -(n - 1));
     // Ayni gunde gercek + tahmini sayfa varsa: pages = GERCEK sayfa (estimated:false), tahmini kisim estimated_pages'te ayri doner.
     // Yalniz tahmini varsa: pages = tahmini sayfa, estimated:true. (Negatif duzeltme satirlari gercek toplamdan duser.)
-    const days = db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? GROUP BY date HAVING real_p + est_p > 0 ORDER BY date').all(id, from).map((r) => {
+    const days = db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=?' + L() + ' GROUP BY date HAVING real_p + est_p > 0 ORDER BY date').all(id, from).map((r) => {
       const real = Math.max(0, r.real_p);
       const est = Math.max(0, r.est_p);
       return real > 0 ? { date: r.date, pages: real, estimated: false, estimated_pages: est } : { date: r.date, pages: est, estimated: true, estimated_pages: est };
@@ -350,6 +381,7 @@ export default async function routes(app) {
     requireUser(req);
     const id = Number(req.params.id);
     if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(id)) throw err(404, 'Kullanici bulunamadi');
+    const L = (col = 'entry_id') => { const sc = viewScope(req, id); return sc ? ` AND ${sc(col)}` : ''; };
     const from = vdate(req.query.from, { field: 'from', required: true });
     const to = vdate(req.query.to, { field: 'to', required: true });
     if (to < from) throw bad('Bitis baslangictan once olamaz', { to: 'baslangictan once' });
@@ -360,7 +392,7 @@ export default async function routes(app) {
       return map.get(date);
     };
     // kitap: heatmap ucuyla ayni mantik
-    for (const r of db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? AND date<=? GROUP BY date').all(id, from, to)) {
+    for (const r of db.prepare('SELECT date, SUM(CASE WHEN estimated=0 THEN pages_read ELSE 0 END) real_p, SUM(CASE WHEN estimated=1 THEN pages_read ELSE 0 END) est_p FROM reading_logs WHERE user_id=? AND date>=? AND date<=?' + L() + ' GROUP BY date').all(id, from, to)) {
       const real = Math.max(0, r.real_p);
       const est = Math.max(0, r.est_p);
       if (real + est <= 0) continue;
@@ -368,19 +400,19 @@ export default async function routes(app) {
       d.pages = real > 0 ? real : est;
       d.estimated = real <= 0;
     }
-    for (const r of db.prepare('SELECT date, SUM(episodes) ep FROM series_progress WHERE user_id=? AND date>=? AND date<=? GROUP BY date').all(id, from, to)) {
+    for (const r of db.prepare('SELECT date, SUM(episodes) ep FROM series_progress WHERE user_id=? AND date>=? AND date<=?' + L() + ' GROUP BY date').all(id, from, to)) {
       if (r.ep > 0) day(r.date).episodes = r.ep;
     }
     // film: stats.js gibi bitti + end_date gunu
-    for (const r of db.prepare("SELECT end_date date, COUNT(*) n FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date>=? AND end_date<=? GROUP BY end_date").all(id, from, to)) {
+    for (const r of db.prepare("SELECT end_date date, COUNT(*) n FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date>=? AND end_date<=?" + L('id') + ' GROUP BY end_date').all(id, from, to)) {
       day(r.date).movies = r.n;
     }
-    for (const r of db.prepare('SELECT date, MAX(note) note FROM reading_logs WHERE user_id=? AND date>=? AND date<=? AND note IS NOT NULL GROUP BY date').all(id, from, to)) day(r.date).note = r.note;
+    for (const r of db.prepare('SELECT date, MAX(note) note FROM reading_logs WHERE user_id=? AND date>=? AND date<=? AND note IS NOT NULL' + L() + ' GROUP BY date').all(id, from, to)) day(r.date).note = r.note;
     const days = [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
     const first = {
-      book: db.prepare('SELECT MIN(date) d FROM reading_logs WHERE user_id=?').get(id).d || null,
-      series: db.prepare('SELECT MIN(date) d FROM series_progress WHERE user_id=?').get(id).d || null,
-      movie: db.prepare("SELECT MIN(end_date) d FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date IS NOT NULL").get(id).d || null,
+      book: db.prepare('SELECT MIN(date) d FROM reading_logs WHERE user_id=?' + L()).get(id).d || null,
+      series: db.prepare('SELECT MIN(date) d FROM series_progress WHERE user_id=?' + L()).get(id).d || null,
+      movie: db.prepare("SELECT MIN(end_date) d FROM entries WHERE user_id=? AND type='movie' AND status='bitti' AND end_date IS NOT NULL" + L('id')).get(id).d || null,
     };
     return { days, first };
   });

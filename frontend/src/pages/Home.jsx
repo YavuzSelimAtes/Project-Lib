@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../auth.js';
+import { useAuth, useGroup } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
@@ -55,7 +55,10 @@ function FeedItem({ it, mine, color, onOpen }) {
 
 export default function Home() {
   const { user: me } = useAuth();
-  const feed = useAsync(() => api.feed(), []);
+  const gid = useGroup();
+  const base = gid ? `/g/${gid}` : '/ben';
+  const shelfTo = (c) => (gid ? (c.user.id === me.id ? `${base}/rafim` : `${base}/uye/${c.user.id}`) : '/ben');
+  const feed = useAsync(() => api.feed(gid), [gid]);
   const pending = useAsync(() => api.pending(), []);
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -82,8 +85,8 @@ export default function Home() {
 
   return (
     <>
-      <h1>Son güncellemeler</h1>
-      <p className="sub">Ailede kim ne okuyor, ne izliyor.</p>
+      {!gid && <h1>Son güncellemeler</h1>}
+      <p className="sub">{gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}</p>
 
       {pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -131,7 +134,7 @@ export default function Home() {
       <div className="grid">
         {sorted.map((c) => (
           <section key={c.user.id} className="card ucard" style={{ '--c': c.user.color }} aria-label={c.user.display_name}>
-            <Link to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`} className="ucard-head" style={{ textDecoration: 'none' }} title="Rafına bak">
+            <Link to={shelfTo(c)} className="ucard-head" style={{ textDecoration: 'none' }} title="Rafına bak">
               <Avatar user={c.user} />
               <div className="grow">
                 <b>{c.user.id === me.id ? 'Sen' : c.user.display_name}</b>
@@ -153,7 +156,7 @@ export default function Home() {
               <FeedItem key={it.entry_id} it={it} mine={c.user.id === me.id} color={c.user.color} onOpen={setOpenId} />
             ))}
             {c.more_count > 0 && (
-              <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`}>
+              <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={shelfTo(c)}>
                 {c.more_count} tane daha
               </Link>
             )}

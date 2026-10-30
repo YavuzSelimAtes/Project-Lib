@@ -2,6 +2,8 @@ import { requireUser } from '../auth.js';
 import { err, bad, str, int, nowIso, publicUser } from '../util.js';
 import { notify } from '../services/notify.js';
 import { getEntry } from '../services/entries.js';
+import { tx } from '../db.js';
+import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, commentAllowedGroups, parseVisibility, setCommentGroups, commentGroupIds, idList } from '../groups.js';
 
 export const REACTIONS = ['❤️', '👍', '😂', '😮', '🔥'];
 
@@ -19,7 +21,8 @@ export default async function routes(app) {
     }
     return { reactions, my_reaction: my };
   };
-  const commentOut = (c, meId = null) => ({ id: c.id, entry_id: c.entry_id, user_id: c.user_id, body: c.body, created_at: c.created_at, user: userOf(c.user_id), ...reactionsOf(c.id, meId) });
+  // group_ids: yorumun gorunur oldugu gruplar (yalniz yazarina doner)
+  const commentOut = (c, meId = null) => ({ id: c.id, entry_id: c.entry_id, user_id: c.user_id, body: c.body, created_at: c.created_at, user: userOf(c.user_id), ...(c.user_id === meId ? { group_ids: commentGroupIds(db, c.id) } : {}), ...reactionsOf(c.id, meId) });
   const questionOut = (q) => {
     const e = getEntry(db, q.entry_id);
     const cat = db.prepare('SELECT id,title,type,cover_url FROM catalog WHERE id=?').get(e.catalog_id);
@@ -29,26 +32,33 @@ export default async function routes(app) {
       entry: { id: e.id, user_id: e.user_id, catalog: cat, user: userOf(e.user_id) },
     };
   };
-  const needEntry = (id) => {
-    const e = getEntry(db, id);
-    if (!e) throw err(404, 'Kayit bulunamadi');
-    return e;
-  };
+  // Kayit, bakanin ortak grubunda gorunmuyorsa 404 (varligi sizdirilmaz)
+  const needEntry = (req, me) => needSeeEntry(db, me.id, Number(req.params.id), scopeGroup(db, me, req.query.group));
+  const visibleComment = (me, id, groupId = null) => db.prepare(`SELECT c.* FROM comments c WHERE c.id=? AND ${commentVisibleSql(me.id, viewerGroups(db, me.id, groupId), 'c')}`).get(id);
 
   // ---- yorumlar ----
   app.get('/api/entries/:id/comments', async (req) => {
     const me = requireUser(req);
-    const e = needEntry(Number(req.params.id));
-    return { comments: db.prepare('SELECT * FROM comments WHERE entry_id=? ORDER BY id').all(e.id).map((c) => commentOut(c, me.id)) };
+    const e = needEntry(req, me);
+    const gids = viewerGroups(db, me.id, scopeGroup(db, me, req.query.group));
+    return { comments: db.prepare(`SELECT c.* FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(me.id, gids)} ORDER BY c.id`).all(e.id).map((c) => commentOut(c, me.id)) };
   });
   app.post('/api/entries/:id/comments', async (req, reply) => {
     const me = requireUser(req);
-    const e = needEntry(Number(req.params.id));
-    const body = str((req.body || {}).body, { field: 'body', required: true, max: 2000 });
-    const info = db.prepare('INSERT INTO comments (entry_id,user_id,body,created_at) VALUES (?,?,?,?)').run(e.id, me.id, body, nowIso());
-    // kayit sahibine + ayni kayitta daha once yorum yapmis diger kisilere (yazar haric, herkese en fazla 1 bildirim)
-    const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id));
-    if (e.user_id !== me.id) targets.add(e.user_id);
+    const e = needEntry(req, me);
+    const b = req.body || {};
+    const body = str(b.body, { field: 'body', required: true, max: 2000 });
+    // gorunurluk: varsayilan kaydin gorunur oldugu (ve benim uye oldugum) tum gruplar; group_ids / none ile daraltilir
+    const groups = parseVisibility(b, commentAllowedGroups(db, e.id, me.id));
+    const info = tx(db, () => {
+      const i = db.prepare('INSERT INTO comments (entry_id,user_id,body,created_at) VALUES (?,?,?,?)').run(e.id, me.id, body, nowIso());
+      setCommentGroups(db, Number(i.lastInsertRowid), groups);
+      return i;
+    });
+    // yorumu gorebilen kisilere: kayit sahibi + ayni kayitta daha once yorum yapmis diger kisiler (yazar haric, herkese en fazla 1 bildirim)
+    const audience = new Set(groups.length ? db.prepare(`SELECT DISTINCT user_id FROM group_members WHERE group_id IN (${idList(groups)})`).all().map((r) => r.user_id) : []);
+    const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id).filter((u) => audience.has(u)));
+    if (e.user_id !== me.id && audience.has(e.user_id)) targets.add(e.user_id);
     for (const uid of targets) {
       const title = uid === e.user_id ? `${me.display_name}, "${entryTitle(e)}" kaydına yorum yazdı` : `${me.display_name}, yorum yazdığın "${entryTitle(e)}" kaydına yeni yorum yazdı`;
       notify(db, uid, { kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
@@ -59,7 +69,7 @@ export default async function routes(app) {
   // Yorum tepkisi: kisi basina yorum basina 1 emoji. Ayni emoji = kaldir, farkli emoji = degistir. emoji:null da kaldirir.
   app.put('/api/comments/:id/reaction', async (req) => {
     const me = requireUser(req);
-    const c = db.prepare('SELECT * FROM comments WHERE id=?').get(Number(req.params.id));
+    const c = visibleComment(me, Number(req.params.id), scopeGroup(db, me, req.query.group));
     if (!c) throw err(404, 'Yorum bulunamadi');
     const emoji = (req.body || {}).emoji;
     if (emoji !== null && emoji !== undefined && !REACTIONS.includes(emoji)) throw bad(`emoji su degerlerden biri olmali: ${REACTIONS.join(' ')}`, { emoji: 'gecersiz deger' });
@@ -83,17 +93,20 @@ export default async function routes(app) {
     const id = Number(req.params.id);
     needCat(id);
     const { limit, offset } = page(req.query);
-    const total = db.prepare('SELECT COUNT(*) c FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=?').get(id).c;
-    const rows = db.prepare('SELECT c.* FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=? ORDER BY c.id DESC LIMIT ? OFFSET ?').all(id, limit, offset);
+    // yalniz bakanin uyesi oldugu gruplara (?group= ile tek gruba) acik yorumlar + kendi yorumlari
+    const vis = commentVisibleSql(me.id, viewerGroups(db, me.id, scopeGroup(db, me, req.query.group)));
+    const total = db.prepare(`SELECT COUNT(*) c FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=? AND ${vis}`).get(id).c;
+    const rows = db.prepare(`SELECT c.* FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=? AND ${vis} ORDER BY c.id DESC LIMIT ? OFFSET ?`).all(id, limit, offset);
     return { comments: rows.map((c) => commentOut(c, me.id)), total };
   });
   app.get('/api/library/:id/questions', async (req) => {
-    requireUser(req);
+    const me = requireUser(req);
     const id = Number(req.params.id);
     needCat(id);
     const { limit, offset } = page(req.query);
-    const total = db.prepare('SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=?').get(id).c;
-    const rows = db.prepare('SELECT q.* FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? ORDER BY q.id DESC LIMIT ? OFFSET ?').all(id, limit, offset);
+    const vis = entryVisibleSql(me.id, viewerGroups(db, me.id, scopeGroup(db, me, req.query.group)));
+    const total = db.prepare(`SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis}`).get(id).c;
+    const rows = db.prepare(`SELECT q.* FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis} ORDER BY q.id DESC LIMIT ? OFFSET ?`).all(id, limit, offset);
     return { questions: rows.map(questionOut), total };
   });
   app.delete('/api/comments/:id', async (req) => {
@@ -105,15 +118,27 @@ export default async function routes(app) {
     return { ok: true };
   });
 
+  // Yorumun gorunurlugunu sonradan degistir (yalniz yazar): { group_ids: [..] } | { all: true } | { none: true }
+  app.put('/api/comments/:id/groups', async (req) => {
+    const me = requireUser(req);
+    const c = db.prepare('SELECT * FROM comments WHERE id=?').get(Number(req.params.id));
+    if (!c) throw err(404, 'Yorum bulunamadi');
+    if (c.user_id !== me.id) throw err(403, 'Sadece yorumun yazari gorunurlugu degistirebilir');
+    const b = req.body || {};
+    if (b.group_ids === undefined && b.all !== true && b.none !== true) throw bad('group_ids dizisi, all veya none gerekli', { group_ids: 'zorunlu' });
+    setCommentGroups(db, c.id, parseVisibility(b, commentAllowedGroups(db, c.entry_id, me.id)));
+    return { comment_id: c.id, group_ids: commentGroupIds(db, c.id) };
+  });
+
   // ---- soru-cevap ----
   app.get('/api/entries/:id/questions', async (req) => {
-    requireUser(req);
-    const e = needEntry(Number(req.params.id));
+    const me = requireUser(req);
+    const e = needEntry(req, me);
     return { questions: db.prepare('SELECT * FROM questions WHERE entry_id=? ORDER BY id').all(e.id).map(questionOut) };
   });
   app.post('/api/entries/:id/questions', async (req, reply) => {
     const me = requireUser(req);
-    const e = needEntry(Number(req.params.id));
+    const e = needEntry(req, me);
     if (e.user_id === me.id) throw bad('Kendi kaydiniza soru soramazsiniz');
     const question = str((req.body || {}).question, { field: 'question', required: true, max: 1000 });
     const info = db.prepare('INSERT INTO questions (entry_id,asker_id,question,created_at) VALUES (?,?,?,?)').run(e.id, me.id, question, nowIso());

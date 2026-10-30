@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
 import { err, bad, str, oneOf, nowIso, normalizeDisplayName, validTz } from '../util.js';
 import { AVATAR_GROUPS, canonAvatar, diceAvatar } from '../avatars.js';
+import { DEFAULT_GROUP, userGroups, ownedGroup, addMember } from '../groups.js';
+import { tx } from '../db.js';
 import { linkedUsers, pruneLinks, unlinkUser } from '../links.js';
 
 const attempts = new Map(); // anahtar -> {n, reset}
@@ -24,6 +26,7 @@ function failRate(key) {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const PALETTE = ['#f97316', '#10b981', '#6366f1', '#ec4899', '#eab308', '#14b8a6', '#8b5cf6', '#ef4444'];
 const EMOJIS = ['🦊', '🐼', '🦉', '🐙', '🦁', '🐸', '🐧', '🦄'];
@@ -62,8 +65,8 @@ function parseColor(v) {
 export default async function routes(app) {
   const db = app.db;
 
-  const DEFAULT_GROUP = 'Aile Kütüphanesi';
-  const withGroup = (u) => ({ ...toUser(u), group_name: (u.group_id && db.prepare('SELECT name FROM groups WHERE id=?').get(u.group_id)?.name) || DEFAULT_GROUP });
+  // group_name: birincil (ilk katildigi) grubun adi (eski istemciler icin); groups: tum uyelikler
+  const withGroup = (u) => { const groups = userGroups(db, u.id); return { ...toUser(u), group_name: groups[0]?.name || DEFAULT_GROUP, groups }; };
 
   app.post('/api/auth/login', async (req, reply) => {
     const b = req.body || {};
@@ -98,15 +101,7 @@ export default async function routes(app) {
   app.get('/api/auth/me', async (req) => ({ user: withGroup(requireUser(req)) }));
 
   // ---- katilim linki (grup) ----
-  const groupOf = (u) => {
-    let g = db.prepare('SELECT * FROM groups WHERE owner_id=?').get(u.id);
-    if (!g) {
-      const r = db.prepare('INSERT INTO groups (owner_id,invite_token,created_at) VALUES (?,?,?)').run(u.id, randomBytes(18).toString('base64url'), nowIso());
-      g = db.prepare('SELECT * FROM groups WHERE id=?').get(r.lastInsertRowid);
-    }
-    if (u.group_id !== g.id) db.prepare('UPDATE users SET group_id=? WHERE id=?').run(g.id, u.id);
-    return g;
-  };
+  const groupOf = (u) => ownedGroup(db, u.id, randomBytes(18).toString('base64url'));
   app.get('/api/admin/invite', async (req) => {
     const g = groupOf(requireAdmin(req));
     return { token: g.invite_token, invite_name: g.invite_name || '' };
@@ -130,11 +125,8 @@ export default async function routes(app) {
     return g;
   };
   app.get('/api/join/:token', async (req) => { const g = groupByToken(req.params.token); return { owner_name: g.invite_name || g.owner_name, group_name: g.name || DEFAULT_GROUP }; });
-  app.post('/api/join/:token', async (req, reply) => {
-    const ipKey = `join|${req.ip}`;
-    checkRate(ipKey, ipKey);
-    const g = groupByToken(req.params.token);
-    const b = req.body || {};
+  // Yeni hesap alanlarini dogrular (kayit ve davetle katilim ortak)
+  const parseNewAccount = (b) => {
     const username = (str(b.username, { field: 'username', required: true, max: 32 }) || '').toLowerCase();
     if (!USERNAME_RE.test(username)) throw bad('Kullanici adi 3-32 karakter, sadece a-z 0-9 . _ - olabilir', { username: 'gecersiz' });
     if (b.display_name === undefined || b.display_name === null || b.display_name === '') throw bad('Hesap adi zorunludur', { display_name: 'zorunlu' });
@@ -143,13 +135,41 @@ export default async function routes(app) {
     const avatar = listedAvatar(b.avatar);
     const color = parseColor(b.color)?.toLowerCase() || PALETTE[0];
     if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw err(409, 'Bu kullanici adi zaten alinmis', { username: 'alinmis' });
-    failRate(ipKey); // her kayit sayaci artirir: ayni IP'den 5 dk'da en fazla 10 kayit
-    const info = db.prepare("INSERT INTO users (username,display_name,password_hash,role,avatar,color,group_id,created_at) VALUES (?,?,?,'member',?,?,?,?)")
-      .run(username, display_name, await hashPassword(password), avatar, color, g.id, nowIso());
+    return { username, display_name, password, avatar, color };
+  };
+  const createAccount = async (a, reply) => {
+    const info = db.prepare("INSERT INTO users (username,display_name,password_hash,role,avatar,color,created_at) VALUES (?,?,?,'member',?,?,?)")
+      .run(a.username, a.display_name, await hashPassword(a.password), a.avatar, a.color, nowIso());
     const { token, maxAge } = createSession(db, info.lastInsertRowid);
     reply.setCookie(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax', maxAge, secure: process.env.COOKIE_SECURE === '1' });
     reply.code(201);
-    return { user: withGroup(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
+    return Number(info.lastInsertRowid);
+  };
+  // Grupsuz hesap acar ve oturum baslatir
+  app.post('/api/auth/register', async (req, reply) => {
+    const ipKey = `join|${req.ip}`;
+    checkRate(ipKey, ipKey);
+    const a = parseNewAccount(req.body || {});
+    failRate(ipKey); // ayni IP'den 5 dk'da en fazla 10 kayit
+    const id = await createAccount(a, reply);
+    return { user: withGroup(db.prepare('SELECT * FROM users WHERE id=?').get(id)) };
+  });
+  // Giris yapmissa mevcut hesabi gruba ekler; yapmamissa hesap acip ekler. share_existing: mevcut kayitlar o grupta gorunur
+  app.post('/api/join/:token', async (req, reply) => {
+    const ipKey = `join|${req.ip}`;
+    checkRate(ipKey, ipKey);
+    const g = groupByToken(req.params.token);
+    const b = req.body || {};
+    const share = b.share_existing === true || b.share_existing === 'true' || b.share_existing === 1;
+    let uid;
+    if (req.user) uid = req.user.id;
+    else {
+      const a = parseNewAccount(b);
+      failRate(ipKey);
+      uid = await createAccount(a, reply);
+    }
+    addMember(db, g.id, uid, 'member', share);
+    return { user: withGroup(db.prepare('SELECT * FROM users WHERE id=?').get(uid)), group_id: g.id };
   });
 
   app.put('/api/admin/group-name', async (req) => {
@@ -190,9 +210,17 @@ export default async function routes(app) {
     const me = requireUser(req);
     const b = req.body || {};
     const has = (k) => b[k] !== undefined;
-    if (!has('avatar') && !has('color') && !has('display_name') && !has('tz')) throw bad('Degistirilecek bir alan gonderin (avatar, color, display_name, tz)');
+    if (!has('avatar') && !has('color') && !has('display_name') && !has('tz') && !has('email')) throw bad('Degistirilecek bir alan gonderin (avatar, color, display_name, tz, email)');
     const row = db.prepare('SELECT * FROM users WHERE id=?').get(me.id);
-    let { avatar, color, display_name, name_changed, tz } = row;
+    let { avatar, color, display_name, name_changed, tz, email } = row;
+    if (has('email')) {
+      if (b.email === null || b.email === '') email = null;
+      else {
+        email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : '';
+        if (email.length > 120 || !EMAIL_RE.test(email)) throw bad('Gecersiz e-posta', { email: 'gecersiz' });
+        if (db.prepare('SELECT 1 FROM users WHERE email=? AND id<>?').get(email, me.id)) throw err(409, 'Bu e-posta baska bir hesapta kayitli', { email: 'alinmis' });
+      }
+    }
     if (has('tz')) {
       if (b.tz === null || b.tz === '') tz = null;
       else if (validTz(b.tz)) tz = b.tz;
@@ -213,8 +241,31 @@ export default async function routes(app) {
         name_changed = 1;
       }
     }
-    db.prepare('UPDATE users SET avatar=?, color=?, display_name=?, name_changed=?, tz=? WHERE id=?').run(avatar, color, display_name, name_changed, tz, me.id);
+    db.prepare('UPDATE users SET avatar=?, color=?, display_name=?, name_changed=?, tz=?, email=? WHERE id=?').run(avatar, color, display_name, name_changed, tz, email, me.id);
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(me.id)) };
+  });
+
+  // Kendi hesabini ve tum verisini siler (FK cascade). Grup sahibiyse: baska uye varsa en eskisine devredilir, yoksa grup silinir
+  app.delete('/api/me', async (req, reply) => {
+    const me = requireUser(req);
+    const password = typeof (req.body || {}).password === 'string' ? req.body.password : '';
+    const key = `del|${me.id}`;
+    checkRate(key, `ip|${req.ip}`);
+    if (!password || !(await verifyPassword(password, me.password_hash))) { failRate(key); throw err(403, 'Sifre hatali'); }
+    if (me.role === 'admin' && db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin' AND active=1").get().c <= 1) throw bad('Son yonetici hesabi silinemez');
+    tx(db, () => {
+      for (const g of db.prepare("SELECT group_id FROM group_members WHERE user_id=? AND role='owner'").all(me.id)) {
+        const next = db.prepare('SELECT m.user_id FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? AND m.user_id<>? AND u.active=1 ORDER BY m.joined_at, m.user_id').get(g.group_id, me.id);
+        if (next) {
+          db.prepare("UPDATE group_members SET role='owner' WHERE group_id=? AND user_id=?").run(g.group_id, next.user_id);
+          db.prepare('UPDATE groups SET owner_id=? WHERE id=?').run(next.user_id, g.group_id);
+        } else db.prepare('DELETE FROM groups WHERE id=?').run(g.group_id);
+      }
+      db.prepare('DELETE FROM users WHERE id=?').run(me.id);
+      pruneLinks(db);
+    });
+    reply.clearCookie(COOKIE, { path: '/' });
+    return { ok: true };
   });
 
   app.post('/api/auth/change-password', async (req) => {
@@ -251,8 +302,9 @@ export default async function routes(app) {
     const avatar = b.avatar !== undefined && b.avatar !== null && b.avatar !== '' ? listedAvatar(b.avatar) : EMOJIS[n % EMOJIS.length];
     const color = parseColor(b.color) || PALETTE[n % PALETTE.length];
     if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw err(409, 'Bu kullanici adi zaten alinmis', { username: 'alinmis' });
-    const info = db.prepare('INSERT INTO users (username,display_name,password_hash,role,avatar,color,group_id,created_at) VALUES (?,?,?,?,?,?,?,?)')
-      .run(username, display_name, await hashPassword(password), role, avatar, color, groupOf(adm).id, nowIso());
+    const info = db.prepare('INSERT INTO users (username,display_name,password_hash,role,avatar,color,created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(username, display_name, await hashPassword(password), role, avatar, color, nowIso());
+    addMember(db, groupOf(adm).id, Number(info.lastInsertRowid));
     reply.code(201);
     return { user: toUser(db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid)) };
   });

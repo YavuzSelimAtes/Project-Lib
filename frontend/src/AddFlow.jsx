@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { Cover, ErrorBox, Modal, SearchMeta, TYPE_ICON, TYPE_LABEL, fmtDate, today, yesterday } from './ui.jsx';
 import EditionPicker from './Editions.jsx';
 import SeasonPicker from './Seasons.jsx';
+import { useAuth } from './auth.js';
+import { GroupPicker } from './Visibility.jsx';
 
 // ayni arama anahtari icin tek kalici kayit (cift cagriyi onler)
 const pickCache = new Map();
@@ -157,6 +159,9 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
       alive = false;
     };
   }, [isMovie, catId, item.key, pickTry]);
+  const { user: me } = useAuth();
+  const myGroups = (me.groups || []).map((g) => ({ id: g.id, name: g.name }));
+  const [shareIds, setShareIds] = useState(() => myGroups.map((g) => g.id)); // varsayilan: tum gruplarim
   const [edition, setEdition] = useState(null);
   const [season, setSeason] = useState('');
   const [episode, setEpisode] = useState('');
@@ -212,7 +217,15 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
       }
       if (isBook) body.total_pages = Number(pages);
       if (rating) body.rating = Number(rating);
-      await api.createEntry(body);
+      const made = await api.createEntry(body);
+      const newId = made?.entry?.id ?? made?.id;
+      if (myGroups.length && shareIds.length !== myGroups.length && newId) {
+        try {
+          await api.setEntryGroups(newId, shareIds.length ? { group_ids: shareIds } : { none: true });
+        } catch {
+          window.alert('Kayıt eklendi ama gruplar ayarlanamadı; kaydı açıp “Kimler görsün” ile değiştirebilirsin.');
+        }
+      }
       onAdded?.();
       onClose();
     } catch (err) {
@@ -348,6 +361,13 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
               ))}
             </select>
           </label>
+        )}
+        {myGroups.length > 0 && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <span>Kimler görsün?</span>
+            <GroupPicker groups={myGroups} value={shareIds} onChange={setShareIds} />
+            <p className="small muted" style={{ margin: '4px 0 0' }}>{shareIds.length === 0 ? 'Sadece sen görürsün.' : 'Seçili gruplar görür; sonradan değiştirebilirsin.'}</p>
+          </div>
         )}
         <ErrorBox error={error} />
         <div className="row">

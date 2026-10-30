@@ -3,11 +3,11 @@ import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom';
 import { api } from './api.js';
 import { Avatar, Skeleton, setTimeZone } from './ui.jsx';
 import Login from './pages/Login.jsx';
-import Join from './pages/Join.jsx';
-import Home from './pages/Home.jsx';
-import Leaderboard from './pages/Leaderboard.jsx';
-import Shelf from './pages/Shelf.jsx';
-import Admin from './pages/Admin.jsx';
+const Join = lazy(() => import('./pages/Join.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
+import Ben from './pages/Ben.jsx';
+const GroupPage = lazy(() => import('./pages/GroupPage.jsx'));
+const Admin = lazy(() => import('./pages/Admin.jsx'));
 const Library = lazy(() => import('./pages/Library.jsx'));
 import Bell from './Bell.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
@@ -62,7 +62,6 @@ export default function App() {
   const [user, setUser] = useState(undefined); // undefined = yukleniyor, null = giris yok
   const [dark, toggleTheme] = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
-  const joinToken = (window.location.pathname.match(/^\/katil\/([\w-]+)\/?$/) || [])[1];
 
   // Cevrimdisi kuyruk: giris yapildiginda/acilista ve internet gelince gonder
   const loggedIn = !!user;
@@ -113,30 +112,35 @@ export default function App() {
   if (!user) {
     return (
       <>
-        {joinToken ? <Join token={joinToken} onLogin={setUser} /> : <Login onLogin={setUser} />}
+        <Suspense fallback={<div className="page"><Skeleton h={80} n={3} /></div>}>
+          <Routes>
+            <Route path="/kayit" element={<Register onLogin={setUser} />} />
+            <Route path="/grup-olustur" element={<Register onLogin={setUser} initialMode="group" />} />
+            <Route path="/katil/:token" element={<Join onLogin={setUser} />} />
+            <Route path="*" element={<Login onLogin={setUser} />} />
+          </Routes>
+        </Suspense>
         <ThemeBtn dark={dark} toggle={toggleTheme} floating />
       </>
     );
   }
 
-  document.title = user.group_name || 'Aile Kütüphanesi';
+  document.title = 'Kütüphane';
   setTimeZone(user.tz); // tarih islemleri (bugun/dun) kisinin saat dilimine gore
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === "admin";
+  const canManage = isAdmin || (user.groups || []).some((g) => g.role === 'owner');
   return (
     <AuthCtx.Provider value={{ user, refresh, editProfile: () => setProfileOpen(true) }}>
       <header className="topbar">
         <div className="topbar-in">
-          <Link to="/" className="brand">
-            <img src="/brand.png" alt="" width="28" height="28" /> <span>{user.group_name || 'Aile Kütüphanesi'}</span>
+          <Link to="/ben" className="brand">
+            <img src="/brand.png" alt="" width="28" height="28" /> <span>Kütüphane</span>
           </Link>
           <nav className="nav" aria-label="Ana menü">
-            <NavLink to="/" end>
-              Ana Sayfa
-            </NavLink>
-            <NavLink to="/liderlik">Liderlik</NavLink>
-            <NavLink to="/rafim">Rafım</NavLink>
+            <NavLink to="/ben">Ben</NavLink>
+            <NavLink to="/gruplar">Gruplar</NavLink>
             <NavLink to="/library">Kitaplık</NavLink>
-            {isAdmin && <NavLink to="/yonetim">Yönetim</NavLink>}
+            {canManage && <NavLink to="/yonetim">Yönetim</NavLink>}
           </nav>
           <span className="spacer" />
           <PendingBadge />
@@ -155,14 +159,20 @@ export default function App() {
       {profileOpen && !user.must_change_pw && <ProfileEdit onClose={() => setProfileOpen(false)} />}
       <main className="page">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/liderlik" element={<Leaderboard />} />
-          <Route path="/rafim" element={<Shelf />} />
-          <Route path="/uye/:id" element={<Shelf />} />
+          <Route path="/" element={<Navigate to="/ben" replace />} />
+          <Route path="/ben/:tab?" element={<Ben />} />
+          <Route path="/gruplar" element={<Navigate to="/ben/gruplarim" replace />} />
+          <Route path="/g/:gid/*" element={<Suspense fallback={<Skeleton h={80} n={3} />}><GroupPage /></Suspense>} />
+          <Route path="/liderlik" element={<Navigate to="/gruplar" replace />} />
+          <Route path="/rafim" element={<Navigate to="/ben" replace />} />
+          <Route path="/uye/:id" element={<Navigate to="/gruplar" replace />} />
           <Route path="/library" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Library /></Suspense>} />
+          <Route path="/kayit" element={<Navigate to="/ben" replace />} />
+          <Route path="/grup-olustur" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Register user={user} onLogin={setUser} initialMode="group" /></Suspense>} />
+          <Route path="/katil/:token" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Join user={user} onLogin={setUser} /></Suspense>} />
           <Route path="/kutuphane" element={<Navigate to="/library" replace />} />
-          <Route path="/yonetim" element={isAdmin ? <Admin /> : <Navigate to="/" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/yonetim" element={canManage ? <Suspense fallback={<Skeleton h={80} n={3} />}><Admin /></Suspense> : <Navigate to="/ben" replace />} />
+          <Route path="*" element={<Navigate to="/ben" replace />} />
         </Routes>
       </main>
     </AuthCtx.Provider>

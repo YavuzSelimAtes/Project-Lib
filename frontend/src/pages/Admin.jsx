@@ -8,33 +8,34 @@ import { avatarText, langLabel } from '../ui.jsx';
 const RSTATUS = { acik: 'Açık', inceleniyor: 'İnceleniyor', tamamlandi: 'Tamamlandı', reddedildi: 'Reddedildi' };
 
 export default function Admin() {
+  const { user } = useAuth();
+  const platform = user.role === 'admin'; // platform yöneticisi: kullanıcılar + okuma durumu da
+  const ownedAll = (user.groups || []).filter((g) => g.role === 'owner');
   const [tab, setTab] = useState('inbox');
   const inbox = useAsync(() => api.adminRequests(), []);
   const open = inbox.data?.counts?.acik ?? 0;
+  const tabs = [
+    ['inbox', `📥 Gelen kutusu${open > 0 ? ` (${open})` : ''}`],
+    ...(ownedAll.length ? [['link', '🔗 Katılım linki']] : []),
+    ...(platform ? [['users', '👥 Kullanıcılar'], ['reading', '📖 Okuma durumu']] : []),
+    ['catalog', '➕ Katalog ekle'],
+    ['list', '📚 Katalog listesi'],
+  ];
   return (
     <>
       <h1>Yönetim</h1>
-      <p className="sub">Aile üyelerini, talepleri ve kataloğu buradan yönet.</p>
+      <p className="sub">{platform ? 'Kullanıcıları, talepleri ve kataloğu buradan yönet.' : 'Katılım linkini, katalog kayıtlarını ve istekleri buradan yönet.'}</p>
       <div className="tabs" role="tablist">
-        <button role="tab" className="tab" aria-selected={tab === 'inbox'} onClick={() => setTab('inbox')}>
-          📥 Gelen kutusu{open > 0 ? ` (${open})` : ''}
-        </button>
-        <button role="tab" className="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')}>
-          👥 Kullanıcılar
-        </button>
-        <button role="tab" className="tab" aria-selected={tab === 'reading'} onClick={() => setTab('reading')}>
-          📖 Okuma durumu
-        </button>
-        <button role="tab" className="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>
-          ➕ Katalog ekle
-        </button>
-        <button role="tab" className="tab" aria-selected={tab === 'list'} onClick={() => setTab('list')}>
-          📚 Katalog listesi
-        </button>
+        {tabs.map(([k, l]) => (
+          <button key={k} role="tab" className="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+            {l}
+          </button>
+        ))}
       </div>
       {tab === 'inbox' && <Inbox state={inbox} />}
-      {tab === 'users' && <Users />}
-      {tab === 'reading' && <ReadingStatus />}
+      {tab === 'link' && ownedAll.map((g) => <InviteLink key={g.id} gid={g.id} />)}
+      {tab === 'users' && platform && <Users />}
+      {tab === 'reading' && platform && <ReadingStatus />}
       {tab === 'catalog' && <CatalogForm onDone={inbox.reload} />}
       {tab === 'list' && <CatalogList />}
     </>
@@ -175,8 +176,8 @@ function RequestCard({ r, reload }) {
 }
 
 /* ---------- kullanicilar ---------- */
-function InviteLink() {
-  const inv = useAsync(() => api.adminInvite(), []);
+export function InviteLink({ gid }) {
+  const inv = useAsync(() => api.groupInvite(gid), [gid]);
   const [msg, setMsg] = useState('');
   const url = inv.data ? `${window.location.origin}/katil/${inv.data.token}` : '';
   const copy = async () => {
@@ -190,7 +191,7 @@ function InviteLink() {
   const regen = async () => {
     if (!window.confirm('Eski link çalışmaz olur. Yeni link oluşturulsun mu?')) return;
     try {
-      await api.adminInviteRegen();
+      await api.groupInviteRegen(gid);
       inv.reload();
       setMsg('Yeni link oluşturuldu');
     } catch (x) {
@@ -198,11 +199,11 @@ function InviteLink() {
     }
   };
   const { user, refresh } = useAuth();
-  const [gname, setGname] = useState(user.group_name || '');
+  const [gname, setGname] = useState((user.groups || []).find((g) => g.id === gid)?.name || user.group_name || '');
   const saveName = async (e) => {
     e.preventDefault();
     try {
-      const r = await api.adminGroupName(gname.trim());
+      const r = await api.groupName(gid, gname.trim());
       setGname(r.group_name);
       await refresh();
       setMsg('Ad kaydedildi');
@@ -229,18 +230,18 @@ function InviteLink() {
           <button type="button" className="btn small ghost" onClick={regen}>Yenile</button>
         </div>
       )}
-      {inv.data && <InviteName key={inv.data.invite_name} initial={inv.data.invite_name} fallback={user.display_name} setMsg={setMsg} />}
+      {inv.data && <InviteName gid={gid} key={inv.data.invite_name} initial={inv.data.invite_name} fallback={user.display_name} setMsg={setMsg} />}
       {msg && <p className="muted small" role="status">{msg}</p>}
     </div>
   );
 }
 
-function InviteName({ initial, fallback, setMsg }) {
+function InviteName({ gid, initial, fallback, setMsg }) {
   const [v, setV] = useState(initial);
   const save = async (e) => {
     e.preventDefault();
     try {
-      const r = await api.adminInviteName(v.trim());
+      const r = await api.groupInviteName(gid, v.trim());
       setV(r.invite_name);
       setMsg('Davet eden adı kaydedildi');
     } catch (x) {
@@ -328,7 +329,6 @@ function Users() {
 
   return (
     <>
-      <InviteLink />
       <form className="card" onSubmit={add} style={{ marginBottom: 16 }}>
         <h2 style={{ marginTop: 0 }}>Kullanıcı ekle</h2>
         <div className="row" style={{ alignItems: 'stretch' }}>

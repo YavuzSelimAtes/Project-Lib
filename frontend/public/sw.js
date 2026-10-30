@@ -1,6 +1,6 @@
 // Aile Kutuphanesi service worker: uygulama kabugu onbellegi + cevrimdisi yazma kuyrugu (Background Sync).
 // Surum degisince CACHE adini arttir; eski onbellekler activate'te silinir.
-const CACHE = 'kutuphane-v4';
+const CACHE = 'kutuphane-v5';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/badge-96.png', '/icon-512.png', '/apple-touch-icon.png', '/brand.png', '/favicon-32.png'];
 
 self.addEventListener('install', (e) => {

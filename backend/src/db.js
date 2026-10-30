@@ -179,6 +179,33 @@ CREATE TABLE IF NOT EXISTS groups (
   name TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS group_members (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner','member')),
+  joined_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
+CREATE TABLE IF NOT EXISTS entry_groups (
+  entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (entry_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_groups_group ON entry_groups(group_id);
+CREATE TABLE IF NOT EXISTS comment_groups (
+  comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (comment_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_comment_groups_group ON comment_groups(group_id);
+CREATE TABLE IF NOT EXISTS rating_groups (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, catalog_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rating_groups_group ON rating_groups(group_id);
 CREATE TABLE IF NOT EXISTS account_links (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   group_id INTEGER NOT NULL
@@ -224,6 +251,22 @@ CREATE TABLE IF NOT EXISTS congrats (
   created_at TEXT NOT NULL,
   PRIMARY KEY (sender_id, entry_id)
 );
+CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  ref TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id, id);
+CREATE TABLE IF NOT EXISTS user_goals (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  monthly_pages INTEGER NOT NULL DEFAULT 0,
+  yearly_books INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -259,7 +302,9 @@ const COLUMNS = [
   ['reading_logs', 'note', 'TEXT'], // otomatik 0 gibi satirlara dusulen not
   ['groups', 'invite_name', 'TEXT'], // katilim sayfasinda 'X seni davet etti' adi (bos = yonetici hesap adi)
   ['groups', 'name', 'TEXT'], // grubun gorunen adi (bos = Aile Kutuphanesi)
+  ['catalog', 'created_by', 'INTEGER'], // kataloga ekleyen grup sahibi (bos = eski/sistem kaydi; sadece platform yoneticisi siler)
   ['users', 'group_id', 'INTEGER'], // kullanicinin kutuphane grubu (groups.id)
+  ['users', 'email', 'TEXT'], // opsiyonel, benzersiz, kucuk harf (sifre sifirlama henuz yok)
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
 ];
 function migrate(db) {
@@ -267,6 +312,7 @@ function migrate(db) {
     const have = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
     if (!have) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
   }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
   // Film sureleri bir kez sifirlanir ve Wikidata'dan yeniden hesaplanir (hatali/supheli degerler duzelsin; arka planda lazy-fill)
   if (!db.prepare("SELECT 1 FROM meta WHERE key='runtime_v2'").get()) {
     db.exec("UPDATE catalog SET runtime=NULL, runtime_checked=NULL WHERE type='movie' AND source='wikipedia'");
@@ -293,6 +339,28 @@ function migrate(db) {
     }
     db.exec('UPDATE users SET group_id=(SELECT MIN(id) FROM groups) WHERE group_id IS NULL');
     db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('groups_v1', ?)").run(new Date().toISOString());
+  }
+  // Uyelik tablosu (bir kez): users.group_id -> group_members (grup sahibi 'owner'); mevcut tum kayitlar kendi sahibinin gruplarinda gorunur. users.group_id artik kullanilmaz (kolon geciste duruyor)
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='group_members_v1'").get()) {
+    const now = new Date().toISOString();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare("INSERT OR IGNORE INTO group_members (user_id,group_id,role,joined_at) SELECT u.id,u.group_id,CASE WHEN g.owner_id=u.id THEN 'owner' ELSE 'member' END,? FROM users u JOIN groups g ON g.id=u.group_id").run(now);
+      db.prepare("INSERT OR IGNORE INTO group_members (user_id,group_id,role,joined_at) SELECT owner_id,id,'owner',? FROM groups").run(now);
+      db.exec('INSERT OR IGNORE INTO entry_groups (entry_id,group_id) SELECT e.id,m.group_id FROM entries e JOIN group_members m ON m.user_id=e.user_id');
+      db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('group_members_v1', ?)").run(now);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  // Yorum / puan gorunurlugu (bir kez): mevcutlar kaydin o anki gruplarinda gorunur kalir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='review_groups_v1'").get()) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec('INSERT OR IGNORE INTO comment_groups (comment_id,group_id) SELECT c.id,eg.group_id FROM comments c JOIN entry_groups eg ON eg.entry_id=c.entry_id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=c.user_id');
+      db.exec('INSERT OR IGNORE INTO rating_groups (user_id,catalog_id,group_id) SELECT DISTINCT r.user_id,r.catalog_id,eg.group_id FROM book_ratings r JOIN entries e ON e.user_id=r.user_id AND e.catalog_id=r.catalog_id JOIN entry_groups eg ON eg.entry_id=e.id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=r.user_id');
+      db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('review_groups_v1', ?)").run(new Date().toISOString());
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {

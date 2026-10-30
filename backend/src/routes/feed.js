@@ -4,6 +4,7 @@ import { entryAvg } from '../services/entries.js';
 import { leaderboard, streaksOf } from '../services/stats.js';
 import { editionBrief, getEdition } from '../services/editions.js';
 import { seriesExtras } from '../services/seasons.js';
+import { scopeGroup } from '../groups.js';
 
 const CARD_MAX = 8; // kart basina en fazla 8 oge, kalani more_count
 const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren', streak: 'Gunluk seri', best_streak: 'En uzun seri' };
@@ -13,19 +14,24 @@ export default async function routes(app) {
 
   app.get('/api/feed', async (req) => {
     const me = requireUser(req);
+    const groupId = scopeGroup(db, me, req.query.group); // yoksa: Hesabim (yalniz kendi kayitlarim)
     const today = todayStr();
     const movieFrom = new Date(Date.now() - 48 * 3600 * 1000).toISOString(); // EKLENME zamanindan 48 saat
     const doneFrom = addDays(today, -2); // biten kitap/dizi: son 3 gun
     // Yonetici hesabi kendi okumasi yoksa kartlardan gizlenir
-    const users = db.prepare("SELECT id,display_name,avatar,color FROM users u WHERE active=1 AND (role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all();
+    const users = (groupId
+      ? db.prepare("SELECT u.id,u.display_name,u.avatar,u.color FROM users u JOIN group_members gm ON gm.user_id=u.id AND gm.group_id=? WHERE u.active=1 AND (u.role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all(groupId)
+      : db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').all(me.id));
+    const vis = groupId ? ' AND EXISTS (SELECT 1 FROM entry_groups eg WHERE eg.entry_id=e.id AND eg.group_id=?)' : ' AND e.user_id=?';
     const entries = db.prepare(`SELECT e.*, c.title, c.author_or_creator, c.year, c.cover_url, c.id AS cid, c.type AS ctype, ed.cover_url AS ed_cover
       FROM entries e JOIN catalog c ON c.id=e.catalog_id LEFT JOIN editions ed ON ed.id=e.edition_id
-      WHERE (e.type IN ('book','series') AND e.status='devam')
+      WHERE ((e.type IN ('book','series') AND e.status='devam')
          OR (e.type IN ('book','series') AND e.status='bitti' AND e.end_date>=?)
-         OR (e.type='movie' AND e.status='bitti' AND e.created_at>=?)`).all(doneFrom, movieFrom);
-    const pagesToday = db.prepare('SELECT entry_id, SUM(pages_read) p FROM reading_logs WHERE date=? GROUP BY entry_id').all(today);
+         OR (e.type='movie' AND e.status='bitti' AND e.created_at>=?))${vis}`).all(doneFrom, movieFrom, groupId || me.id);
+    const pagesToday = db.prepare('SELECT entry_id, SUM(pages_read) p FROM reading_logs WHERE date=? GROUP BY entry_id').all(today).filter((r) => entries.some((e) => e.id === r.entry_id));
     const ptMap = new Map(pagesToday.map((r) => [r.entry_id, r.p]));
-    const cg = new Map(db.prepare('SELECT entry_id, COUNT(*) n, SUM(sender_id=?) mine FROM congrats GROUP BY entry_id').all(me.id).map((r) => [r.entry_id, r]));
+    // tebrik sayisi: yalniz bu kapsamdaki kisilerden (grup uyeleri / kendim)
+    const cg = new Map(db.prepare(`SELECT entry_id, COUNT(*) n, SUM(sender_id=?) mine FROM congrats WHERE ${groupId ? 'sender_id IN (SELECT user_id FROM group_members WHERE group_id=?)' : 'sender_id=?'} GROUP BY entry_id`).all(me.id, groupId || me.id).map((r) => [r.entry_id, r]));
     const byUser = new Map(users.map((u) => [u.id, []]));
     for (const e of entries) {
       let kind;
@@ -59,10 +65,11 @@ export default async function routes(app) {
 
   for (const kind of ['record', 'average', 'finished', 'streak', 'best_streak']) {
     app.get(`/api/leaderboards/${kind}`, async (req) => {
-      requireUser(req);
+      const me = requireUser(req);
+      const groupId = scopeGroup(db, me, req.query.group);
       // seri liderliginde period yok sayilir (gecersiz deger bile hata vermez)
       const period = (kind === 'streak' || kind === 'best_streak') ? 'all' : (oneOf(req.query.period, ['all', 'year', 'month'], { field: 'period' }) || 'all');
-      return { period, title: TITLES[kind], entries: leaderboard(db, kind, period) };
+      return { period, title: TITLES[kind], group_id: groupId, entries: leaderboard(db, kind, period, { groupId, meId: me.id }) };
     });
   }
 }

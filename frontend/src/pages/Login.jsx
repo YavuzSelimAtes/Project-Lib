@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { autoEnablePush } from '../pushClient.js';
 
@@ -48,9 +49,9 @@ export default function Login({ onLogin }) {
         <button className="btn" style={{ width: '100%' }} disabled={busy}>
           {busy ? 'Giriş yapılıyor…' : 'Giriş yap'}
         </button>
-        <p className="muted small" style={{ textAlign: 'center', marginBottom: 0 }}>
-          Hesabın yok mu? Yöneticiye yaz, senin için açsın.
-        </p>
+        <Link className="btn ghost" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }} to="/kayit">
+          Hesap aç
+        </Link>
       </form>
     </div>
   );

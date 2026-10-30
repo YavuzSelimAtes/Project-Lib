@@ -128,6 +128,7 @@ export default function ProfileEdit({ onClose }) {
   const [color, setColor] = useState(user.color || COLORS[0]);
   const [name, setName] = useState(user.display_name || '');
   const [tz, setTz] = useState(user.tz || DEFAULT_TZ);
+  const [email, setEmail] = useState(user.email || '');
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -140,7 +141,8 @@ export default function ProfileEdit({ onClose }) {
   const nameDirty = touched && norm !== user.display_name;
   const nameInvalid = touched && !!nameError;
   const tzDirty = tz !== (user.tz || DEFAULT_TZ);
-  const dirty = avatar !== user.avatar || color !== user.color || nameDirty || tzDirty;
+  const emailDirty = email.trim() !== (user.email || '');
+  const dirty = avatar !== user.avatar || color !== user.color || nameDirty || tzDirty || emailDirty;
 
   const tryClose = () => {
     if (done || !dirty || window.confirm('Kaydedilmemiş değişiklikler var. Yine de kapatılsın mı?')) onClose();
@@ -158,6 +160,7 @@ export default function ProfileEdit({ onClose }) {
       if (color !== user.color) body.color = color;
       if (nameDirty) body.display_name = norm;
       if (tzDirty) body.tz = tz;
+      if (emailDirty) body.email = email.trim();
       await api.updateProfile(body);
       await refresh();
       setDone(true);
@@ -233,9 +236,16 @@ export default function ProfileEdit({ onClose }) {
           </p>
         </div>
 
+        <label className="field" style={{ marginTop: 12 }}>
+          <span>E-posta (isteğe bağlı)</span>
+          <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} placeholder="ornek@mail.com" aria-describedby="em-note" />
+        </label>
+        <p id="em-note" className="small muted" style={{ marginTop: -6 }}>⚠️ Şifreni unutursan sıfırlayabilmen için gerekli. Boş bırakırsan şifre sıfırlama yapılamaz.</p>
+
         <PushSettings uid={user.id} />
 
         <ErrorBox error={error} />
+        <DeleteAccount />
         <div role="status" aria-live="polite">{done && <p className="ok-note">✅ Kaydedildi</p>}</div>
         <div className="row">
           <button type="button" className="btn ghost" onClick={tryClose}>
@@ -247,5 +257,51 @@ export default function ProfileEdit({ onClose }) {
         </div>
       </form>
     </Modal>
+  );
+}
+
+// Hesabi ve tum verisini kalici siler (sifre onayli)
+export function DeleteAccount() {
+  const { user, refresh } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const owns = (user.groups || []).some((g) => g.role === 'owner');
+  const del = async () => {
+    if (!pw) return setError(new Error('Onay için şifreni yaz.'));
+    if (!window.confirm('Hesabın ve tüm verilerin KALICI olarak silinecek. Bu geri alınamaz. Emin misin?')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteMe(pw);
+      window.location.assign('/');
+    } catch (x) {
+      setError(x);
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ margin: '16px 0', paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+      {!open ? (
+        <button type="button" className="btn small ghost" style={{ color: 'var(--danger)' }} onClick={() => setOpen(true)}>Hesabı sil…</button>
+      ) : (
+        <div role="group" aria-label="Hesabı sil">
+          <p className="small" style={{ color: 'var(--danger)', fontWeight: 700, margin: '0 0 6px' }}>
+            Dikkat: hesabın, tüm kayıtların, yorumların ve istatistiklerin kalıcı olarak silinir; geri alınamaz.
+            {owns && ' Sahibi olduğun gruplar, başka üye varsa en eski üyeye devredilir; kimse yoksa grup silinir.'}
+          </p>
+          <label className="field">
+            <span>Şifren</span>
+            <input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+          </label>
+          <ErrorBox error={error} />
+          <div className="row">
+            <button type="button" className="btn small ghost" onClick={() => { setOpen(false); setPw(''); setError(null); }}>Vazgeç</button>
+            <button type="button" className="btn small" style={{ background: 'var(--danger)' }} disabled={busy} onClick={del}>{busy ? 'Siliniyor…' : 'Hesabımı kalıcı sil'}</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
