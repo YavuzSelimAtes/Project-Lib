@@ -129,7 +129,7 @@ export default async function routes(app) {
     if (!g) throw err(404, 'Davet linki gecersiz ya da yenilenmis');
     return g;
   };
-  app.get('/api/join/:token', async (req) => { const g = groupByToken(req.params.token); return { owner_name: g.invite_name || g.owner_name }; });
+  app.get('/api/join/:token', async (req) => { const g = groupByToken(req.params.token); return { owner_name: g.invite_name || g.owner_name, group_name: g.name || DEFAULT_GROUP }; });
   app.post('/api/join/:token', async (req, reply) => {
     const ipKey = `join|${req.ip}`;
     checkRate(ipKey, ipKey);

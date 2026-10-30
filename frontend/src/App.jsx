@@ -119,6 +119,7 @@ export default function App() {
     );
   }
 
+  document.title = user.group_name || 'Aile Kütüphanesi';
   setTimeZone(user.tz); // tarih islemleri (bugun/dun) kisinin saat dilimine gore
   const isAdmin = user.role === 'admin';
   return (

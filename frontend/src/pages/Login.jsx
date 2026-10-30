@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { autoEnablePush } from '../pushClient.js';
 
 export default function Login({ onLogin }) {
+  useEffect(() => { document.title = 'Kütüphane'; }, []);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,7 +28,7 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit} noValidate>
-        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />Aile Kütüphanesi</h1>
+        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />Kütüphane</h1>
         <p className="sub" style={{ textAlign: 'center' }}>
           Ne okuduk, ne izledik – hepsi burada.
         </p>

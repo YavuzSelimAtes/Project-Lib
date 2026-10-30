@@ -5,6 +5,7 @@ import { AvatarPicker, ColorPicker, COLORS } from '../Profile.jsx';
 
 export default function Join({ token, onLogin }) {
   const [owner, setOwner] = useState(null);
+  const [groupName, setGroupName] = useState('');
   const [invalid, setInvalid] = useState('');
   const [f, setF] = useState({ username: '', password: '', display_name: '', avatar: '🦊', color: COLORS[0] });
   const [error, setError] = useState('');
@@ -12,7 +13,11 @@ export default function Join({ token, onLogin }) {
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
-    api.joinInfo(token).then((r) => setOwner(r.owner_name), (e) => setInvalid(e.message));
+    api.joinInfo(token).then((r) => {
+      setOwner(r.owner_name);
+      setGroupName(r.group_name);
+      document.title = r.group_name;
+    }, (e) => setInvalid(e.message));
   }, [token]);
 
   const submit = async (e) => {
@@ -46,8 +51,8 @@ export default function Join({ token, onLogin }) {
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit} noValidate>
-        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />Kütüphaneye katıl</h1>
-        <p className="sub" style={{ textAlign: 'center' }}>{owner ? `${owner} seni grubuna davet etti.` : 'Davet kontrol ediliyor…'}</p>
+        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />{groupName || 'Kütüphane'}</h1>
+        <p className="sub" style={{ textAlign: 'center' }}>{owner ? `${owner} seni davet etti, hesabını oluştur.` : 'Davet kontrol ediliyor…'}</p>
         <label className="field">
           <span>Kullanıcı adı</span>
           <input type="text" autoComplete="username" autoCapitalize="none" value={f.username} onChange={(e) => set('username')(e.target.value)} autoFocus />
