@@ -3,6 +3,7 @@ import { err, bad, str, int, nowIso, userToday, diffDays } from '../util.js';
 import { notify } from '../services/notify.js';
 import { catalogOut } from '../services/catalog.js';
 import { streakDates } from '../services/stats.js';
+import { prePagesBetween } from '../services/entries.js';
 import { tx } from '../db.js';
 import { parseVisibility, commentAllowedGroups, setCommentGroups, commentGroupIds, idList } from '../groups.js';
 
@@ -100,7 +101,7 @@ export default async function routes(app) {
     return {
       monthly_pages: g?.monthly_pages ?? 0,
       yearly_books: g?.yearly_books ?? 0,
-      month_pages: db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE user_id=? AND date>=? AND date<=?').get(me.id, `${month}-01`, today).s,
+      month_pages: db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE user_id=? AND date>=? AND date<=?').get(me.id, `${month}-01`, today).s + prePagesBetween(db, me.id, `${month}-01`, today),
       year_books: db.prepare("SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='book' AND status='bitti' AND end_date>=? AND end_date<=?").get(me.id, `${year}-01-01`, today).c,
     };
   };
@@ -150,7 +151,7 @@ export default async function routes(app) {
     return {
       year,
       finished: { total: fin.length, books: count('book'), movies: count('movie'), series: count('series') },
-      total_pages: pages,
+      total_pages: pages + prePagesBetween(db, me.id, from, to),
       longest_streak: longest,
       best_month: best,
       avg_rating: rated.length ? Math.round((rated.reduce((s, r) => s + r.rating, 0) / rated.length) * 10) / 10 : null,

@@ -12,6 +12,12 @@ export const pagesReadOf = (db, e) => {
   return Math.max(0, (e.current_page || 0) - base);
 };
 
+// Kitap eklenirken zaten okunmus baslangic sayfasi (pre_pages) hangi donemde sayilir: start_date (yoksa created_at) tarihine gore
+export const prePagesDate = (e) => e.start_date || String(e.created_at || '').slice(0, 10);
+// Donem [from,to] (null = sinirsiz) icinde baslayan kitaplarin baslangic sayfalari toplami: 'toplam okunan'a eklenir, gun gun dagitilmaz
+export const prePagesBetween = (db, userId, from = null, to = null) => db.prepare(`SELECT COALESCE(SUM(pre_pages),0) s FROM entries WHERE user_id=? AND type='book' AND status<>'planlandi' AND pre_pages>0
+  AND (? IS NULL OR COALESCE(start_date, substr(created_at,1,10))>=?) AND (? IS NULL OR COALESCE(start_date, substr(created_at,1,10))<=?)`).get(userId, from, from, to, to).s;
+
 // Bir kitap kaydinin gun-bazli sayfa modeli: Map(date -> {real, est}) + aralik + kaynak
 export function entryDayModel(db, e, today = userToday(db, e.user_id)) {
   const logs = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id);

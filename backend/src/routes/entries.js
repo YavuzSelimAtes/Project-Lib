@@ -141,8 +141,8 @@ export default async function routes(app) {
     }
     if (backfill !== 'none' && !(type === 'book' && status === 'devam' && cur > 0)) throw bad('backfill sadece current_page>0 olan, devam eden kitaplar icindir', { backfill: 'gecersiz' });
     const now = nowIso();
-    const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,season,episode,rating,created_at,updated_at,edition_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, season, episode, rating, now, now, ed ? ed.id : null);
+    const info = db.prepare(`INSERT INTO entries (user_id,catalog_id,type,status,start_date,end_date,total_pages,current_page,base_page,pre_pages,season,episode,rating,created_at,updated_at,edition_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(me.id, catId, type, status, start, end, total, cur, backfill !== 'none' || status === 'bitti' ? 0 : cur, type === 'book' && backfill === 'none' && (status === 'devam' || status === 'birakildi') ? cur : 0, season, episode, rating, now, now, ed ? ed.id : null);
     defaultEntryGroups(db, info.lastInsertRowid, me.id); // varsayilan: kisinin tum gruplarinda gorunur
     if (backfill !== 'none') {
       try { backfillLogs(db, getEntry(db, info.lastInsertRowid), backfill, backDays); } catch (e) { db.prepare('DELETE FROM entries WHERE id=?').run(info.lastInsertRowid); throw e; }

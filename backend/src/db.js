@@ -288,6 +288,7 @@ CREATE TABLE IF NOT EXISTS meta (
 const COLUMNS = [
   ['users', 'must_change', 'INTEGER NOT NULL DEFAULT 0'],
   ['entries', 'base_page', 'INTEGER NOT NULL DEFAULT 0'],
+  ['entries', 'pre_pages', 'INTEGER NOT NULL DEFAULT 0'], // kitap eklenirken zaten okunmus baslangic sayfasi: donemin 'toplam okunan'ina eklenir (gunluk ortalama/rekor/seriye girmez). base_page ise duzeltmelerle de artar
   ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
   ['catalog', 'listed', 'INTEGER NOT NULL DEFAULT 1'],
   ['catalog', 'norm', "TEXT NOT NULL DEFAULT ''"],
@@ -382,6 +383,12 @@ function migrate(db) {
       db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('group_managers_v1', ?)").run(new Date().toISOString());
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  // pre_pages (bir kez): eklemedeki baslangic sayfasi. Gun duzeltmesi (d742b8e, 2026-10-29T21:54:54Z) base_page'i de artirabildiginden, o tarihten SONRA acilmis kayitlar
+  // belirsizdir (duzeltme mi ekleme mi ayirt edilemez) -> pre_pages=0 kalir; oncesindekilerde base_page yalniz eklemedeki sayfadir -> kopyalanir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='pre_pages_v1'").get()) {
+    db.exec("UPDATE entries SET pre_pages=base_page WHERE type='book' AND base_page>0 AND status<>'planlandi' AND created_at<'2026-10-29T21:54:54Z'");
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('pre_pages_v1', ?)").run(new Date().toISOString());
   }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {

@@ -831,3 +831,21 @@ BACKEND: geri bildirim (hazir)
   375 genis, 3 segment 16-304px, scrollW=375. 4200 (admin): sekme 5. sirada, 2 sentetik kayit (oneri/hata, yonetici hesabi, e-posta gitti/gitmedi)
   masaustunde dogru; bos durum sentetik bos listeyle denendi. Silme ve gercek POST gercek backend ile DENENMEDI (backend 404 / sentetik).
  BACKEND ISTEGI: yok. Not: GET /admin/feedback sayfalamasiz varsayildi (tum liste).
+
+BACKEND: pre_pages (kitap eklenirken baslangic sayfasi toplama sayilir)
+-----------------------------------------------------------------------
+ Kolon: entries.pre_pages INTEGER NOT NULL DEFAULT 0 (migrate ile otomatik eklenir). base_page AYNEN kaldi (gunluk
+ hesap + 'Gunluk kayitlari duzelt' yolu hala base_page'e ekler, toplam okunan hala DUSER). Yeni kayitta
+ (kitap, backfill none, status devam/birakildi, current_page>0) pre_pages = current_page.
+ Kural: pre_pages donemin TOPLAM sayfasina eklenir, start_date (yoksa created_at) o donem icindeyse; gun gun
+ dagitilmaz -> gunluk ortalama / rekor / seri / spanDays DEGISMEDI. Yerler: userStats.total_pages (Hesabim, grup
+ kapsami dahil, period all/month/year; all'da her zaman), /api/me/year-summary total_pages (yil), goals month_pages
+ (ay). Liderlik 'average' detail.total_pages ve ortalama tabani eski haliyle (gunluk kayit toplami).
+ Migrate (pre_pages_v1, bir kez): d742b8e (2026-10-29T21:54:54Z) ONCESI acilmis ve base_page>0 kayitlarda
+ pre_pages=base_page (o zamana kadar base_page yalniz eklemedeki sayfaydi). Sonrasinda acilanlarda duzeltme/ekleme
+ ayirt edilemez -> pre_pages=0 birakildi. Gercek veri kopyasi (4200 DB) uzerinde deneme: 3 kayit dolduruldu (toplam 79
+ sayfa), BELIRSIZ 0 kayit (raporlanacak ornek yok). Canlida kontrol: `node scripts/diagnose-pages.js --pre-report [DB]`
+ (salt okunur; dolu kayit sayisi + belirsiz kayitlar + 3 ornek).
+ Canliya alma: ONCE DB YEDEGI al (/api/admin/backup ya da data/kutuphane.db + -wal), sunucuyu yeniden baslat (migrate acilista
+ calisir), --pre-report ile sonucu kontrol et. Test: testler/prepages.test.js; groups/scope/notes/manager/feedback gecti.
+ (v5-dizi-stats'taki sezon testleri TVMaze agina bagli; bu degisiklikle ilgisiz.)

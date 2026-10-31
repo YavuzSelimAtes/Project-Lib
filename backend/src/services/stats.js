@@ -1,5 +1,5 @@
 import { addDays, diffDays, round1, todayStr, userToday, publicUser } from '../util.js';
-import { entryDayModel } from './entries.js';
+import { entryDayModel, prePagesDate } from './entries.js';
 import { seasonRows, watchedOf, ensureSeasons } from './seasons.js';
 import { queueMovieRuntimes } from './catalog.js';
 
@@ -23,6 +23,7 @@ export function userModel(db, userId, period = 'all', today = userToday(db, user
   const days = new Map(); // date -> {real, est, books:Set(title)}
   const spanDays = new Set();
   let finished = [];
+  let pre = 0; // eklemedeki baslangic sayfalari (donemde baslayan kitaplar): sadece toplama, gun/ortalama/rekora girmez
   const titles = new Map();
   for (const e of entries) {
     const m = entryDayModel(db, e, today);
@@ -40,12 +41,13 @@ export function userModel(db, userId, period = 'all', today = userToday(db, user
       if (v.real > 0 && title) cur.books.add(title);
       days.set(d, cur);
     }
+    if (e.pre_pages > 0 && (period === 'all' || inRange(prePagesDate(e), range))) pre += e.pre_pages;
     if (e.status === 'bitti' && e.end_date && inRange(e.end_date, range)) finished.push({ title, end_date: e.end_date });
   }
   for (const d of days.keys()) spanDays.add(d);
   let total = 0;
   for (const v of days.values()) total += v.real + v.est;
-  return { days, spanDays, total, finished, range };
+  return { days, spanDays, total, pre, totalPages: total + pre, finished, range }; // total: gunluk ortalama tabani; totalPages: gorunen toplam
 }
 
 export function averageOf(model) {
@@ -150,7 +152,7 @@ export function userStats(db, user, period = 'all', scope = null) {
   const seriesActive = db.prepare(`SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='series' AND status='devam'${sc(scope, 'id')}`).get(user.id).c;
   return {
     user: publicUser(user),
-    total_pages: Math.round(m.total),
+    total_pages: Math.round(m.totalPages),
     books_finished: m.finished.length,
     movies_watched: movies,
     series_active: seriesActive,
