@@ -1,6 +1,5 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { GroupCtx, useAuth } from '../auth.js';
-import { Empty } from '../ui.jsx';
 import { RouteTabs } from './Ben.jsx';
 import Home from './Home.jsx';
 
@@ -12,20 +11,16 @@ export default function AllHome() {
   const { user } = useAuth();
   const groups = user.groups || [];
   const { gid } = useParams();
-  if (!groups.length) {
-    return (
-      <Empty icon="📚" title="Henüz bir grubun yok">
-        Bir gruba katıldığında arkadaşlarının ne okuduğunu burada görürsün.
-        <div style={{ marginTop: 12 }}><Link className="btn" to="/gruplar" style={{ textDecoration: 'none' }}>Gruplarıma git</Link></div>
-      </Empty>
-    );
-  }
+  if (!groups.length) return <Home />; // bireysel kullanim: yalniz kendi karti
   const cur = groups.find((g) => g.id === Number(gid));
   if (!cur) return <Navigate to={`/ana/${(groups.find((g) => g.id === remembered()) || groups[0]).id}`} replace />;
   try { localStorage.setItem(LAST, String(cur.id)); } catch { /* tercih saklanamazsa onemli degil */ }
   return (
     <>
-      {<RouteTabs tabs={groups.map((g) => [String(g.id), g.name])} current={String(cur.id)} base="/ana" label="Gruplar" />}
+      <RouteTabs tabs={groups.map((g) => [String(g.id), g.name])} current={String(cur.id)} base="/ana" label="Gruplar" />
+      <p className="small" style={{ margin: '0 0 10px' }}>
+        <Link to={`/g/${cur.id}`}>{cur.name} sayfasına git ›</Link>
+      </p>
       <GroupCtx.Provider value={cur.id} key={cur.id}><Home /></GroupCtx.Provider>
     </>
   );
