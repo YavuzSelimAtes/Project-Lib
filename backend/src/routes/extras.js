@@ -1,4 +1,4 @@
-import { requireUser, requireAdmin } from '../auth.js';
+import { requireUser, requireGroupAdmin } from '../auth.js';
 import { err, bad, int, oneOf, todayStr, userToday, publicUser } from '../util.js';
 import { norm } from '../services/sources.js';
 import { notify } from '../services/notify.js';
@@ -137,11 +137,19 @@ export default async function routes(app) {
   });
 
   // ---- yonetici: "neden okumuyorsun?" ----
+  // Platform yoneticisi herkesi, grup yonetici hesabi yalniz kendi grubunun uyelerini gorur/hatirlatir
+  const managedGroupId = (me) => me.kind === 'manager' ? db.prepare('SELECT id FROM groups WHERE owner_id=?').get(me.id)?.id ?? 0 : null;
+  const inScope = (me, userId) => {
+    const gid = managedGroupId(me);
+    return gid === null || !!db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(gid, userId);
+  };
   app.get('/api/admin/reading-status', async (req) => {
-    requireAdmin(req);
+    const me = requireGroupAdmin(req);
     const today = todayStr();
     const all = req.query.all === '1' || req.query.all === 'true';
-    const users = db.prepare("SELECT id,display_name,avatar,color FROM users WHERE active=1 AND role<>'admin' AND kind<>'manager' ORDER BY display_name COLLATE NOCASE").all();
+    const gid = managedGroupId(me);
+    const users = db.prepare(`SELECT id,display_name,avatar,color FROM users WHERE active=1 AND role<>'admin' AND kind<>'manager'
+        ${gid === null ? '' : 'AND id IN (SELECT user_id FROM group_members WHERE group_id=?)'} ORDER BY display_name COLLATE NOCASE`).all(...(gid === null ? [] : [gid]));
     const out = users.map((u) => {
       const readToday = !!db.prepare('SELECT 1 FROM reading_logs WHERE user_id=? AND date=? AND pages_read>0').get(u.id, userToday(db, u.id));
       const activeBooks = db.prepare("SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='book' AND status='devam'").get(u.id).c;
@@ -155,9 +163,9 @@ export default async function routes(app) {
     return { date: today, users: all ? out : out.filter((x) => x.bugun_okumadi || x.aktif_kitap_yok) };
   });
   app.post('/api/admin/users/:id/nudge', async (req) => {
-    requireAdmin(req);
-    const u = db.prepare('SELECT id,active FROM users WHERE id=?').get(Number(req.params.id));
-    if (!u) throw err(404, 'Kullanici bulunamadi');
+    const me = requireGroupAdmin(req);
+    const u = db.prepare("SELECT id,active FROM users WHERE id=? AND kind<>'manager'").get(Number(req.params.id));
+    if (!u || !inScope(me, u.id)) throw err(404, 'Kullanici bulunamadi');
     if (!u.active) throw bad('Pasif kullaniciya bildirim gonderilemez');
     const today = todayStr();
     if (!db.prepare("INSERT OR IGNORE INTO push_log (user_id,kind,day) VALUES (?,'nudge',?)").run(u.id, today).changes) {

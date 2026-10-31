@@ -8,6 +8,7 @@ const Register = lazy(() => import('./pages/Register.jsx'));
 import Ben from './pages/Ben.jsx';
 const GroupPage = lazy(() => import('./pages/GroupPage.jsx'));
 const Groups = lazy(() => import('./pages/Groups.jsx'));
+const AllHome = lazy(() => import('./pages/AllHome.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const Library = lazy(() => import('./pages/Library.jsx'));
 import Bell from './Bell.jsx';
@@ -36,6 +37,7 @@ function PendingBadge() {
 }
 
 const ACCOUNT_NAV = [
+  ['/ana', 'Ana sayfa', (p) => p.startsWith('/ana')],
   ['/ben', 'Hesabım', (p) => p === '/ben' || p === '/ben/' || p.startsWith('/ben/hesabim')],
   ['/ben/defterim', 'Defterim', (p) => p.startsWith('/ben/defterim')],
   ['/ben/hedefler', 'Hedefler', (p) => p.startsWith('/ben/hedefler')],
@@ -56,6 +58,7 @@ const groupNav = (gid, uid) => [
 const MANAGER_NAV = [
   ['/yonetim', 'İstekler', (p) => p === '/yonetim' || p === '/yonetim/' || p.startsWith('/yonetim/inbox')],
   ['/yonetim/link', 'Grup', (p) => p.startsWith('/yonetim/link')],
+  ['/yonetim/reading', 'Okuma', (p) => p.startsWith('/yonetim/reading')],
   ['/yonetim/list', 'Katalog', (p) => p.startsWith('/yonetim/list') || p.startsWith('/yonetim/catalog')],
 ];
 
@@ -260,6 +263,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/ben" replace />} />
           <Route path="/ben/:tab?" element={<Ben />} />
+          <Route path="/ana/:gid?" element={<Suspense fallback={<Skeleton h={80} n={3} />}><AllHome /></Suspense>} />
           <Route path="/gruplar" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Groups /></Suspense>} />
           <Route path="/g/:gid/*" element={<Suspense fallback={<Skeleton h={80} n={3} />}><GroupPage /></Suspense>} />
           <Route path="/liderlik" element={<Navigate to="/gruplar" replace />} />

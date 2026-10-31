@@ -32,6 +32,15 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await a('GET', '/api/admin/requests'); t('istekler', r.s === 200, r);
   r = await a('GET', '/api/admin/catalog'); t('katalog listesi', r.s === 200, r);
   r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Yonetici Kitabi', pages: 50 }); t('katalog ekler', r.s === 201, r); const cat = r.j.item.id;
+  // okuma durumu: yonetici yalniz kendi grubunun uyelerini gorur ve hatirlatir
+  r = await a('GET', '/api/admin/reading-status?all=1'); const rs = r.j && r.j.users;
+  t('okuma durumu: yalniz kendi grubu', r.s === 200 && rs.length === 1 && rs[0].user.display_name === 'mgra', r);
+  r = await b('GET', '/api/auth/me'); const otherId = r.j.user.id;
+  r = await a('POST', `/api/admin/users/${otherId}/nudge`); t('baska grubun uyesine hatirlatma yok', r.s === 404, r);
+  r = await a('POST', `/api/admin/users/${mid}/nudge`); t('yoneticiye hatirlatma yok', r.s === 404, r);
+  r = await a('POST', `/api/admin/users/${rs[0].user.id}/nudge`); t('kendi grubuna hatirlatma', r.s === 200, r);
+  r = await a('POST', `/api/admin/users/${rs[0].user.id}/nudge`); t('ayni gun ikinci hatirlatma 409', r.s === 409, r);
+  r = await b('GET', '/api/admin/reading-status'); t('sade kullanici okuma durumunu goremez', r.s === 403, r);
   r = await a('GET', `/api/groups/${gid}`); t('uye listesinde yonetici yok, okuyucu var', r.j.group.members.length === 1 && r.j.group.members[0].username === 'mgra' && r.j.group.manager.id === mid, r);
   // okuyucu degil
   r = await a('POST', '/api/entries', { catalog_id: cat, status: 'devam' }); t('kayit ekleyemez 403', r.s === 403 && r.j.code === 'MANAGER_READONLY', r);

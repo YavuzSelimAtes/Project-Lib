@@ -18,7 +18,7 @@ export default function Admin() {
   const inbox = useAsync(() => api.adminRequests(), []);
   const open = inbox.data?.counts?.acik ?? 0;
   const mgr = !!user.is_manager; // grup yonetici hesabi: sade grup ayarlari
-  const tabs = mgr ? [['inbox', 'İstekler'], ['link', 'Grup'], ['catalog', 'Katalog ekle'], ['list', 'Katalog listesi']] : [
+  const tabs = mgr ? [['inbox', 'İstekler'], ['link', 'Grup'], ['reading', 'Okuma durumu'], ['catalog', 'Katalog ekle'], ['list', 'Katalog listesi']] : [
     ['inbox', `Gelen kutusu${open > 0 ? ` (${open})` : ''}`],
     ...(ownedAll.length ? [['link', 'Katılım linki']] : []),
     ...(platform ? [['users', 'Kullanıcılar'], ['reading', 'Okuma durumu'], ['feedback', 'Geri bildirim']] : []),
@@ -26,7 +26,7 @@ export default function Admin() {
     ['list', 'Katalog listesi'],
   ];
   if (!tabs.some(([k]) => k === tab)) return <Navigate to="/yonetim" replace />;
-  const MGR_TITLE = { inbox: 'İstekler', link: 'Grup', catalog: 'Katalog', list: 'Katalog' };
+  const MGR_TITLE = { inbox: 'İstekler', link: 'Grup', reading: 'Okuma durumu', catalog: 'Katalog', list: 'Katalog' };
   return (
     <>
       <PageHead
@@ -34,7 +34,7 @@ export default function Admin() {
         sub={mgr ? (user.managed_group_name ? `${user.managed_group_name} · yönetici hesabı` : 'Yönetici hesabı') : undefined}
       />
       {(!mgr || tab === 'catalog' || tab === 'list') && (
-        <RouteTabs tabs={mgr ? tabs.slice(2) : tabs} current={tab} base="/yonetim" label="Yönetim bölümleri" />
+        <RouteTabs tabs={mgr ? tabs.slice(3) : tabs} current={tab} base="/yonetim" label="Yönetim bölümleri" />
       )}
       {tab === 'inbox' && <Inbox state={inbox} />}
       {tab === 'link' && mgr && user.managed_group_id && (
@@ -47,7 +47,7 @@ export default function Admin() {
         </section>
       ))}
       {tab === 'users' && platform && <Users />}
-      {tab === 'reading' && platform && <ReadingStatus />}
+      {tab === 'reading' && (platform || mgr) && <ReadingStatus />}
       {tab === 'feedback' && platform && <FeedbackList />}
       {tab === 'catalog' && <CatalogForm onDone={inbox.reload} />}
       {tab === 'list' && <CatalogList />}
