@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from './api.js';
 import { Avatar } from './ui.jsx';
 import { flushQueue, queueCount } from './offlineQueue.js';
 import { moveSubscriptionToCurrentUser } from './pushClient.js';
 
-// Bagli hesaplar arasinda sifresiz gecis. Bagli hesap yoksa hicbir sey cizmez.
-export default function AccountSwitch({ userId }) {
+// Tek hesap menusu: avatar -> profil, tema, bagli hesaplara gecis, cikis.
+export default function AccountMenu({ user, dark, toggleTheme, onProfile, onFeedback, onLogout }) {
   const [accounts, setAccounts] = useState([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export default function AccountSwitch({ userId }) {
     return () => {
       alive = false;
     };
-  }, [userId]);
+  }, [user.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -31,8 +32,6 @@ export default function AccountSwitch({ userId }) {
       document.removeEventListener('keydown', key);
     };
   }, [open]);
-
-  if (!accounts.length) return null;
 
   const go = async (a) => {
     if (busy) return;
@@ -48,6 +47,10 @@ export default function AccountSwitch({ userId }) {
       }
       await api.switchAccount(a.id);
       await moveSubscriptionToCurrentUser();
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.body.classList.add('switching');
+        await new Promise((r) => setTimeout(r, 200));
+      }
       window.location.reload();
     } catch (x) {
       setMsg(x?.message || 'Geçiş yapılamadı.');
@@ -55,55 +58,35 @@ export default function AccountSwitch({ userId }) {
     }
   };
 
-  const single = accounts.length === 1 ? accounts[0] : null;
+  const pick = (fn) => () => {
+    setOpen(false);
+    fn();
+  };
+  const kind = (a) => (a.is_manager ? `Grup yönetimi · ${a.managed_group_name || ''}` : '');
   return (
-    <div ref={box} style={{ position: 'relative' }}>
-      <button
-        className="btn small ghost"
-        onClick={() => (single ? go(single) : setOpen((o) => !o))}
-        disabled={busy}
-        title={single ? `${single.display_name} hesabına geç` : 'Hesap değiştir'}
-        aria-label={single ? `${single.display_name} hesabına geç` : 'Hesap değiştir'}
-        aria-haspopup={single ? undefined : 'true'}
-        aria-expanded={single ? undefined : open}
-        style={{ minHeight: 36, whiteSpace: 'nowrap' }}
-      >
-        🔁 <span className="acc-label">{single ? single.display_name : 'Hesap değiştir'}</span>
+    <div ref={box} className="acct">
+      <button className="who" onClick={() => setOpen((o) => !o)} aria-label="Hesap menüsü" aria-haspopup="true" aria-expanded={open}>
+        <Avatar user={user} size="sm" />
       </button>
-      {single && msg && (
-        <p className="small" role="alert" style={{ position: 'absolute', right: 0, top: '100%', margin: '4px 0 0', padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, width: 220, zIndex: 60, color: 'var(--danger)' }}>
-          {msg}
-        </p>
-      )}
-      {open && !single && (
-        <div
-          role="menu"
-          aria-label="Bağlı hesaplar"
-          style={{
-            position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 60, minWidth: 220, maxWidth: 'calc(100vw - 20px)',
-            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, boxShadow: 'var(--shadow)', padding: 6,
-          }}
-        >
+      {open && (
+        <div role="menu" aria-label="Hesap" className="sw-menu">
+          <div className="sw-me">
+            <Avatar user={user} size="sm" />
+            <span className="sw-txt"><b>{user.display_name}</b>{kind(user) && <span className="muted small">{kind(user)}</span>}</span>
+          </div>
+          {user.is_manager && <button role="menuitem" className="sw-item" onClick={pick(onProfile)}>Profili düzenle</button>}
+          {!user.is_manager && <Link role="menuitem" className="sw-item" to="/ben/ayarlar" onClick={() => setOpen(false)}>Hesap ayarları</Link>}
+          <button role="menuitem" className="sw-item" onClick={pick(onFeedback)}>Fikrini belirt</button>
+          <button role="menuitem" className="sw-item" onClick={toggleTheme}>{dark ? 'Açık tema' : 'Koyu tema'}</button>
+          {accounts.length > 0 && <div className="sw-h">{user.is_manager ? 'Kişisel hesaba geç' : 'Hesap değiştir'}</div>}
           {accounts.map((a) => (
-            <button
-              key={a.id}
-              role="menuitem"
-              disabled={busy}
-              onClick={() => go(a)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '6px 10px',
-                background: 'none', border: 0, borderRadius: 10, cursor: 'pointer', color: 'var(--text)', font: 'inherit', textAlign: 'left',
-              }}
-            >
+            <button key={a.id} role="menuitem" className="sw-item sw-acc" disabled={busy} onClick={() => go(a)}>
               <Avatar user={a} size="sm" />
-              <span>{a.display_name}</span>
+              <span className="sw-txt"><span>{a.display_name}</span>{kind(a) && <span className="muted small">{kind(a)}</span>}</span>
             </button>
           ))}
-          {msg && (
-            <p className="small" role="alert" style={{ margin: '6px 10px', color: 'var(--danger)' }}>
-              {msg}
-            </p>
-          )}
+          {msg && <p className="small sw-err" role="alert">{msg}</p>}
+          <button role="menuitem" className="sw-item sw-out" onClick={pick(onLogout)}>Çıkış</button>
         </div>
       )}
     </div>

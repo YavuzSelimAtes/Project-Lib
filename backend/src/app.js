@@ -13,6 +13,8 @@ import { COOKIE, userFromToken, hashPassword } from './auth.js';
 import { HttpError, nowIso } from './util.js';
 import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
+import groupRoutes from './routes/groups.js';
+import meRoutes from './routes/me.js';
 import catalogRoutes from './routes/catalog.js';
 import requestRoutes from './routes/requests.js';
 import entryRoutes from './routes/entries.js';
@@ -20,6 +22,7 @@ import socialRoutes from './routes/social.js';
 import extrasRoutes from './routes/extras.js';
 import feedRoutes from './routes/feed.js';
 import pushRoutes from './routes/push.js';
+import feedbackRoutes from './routes/feedback.js';
 import { initPush, startReminders } from './services/push.js';
 import { cleanupUnlisted } from './services/catalog.js';
 import { seedExtraDb, seedExtraCovers } from './services/seedExtra.js';
@@ -75,6 +78,14 @@ export async function buildApp({ logger = true } = {}) {
     req.user = token ? userFromToken(db, token) : null;
   });
 
+  // Grup yonetici hesaplari okuyucu degildir: kayit/ilerleme/yorum/not/puan/hedef/istek yazma uclari reddedilir
+  const READER_WRITES = /^\/api\/(entries|comments|questions|notes|requests$|me\/goals|catalog\/pick|catalog\/\d+\/ratings)/;
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.user?.kind === 'manager' && req.method !== 'GET' && req.method !== 'HEAD' && READER_WRITES.test(req.url.split('?')[0])) {
+      return reply.code(403).send({ error: 'Grup yonetici hesabi okuma/izleme kaydi tutamaz; kisisel hesabiniza gecin', code: 'MANAGER_READONLY' });
+    }
+  });
+
   app.setErrorHandler((e, req, reply) => {
     if (e instanceof HttpError) {
       return reply.code(e.status).send({ error: e.message, code: e.code, ...(e.fields ? { fields: e.fields } : {}) });
@@ -118,7 +129,7 @@ export async function buildApp({ logger = true } = {}) {
   });
 
   app.get('/api/health', async () => ({ ok: true, time: nowIso() }));
-  for (const r of [adminRoutes, authRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes]) await app.register(r);
+  for (const r of [adminRoutes, authRoutes, groupRoutes, meRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes, feedbackRoutes]) await app.register(r);
 
   await seedAdmin(db, app.log);
   // Kurator listesi (aranan ama bulunamayan kitaplar): veritabani kismi aninda, kapaklar arka planda. SEED_EXTRA=0 ile kapatilir.

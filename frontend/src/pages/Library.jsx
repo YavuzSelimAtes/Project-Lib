@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { Avatar, Cover, Empty, ErrorBox, Modal, Skeleton, timeAgo, useAsync } from '../ui.jsx';
+import { useGroup } from '../auth.js';
+import { Avatar, Cover, Empty, Hint, PageHead, ErrorBox, Modal, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { RatingBadge, Reactions, genreLabel } from '../Rating.jsx';
 
 const SORTS = { recent: 'En yeni', title: 'Ada göre', rating: 'Puana göre', readers: 'Okuyan sayısı' };
@@ -15,16 +16,16 @@ export default function Library() {
     const t = setTimeout(() => setDq(q.trim()), 350);
     return () => clearTimeout(t);
   }, [q]);
-  const lib = useAsync(() => api.library({ q: dq, genre, sort, limit: 60 }), [dq, genre, sort]);
+  const gid = useGroup();
+  const lib = useAsync(() => api.library({ q: dq, genre, sort, limit: 60, group: gid }), [dq, genre, sort, gid]);
   const items = lib.data?.items || [];
   const [added, setAdded] = useState([]); // bu oturumda listeme eklenenler
   const onAdded = (id) => setAdded((a) => [...a, id]);
 
   return (
     <>
-      <h1>Kitaplık</h1>
-      <p className="sub">Ailenin okuduğu tüm kitaplar, puanlar ve yorumlar.</p>
-      <div className="row" style={{ marginBottom: 12 }}>
+      <PageHead title="Kitaplık" sub={gid ? 'Bu gruptaki üyelerin okuduğu ve izlediği her şey.' : 'Uygulamadaki tüm kitaplar, puanlar ve yorumlar.'} />
+      <div className="row toolbar" style={{ justifyContent: 'stretch' }}>
         <input type="search" className="grow" placeholder="Kitap adı + yazar ara (örn. Gora Tagore)…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Kitap ara" />
         <select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Tür">
           <option value="">Tüm türler</option>
@@ -104,9 +105,10 @@ function AddToList({ catalogId, mine, onAdded }) {
 const READ_LABEL ={ devam: 'okuyor', bitti: 'bitirdi', birakildi: 'bıraktı' };
 
 function BookDetail({ id, added, onAdded, onClose }) {
-  const d = useAsync(() => api.libraryItem(id), [id]);
-  const comments = useAsync(() => api.libraryComments(id, { limit: 100 }), [id]);
-  const questions = useAsync(() => api.libraryQuestions(id, { limit: 100 }), [id]);
+  const gid = useGroup();
+  const d = useAsync(() => api.libraryItem(id, gid), [id, gid]);
+  const comments = useAsync(() => api.libraryComments(id, { limit: 100, group: gid }), [id, gid]);
+  const questions = useAsync(() => api.libraryQuestions(id, { limit: 100, group: gid }), [id, gid]);
   const it = d.data?.item;
   const rating = d.data?.rating;
   const cl = comments.data?.comments || [];
@@ -145,7 +147,7 @@ function BookDetail({ id, added, onAdded, onClose }) {
 
           <h3>💬 Yorumlar ({comments.data?.total ?? d.data.comment_count ?? 0})</h3>
           <ErrorBox error={comments.error} onRetry={comments.reload} />
-          {!comments.loading && !comments.error && cl.length === 0 && <p className="muted small">Henüz yorum yok.</p>}
+          {!comments.loading && !comments.error && cl.length === 0 && <Hint>Henüz yorum yok.</Hint>}
           {cl.map((c) => (
             <div className="comment" key={c.id}>
               <div className="row">
@@ -160,7 +162,7 @@ function BookDetail({ id, added, onAdded, onClose }) {
 
           <h3>❓ Sorular ({questions.data?.total ?? d.data.question_count ?? 0})</h3>
           <ErrorBox error={questions.error} onRetry={questions.reload} />
-          {!questions.loading && !questions.error && ql.length === 0 && <p className="muted small">Henüz soru yok.</p>}
+          {!questions.loading && !questions.error && ql.length === 0 && <Hint>Henüz soru yok.</Hint>}
           {ql.map((q) => (
             <div className="qa" key={q.id}>
               <div className="row">

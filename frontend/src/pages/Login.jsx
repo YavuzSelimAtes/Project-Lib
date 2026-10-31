@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { autoEnablePush } from '../pushClient.js';
+import { BookArt } from './AuthArt.jsx';
+import { Shelves } from './AuthArtShelves.jsx';
 
+// Hesap ac sayfasiyla ayni gorunum: raflar uzerinde acik panel, solda 3B kitap
 export default function Login({ onLogin }) {
   useEffect(() => { document.title = 'Kütüphane'; }, []);
   const [username, setUsername] = useState('');
@@ -26,32 +30,34 @@ export default function Login({ onLogin }) {
   };
 
   return (
-    <div className="login-wrap">
-      <form className="card login" onSubmit={submit} noValidate>
-        <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />Kütüphane</h1>
-        <p className="sub" style={{ textAlign: 'center' }}>
-          Ne okuduk, ne izledik – hepsi burada.
-        </p>
-        <label className="field">
-          <span>Kullanıcı adı</span>
-          <input type="text" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
-        </label>
-        <label className="field">
-          <span>Şifre</span>
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        {error && (
-          <div className="err" role="alert">
-            {error}
+    <div className="reg-wrap">
+      <Shelves />
+      <div className="reg-veil" />
+      <div className="reg-inner reg-login">
+        <h1 className="reg-title">Kütüphane</h1>
+        <div className="reg-panel">
+          <div className="reg-side">
+            <BookArt />
+            <p className="reg-cap">Ne okuduk, ne izledik – hepsi burada.</p>
           </div>
-        )}
-        <button className="btn" style={{ width: '100%' }} disabled={busy}>
-          {busy ? 'Giriş yapılıyor…' : 'Giriş yap'}
-        </button>
-        <p className="muted small" style={{ textAlign: 'center', marginBottom: 0 }}>
-          Hesabın yok mu? Yöneticiye yaz, senin için açsın.
-        </p>
-      </form>
+          <form className="reg-form" onSubmit={submit} noValidate>
+            <h2>Giriş yap</h2>
+            <label className="field">
+              <span>Kullanıcı adı</span>
+              <input type="text" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+            </label>
+            <label className="field">
+              <span>Şifre</span>
+              <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            {error && <div className="err" role="alert">{error}</div>}
+            <div className="reg-actions">
+              <button className="btn" disabled={busy}>{busy ? 'Giriş yapılıyor…' : 'Giriş yap'}</button>
+              <Link className="btn ghost" to="/kayit">Hesap aç</Link>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }

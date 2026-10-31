@@ -1,4 +1,5 @@
 import { bad, err, round1, nowIso, publicUser } from '../util.js';
+import { userGroups, ratingVisibleSql, ratingGroupIds } from '../groups.js';
 
 // Kitap puanlama: tur (genre) katalog seviyesindedir (catalog.genre); metrikler sunucuda sabittir.
 export const GENRES = {
@@ -42,9 +43,11 @@ export function setGenre(db, catalogId, genre) {
 }
 
 // Kitap puani ozeti: tum kullanici puanlarinin tum metriklerle ortalamasi + kullanici ve metrik bazli ortalamalar
-export function ratingSummary(db, catalogId, meId = null) {
+// Bakan kisinin (meId) gorebildigi puanlarla sinirli: kendi puani + uyesi oldugu gruplara (groupIds ile tek gruba) acik olanlar
+export function ratingSummary(db, catalogId, meId = null, groupIds = null) {
   const cat = db.prepare('SELECT id,genre FROM catalog WHERE id=?').get(catalogId);
-  const rows = db.prepare('SELECT user_id,metric,score FROM book_ratings WHERE catalog_id=? ORDER BY user_id').all(catalogId);
+  const gids = groupIds || (meId != null ? userGroups(db, meId).map((g) => g.id) : []);
+  const rows = db.prepare(`SELECT r.user_id,r.metric,r.score FROM book_ratings r WHERE r.catalog_id=? AND ${ratingVisibleSql(meId ?? 0, gids, 'r')} ORDER BY r.user_id`).all(catalogId);
   const users = new Map();
   const metricSum = {};
   let total = 0;
@@ -67,6 +70,7 @@ export function ratingSummary(db, catalogId, meId = null) {
     metrics: cat?.genre ? GENRES[cat.genre].metrics : [],
     average: rows.length ? Math.round((total / rows.length) * 100) / 100 : null, // tum puanlarin ortalamasi (2 basamak)
     count: users.size, by_user: byUser, by_metric: byMetric, mine,
+    mine_group_ids: meId != null ? ratingGroupIds(db, meId, catalogId) : [],
   };
 }
 

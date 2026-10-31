@@ -13,9 +13,13 @@ export function periodRange(period, today = todayStr()) {
 const inRange = (d, r) => (!r.from || d >= r.from) && (!r.to || d <= r.to);
 
 // Bir kullanicinin kitaplarindan gun-bazli birlesik model
-export function userModel(db, userId, period = 'all', today = userToday(db, userId)) {
+// scope: null (tum kayitlar) ya da (sutun) => SQL kosulu; gruba acik kayitlarla sinirlar. groupScope(ids) ile uretilir
+export const groupScope = (groupIds) => (col) => `${col} IN (SELECT entry_id FROM entry_groups WHERE group_id IN (${groupIds.length ? groupIds.map((g) => Math.trunc(Number(g))).join(',') : 'NULL'}))`;
+const sc = (scope, col) => (scope ? ` AND ${scope(col)}` : '');
+
+export function userModel(db, userId, period = 'all', today = userToday(db, userId), scope = null) {
   const range = periodRange(period, today);
-  const entries = db.prepare("SELECT * FROM entries WHERE user_id=? AND type='book' AND status<>'planlandi'").all(userId);
+  const entries = db.prepare(`SELECT * FROM entries WHERE user_id=? AND type='book' AND status<>'planlandi'${sc(scope, 'id')}`).all(userId);
   const days = new Map(); // date -> {real, est, books:Set(title)}
   const spanDays = new Set();
   let finished = [];
@@ -79,14 +83,14 @@ export function streaksOf(db, userId, today = userToday(db, userId)) {
 }
 
 // Dizi/film istatistikleri (period: bitis tarihi periyotta olan kayitlar; devam/birakildi dizilerde son guncelleme gunu)
-export function mediaStats(db, userId, period, today = todayStr()) {
+export function mediaStats(db, userId, period, today = todayStr(), scope = null) {
   const range = periodRange(period, today);
   const inP = (d) => period === 'all' || (!!d && inRange(d, range));
   const dayOf = (iso) => (iso ? todayStr(new Date(iso)) : null);
   let episodes = 0;
   let minutes = 0;
   let unknown = false;
-  const series = db.prepare("SELECT e.*, c.runtime AS crt FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='series' AND e.status<>'planlandi'").all(userId);
+  const series = db.prepare(`SELECT e.*, c.runtime AS crt FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='series' AND e.status<>'planlandi'${sc(scope, 'e.id')}`).all(userId);
   const rowsCache = new Map();
   const progSum = db.prepare('SELECT COALESCE(SUM(episodes),0) ep, COALESCE(SUM(minutes),0) mn FROM series_progress WHERE entry_id=? AND (? IS NULL OR date>=?) AND (? IS NULL OR date<=?)');
   for (const e of series) {
@@ -115,7 +119,7 @@ export function mediaStats(db, userId, period, today = todayStr()) {
       minutes += Math.max(0, p.mn);
     }
   }
-  const movies = db.prepare("SELECT e.end_date, c.runtime FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='movie' AND e.status='bitti'").all(userId).filter((m) => inP(m.end_date));
+  const movies = db.prepare(`SELECT e.end_date, c.runtime FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.type='movie' AND e.status='bitti'${sc(scope, 'e.id')}`).all(userId).filter((m) => inP(m.end_date));
   let movieMinutes = 0;
   let movieUnknown = 0;
   for (const m of movies) {
@@ -135,15 +139,15 @@ export function backfillMediaInfo(db, userId) {
   } catch { /* veritabani kapanmis olabilir */ }
 }
 
-export function userStats(db, user, period = 'all') {
+export function userStats(db, user, period = 'all', scope = null) {
   const today = userToday(db, user.id);
-  const m = userModel(db, user.id, period, today);
+  const m = userModel(db, user.id, period, today, scope);
   const st = streaksOf(db, user.id, today);
   const range = m.range;
   const inP = (d) => d && inRange(d, range);
-  const movies = db.prepare("SELECT end_date FROM entries WHERE user_id=? AND type='movie' AND status='bitti'").all(user.id).filter((r) => period === 'all' || inP(r.end_date)).length;
-  const seriesFinished = db.prepare("SELECT end_date FROM entries WHERE user_id=? AND type='series' AND status='bitti'").all(user.id).filter((r) => period === 'all' || inP(r.end_date)).length;
-  const seriesActive = db.prepare("SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='series' AND status='devam'").get(user.id).c;
+  const movies = db.prepare(`SELECT end_date FROM entries WHERE user_id=? AND type='movie' AND status='bitti'${sc(scope, 'id')}`).all(user.id).filter((r) => period === 'all' || inP(r.end_date)).length;
+  const seriesFinished = db.prepare(`SELECT end_date FROM entries WHERE user_id=? AND type='series' AND status='bitti'${sc(scope, 'id')}`).all(user.id).filter((r) => period === 'all' || inP(r.end_date)).length;
+  const seriesActive = db.prepare(`SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='series' AND status='devam'${sc(scope, 'id')}`).get(user.id).c;
   return {
     user: publicUser(user),
     total_pages: Math.round(m.total),
@@ -156,7 +160,7 @@ export function userStats(db, user, period = 'all') {
     current_streak: st.current,
     longest_streak: st.longest,
     active_days: st.active,
-    ...mediaStats(db, user.id, period, today),
+    ...mediaStats(db, user.id, period, today, scope),
   };
 }
 
@@ -190,13 +194,17 @@ function bestStreakBoard(db, users) {
   });
 }
 
-export function leaderboard(db, kind, period = 'all') {
-  const users = db.prepare('SELECT * FROM users WHERE active=1').all();
+// groupId: grubun uyeleri, sadece gruba acik kayitlardan (seri ise kisinin tum kayitlarindan); groupId yoksa yalniz meId (Hesabim)
+export function leaderboard(db, kind, period = 'all', { groupId = null, meId = null } = {}) {
+  const users = groupId
+    ? db.prepare('SELECT u.* FROM users u JOIN group_members m ON m.user_id=u.id AND m.group_id=? WHERE u.active=1 AND u.kind<>\'manager\'').all(groupId)
+    : db.prepare('SELECT * FROM users WHERE active=1 AND id=?').all(meId);
+  const scope = groupId ? groupScope([groupId]) : null;
   if (kind === 'streak') return streakBoard(db, users);
   if (kind === 'best_streak') return bestStreakBoard(db, users);
   const rows = [];
   for (const u of users) {
-    const m = userModel(db, u.id, period);
+    const m = userModel(db, u.id, period, undefined, scope);
     let value = 0;
     let detail = {};
     if (kind === 'record') {

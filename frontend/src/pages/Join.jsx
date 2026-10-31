@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { autoEnablePush } from '../pushClient.js';
-import { AvatarPicker, ColorPicker, COLORS } from '../Profile.jsx';
+import { AccountInputs, accountBody, accountError, useAccountForm } from '../AccountFields.jsx';
 
-export default function Join({ token, onLogin }) {
+// /katil/:token — oturum yoksa "Giriş yap" / "Hesap aç" sekmeleri, oturum varsa tek tıkla "Gruba katıl"
+export default function Join({ user, onLogin }) {
+  const { token } = useParams();
+  const navigate = useNavigate();
   const [owner, setOwner] = useState(null);
   const [groupName, setGroupName] = useState('');
   const [invalid, setInvalid] = useState('');
-  const [f, setF] = useState({ username: '', password: '', display_name: '', avatar: '🦊', color: COLORS[0] });
+  const [mode, setMode] = useState('login');
+  const [f, set] = useAccountForm();
+  const [share, setShare] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
     api.joinInfo(token).then((r) => {
@@ -20,16 +25,27 @@ export default function Join({ token, onLogin }) {
     }, (e) => setInvalid(e.message));
   }, [token]);
 
+  const finish = (u) => {
+    navigate('/', { replace: true });
+    onLogin(u);
+    if (!user) autoEnablePush(u.id, { prompt: true });
+  };
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!f.username.trim() || !f.password || !f.display_name.trim()) return setError('Kullanıcı adı, şifre ve hesap adını doldur.');
-    setBusy(true);
     setError('');
+    if (!user && mode === 'login' && (!f.username.trim() || !f.password)) return setError('Kullanıcı adı ve şifreyi yaz.');
+    if (!user && mode === 'register' && accountError(f)) return setError(accountError(f));
+    setBusy(true);
     try {
-      const r = await api.join(token, { ...f, username: f.username.trim(), display_name: f.display_name.trim() });
-      window.history.replaceState(null, '', '/');
-      onLogin(r.user);
-      autoEnablePush(r.user.id, { prompt: true });
+      if (user) {
+        finish((await api.join(token, { share_existing: share })).user);
+      } else if (mode === 'login') {
+        await api.login(f.username.trim(), f.password);
+        finish((await api.join(token, { share_existing: share })).user);
+      } else {
+        finish((await api.join(token, accountBody(f))).user);
+      }
     } catch (x) {
       setError(x.message);
     } finally {
@@ -43,32 +59,57 @@ export default function Join({ token, onLogin }) {
         <div className="card login">
           <h1>Davet geçersiz</h1>
           <p className="sub" style={{ textAlign: 'center' }}>{invalid}</p>
-          <a className="btn" style={{ width: '100%', textAlign: 'center' }} href="/">Girişe git</a>
+          <Link className="btn" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }} to="/">Ana sayfaya git</Link>
         </div>
       </div>
     );
   }
+  const shareBox = (
+    <label className="small" style={{ display: 'block', margin: '0 0 12px' }}>
+      <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} /> Eski kayıtlarımı da paylaş
+      <span className="muted"> (şimdiye kadarki kitap/film kayıtlarım bu grupta da görünsün)</span>
+    </label>
+  );
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit} noValidate>
         <h1><img src="/brand.png" alt="" width="40" height="40" style={{ verticalAlign: 'middle', marginRight: 8 }} />{groupName || 'Kütüphane'}</h1>
-        <p className="sub" style={{ textAlign: 'center' }}>{owner ? `${owner} seni davet etti, hesabını oluştur.` : 'Davet kontrol ediliyor…'}</p>
-        <label className="field">
-          <span>Kullanıcı adı</span>
-          <input type="text" autoComplete="username" autoCapitalize="none" value={f.username} onChange={(e) => set('username')(e.target.value)} autoFocus />
-        </label>
-        <label className="field">
-          <span>Şifre (en az 6 karakter)</span>
-          <input type="password" autoComplete="new-password" value={f.password} onChange={(e) => set('password')(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>Hesap adı (herkese görünen)</span>
-          <input type="text" value={f.display_name} onChange={(e) => set('display_name')(e.target.value)} />
-        </label>
-        <div className="field"><span>Avatar</span><AvatarPicker value={f.avatar} onChange={set('avatar')} /></div>
-        <div className="field"><span>Renk</span><ColorPicker value={f.color} onChange={set('color')} /></div>
+        <p className="sub" style={{ textAlign: 'center' }}>
+          {!owner ? 'Davet kontrol ediliyor…' : user ? `${owner} seni “${groupName}” grubuna davet etti.` : `${owner} seni davet etti. Giriş yap ya da hesap aç, otomatik katılırsın.`}
+        </p>
+        {user ? (
+          <>
+            <p style={{ textAlign: 'center', margin: '0 0 12px' }}><b>{user.display_name}</b> hesabıyla katılacaksın.</p>
+            {shareBox}
+          </>
+        ) : (
+          <>
+            <div className="tabs" role="tablist" aria-label="Katılım yolu" style={{ justifyContent: 'center', marginBottom: 12 }}>
+              <button type="button" role="tab" className="tab sm" aria-selected={mode === 'login'} onClick={() => { setMode('login'); setError(''); }}>Giriş yap</button>
+              <button type="button" role="tab" className="tab sm" aria-selected={mode === 'register'} onClick={() => { setMode('register'); setError(''); }}>Hesap aç</button>
+            </div>
+            {mode === 'login' ? (
+              <>
+                <label className="field">
+                  <span>Kullanıcı adı</span>
+                  <input type="text" autoComplete="username" autoCapitalize="none" value={f.username} onChange={(e) => set('username')(e.target.value)} autoFocus />
+                </label>
+                <label className="field">
+                  <span>Şifre</span>
+                  <input type="password" autoComplete="current-password" value={f.password} onChange={(e) => set('password')(e.target.value)} />
+                </label>
+                {shareBox}
+              </>
+            ) : (
+              <AccountInputs f={f} set={set} autoFocus />
+            )}
+          </>
+        )}
         {error && <div className="err" role="alert">{error}</div>}
-        <button className="btn" style={{ width: '100%' }} disabled={busy || !owner}>{busy ? 'Katılınıyor…' : 'Katıl'}</button>
+        <button className="btn" style={{ width: '100%' }} disabled={busy || !owner}>
+          {busy ? 'Katılınıyor…' : user ? 'Gruba katıl' : mode === 'login' ? 'Giriş yap ve katıl' : 'Hesap aç ve katıl'}
+        </button>
+        {user && <Link className="btn ghost" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box', marginTop: 8 }} to="/">Vazgeç</Link>}
       </form>
     </div>
   );

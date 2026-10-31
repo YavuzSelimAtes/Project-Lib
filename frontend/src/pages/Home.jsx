@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../auth.js';
-import { Avatar, Cover, Empty, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
+import { useAuth, useGroup } from '../auth.js';
+import { Avatar, Cover, Empty, PageHead, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
@@ -55,7 +55,10 @@ function FeedItem({ it, mine, color, onOpen }) {
 
 export default function Home() {
   const { user: me } = useAuth();
-  const feed = useAsync(() => api.feed(), []);
+  const gid = useGroup();
+  const base = gid ? `/g/${gid}` : '/ben';
+  const shelfTo = (c) => (gid ? (c.user.id === me.id ? `${base}/rafim` : `${base}/uye/${c.user.id}`) : '/ben');
+  const feed = useAsync(() => api.feed(gid), [gid]);
   const pending = useAsync(() => api.pending(), []);
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -78,12 +81,12 @@ export default function Home() {
   // yonetici hesabinin kendi okumasi yoksa karti gizle
   const visible = cards.filter((c) => !((c.user.role === 'admin' || (c.user.id === me.id && me.role === 'admin')) && c.items.length === 0));
   const sorted = [...visible].sort((a, b) => (b.user.id === me.id) - (a.user.id === me.id));
-  const allEmpty = visible.length > 0 && visible.every((c) => c.items.length === 0);
 
   return (
     <>
-      <h1>Son güncellemeler</h1>
-      <p className="sub">Ailede kim ne okuyor, ne izliyor.</p>
+      <PageHead title={gid ? 'Ana sayfa' : 'Son güncellemeler'} sub={gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}>
+        <button className="btn" onClick={() => setAdding(true)}>+ Yeni ekle</button>
+      </PageHead>
 
       {pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -117,21 +120,11 @@ export default function Home() {
           Yönetici aile üyelerini ekleyince burada görünecekler.
         </Empty>
       )}
-      {allEmpty && (
-        <Empty icon="📚" title="Raflar henüz boş">
-          İlk kitabı, filmi ya da diziyi sen ekle!
-          <div style={{ marginTop: 12 }}>
-            <button className="btn" onClick={() => setAdding(true)}>
-              + Yeni ekle
-            </button>
-          </div>
-        </Empty>
-      )}
 
       <div className="grid">
         {sorted.map((c) => (
           <section key={c.user.id} className="card ucard" style={{ '--c': c.user.color }} aria-label={c.user.display_name}>
-            <Link to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`} className="ucard-head" style={{ textDecoration: 'none' }} title="Rafına bak">
+            <Link to={shelfTo(c)} className="ucard-head" style={{ textDecoration: 'none' }} title="Rafına bak">
               <Avatar user={c.user} />
               <div className="grow">
                 <b>{c.user.id === me.id ? 'Sen' : c.user.display_name}</b>
@@ -153,7 +146,7 @@ export default function Home() {
               <FeedItem key={it.entry_id} it={it} mine={c.user.id === me.id} color={c.user.color} onOpen={setOpenId} />
             ))}
             {c.more_count > 0 && (
-              <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={c.user.id === me.id ? '/rafim' : `/uye/${c.user.id}`}>
+              <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={shelfTo(c)}>
                 {c.more_count} tane daha
               </Link>
             )}
@@ -161,9 +154,6 @@ export default function Home() {
         ))}
       </div>
 
-      <button className="fab" onClick={() => setAdding(true)} aria-label="Yeni ekle">
-        + Yeni ekle
-      </button>
       {adding && <AddFlow onClose={() => setAdding(false)} onAdded={reload} />}
       {openId && <EntryDetail entryId={openId} onClose={() => setOpenId(null)} onChanged={reload} />}
     </>

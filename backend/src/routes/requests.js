@@ -1,9 +1,11 @@
-import { requireUser, requireAdmin } from '../auth.js';
+import { requireUser, requireCatalogEditor } from '../auth.js';
 import { err, bad, str, int, oneOf, nowIso, publicUser } from '../util.js';
 import { catalogOut, markListed } from '../services/catalog.js';
 import { notify } from '../services/notify.js';
 
 const STATUSES = ['acik', 'inceleniyor', 'tamamlandi', 'reddedildi'];
+// Grup sahibi yalniz sahibi oldugu gruplarin uyelerinin isteklerini gorur/cevaplar; platform yoneticisi hepsini
+const scopeSql = (me) => me.role === 'admin' ? '1=1' : `user_id IN (SELECT user_id FROM group_members WHERE group_id IN (SELECT group_id FROM group_members WHERE user_id=${Number(me.id)} AND role='owner'))`;
 const LABEL = { inceleniyor: 'incelemeye alindi', tamamlandi: 'tamamlandi', reddedildi: 'reddedildi', acik: 'tekrar acildi' };
 
 export default async function routes(app) {
@@ -36,20 +38,21 @@ export default async function routes(app) {
   });
 
   app.get('/api/admin/requests', async (req) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
+    const sc = scopeSql(me);
     const status = oneOf(req.query.status, STATUSES, { field: 'status' });
     const rows = status
-      ? db.prepare('SELECT * FROM requests WHERE status=? ORDER BY id DESC').all(status)
-      : db.prepare('SELECT * FROM requests ORDER BY id DESC').all();
+      ? db.prepare(`SELECT * FROM requests WHERE status=? AND ${sc} ORDER BY id DESC`).all(status)
+      : db.prepare(`SELECT * FROM requests WHERE ${sc} ORDER BY id DESC`).all();
     const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
-    for (const r of db.prepare('SELECT status, COUNT(*) c FROM requests GROUP BY status').all()) counts[r.status] = r.c;
+    for (const r of db.prepare('SELECT status, COUNT(*) c FROM requests WHERE ' + sc + ' GROUP BY status').all()) counts[r.status] = r.c;
     return { requests: rows.map(out), counts };
   });
 
   app.patch('/api/admin/requests/:id', async (req) => {
-    requireAdmin(req);
+    const me = requireCatalogEditor(req);
     const id = Number(req.params.id);
-    const r = db.prepare('SELECT * FROM requests WHERE id=?').get(id);
+    const r = db.prepare(`SELECT * FROM requests WHERE id=? AND ${scopeSql(me)}`).get(id);
     if (!r) throw err(404, 'Talep bulunamadi');
     const b = req.body || {};
     let status = b.status !== undefined ? oneOf(b.status, STATUSES, { field: 'status', required: true }) : r.status;

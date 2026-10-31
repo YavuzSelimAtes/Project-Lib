@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { Avatar, CountUp, Empty, ErrorBox, Skeleton, fmtDate, useAsync } from '../ui.jsx';
+import { useGroup } from '../auth.js';
+import { Avatar, CountUp, Empty, PageHead, ErrorBox, Skeleton, fmtDate, useAsync } from '../ui.jsx';
 
 const BOARDS = [
-  { key: 'record', label: '🏆 Rekor', unit: 'sayfa', note: 'Bir günde en çok okunan sayfa', dec: 0 },
-  { key: 'average', label: '📈 Günlük ortalama', unit: 'sayfa/gün', note: 'Günde ortalama okunan sayfa', dec: 1 },
-  { key: 'finished', label: '📕 En çok bitiren', unit: 'kitap', note: 'Bitirilen kitap sayısı', dec: 0 },
-  { key: 'streak', label: '🔥 Seri', unit: 'gün', note: 'Üst üste her gün kitap okuyanlar: güncel ve tüm zamanların en uzun serisi', dec: 0, noPeriod: true },
+  { key: 'record', label: '🏆 Rekor', short: 'Rekor', unit: 'sayfa', note: 'Bir günde en çok okunan sayfa', dec: 0 },
+  { key: 'average', label: '📈 Günlük ortalama', short: 'Günlük', unit: 'sayfa/gün', note: 'Günde ortalama okunan sayfa', dec: 1 },
+  { key: 'finished', label: '📕 En çok bitiren', short: 'Bitiren', unit: 'kitap', note: 'Bitirilen kitap sayısı', dec: 0 },
+  { key: 'streak', label: '🔥 Seri', short: 'Seri', unit: 'gün', note: 'Üst üste her gün kitap okuyanlar: güncel ve tüm zamanların en uzun serisi', dec: 0, noPeriod: true },
 ];
 const PERIODS = [
   ['all', 'Tüm zamanlar'],
@@ -30,7 +31,8 @@ function detailText(kind, d) {
 
 // Seri sekmesi: buton eklemeden iki sıralama alt alta (güncel seri + en uzun seri)
 function StreakBoard({ kind, title, note }) {
-  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind), [kind]);
+  const gid = useGroup();
+  const { data, error, loading, reload } = useAsync(() => api.leaderboard(kind, undefined, gid), [kind, gid]);
   const list = data?.entries || [];
   return (
     <>
@@ -65,37 +67,42 @@ function StreakBoard({ kind, title, note }) {
 }
 
 export default function Leaderboard() {
+  const gid = useGroup();
   const [kind, setKind] = useState('record');
   const [period, setPeriod] = useState('all');
   const board = BOARDS.find((b) => b.key === kind);
   const isStreak = kind === 'streak';
-  const { data, error, loading, reload } = useAsync(() => (isStreak ? Promise.resolve(null) : api.leaderboard(kind, period)), [kind, period]);
+  const { data, error, loading, reload } = useAsync(() => (isStreak ? Promise.resolve(null) : api.leaderboard(kind, period, gid)), [kind, period, gid]);
   const list = data?.entries || [];
   const top = list.filter((e) => e.rank <= 3).slice(0, 3);
   const rest = list.filter((e) => !top.includes(e));
   // podyum sirasi: 2 - 1 - 3
-  const podium = top.length === 3 ? [top[1], top[0], top[2]] : top;
+  const podium = top.length >= 2 ? [top[1], top[0], top[2]].filter(Boolean) : top;
 
   return (
     <>
-      <h1>Liderlik</h1>
-      <p className="sub">{board.note}</p>
-      <div className="tabs" role="tablist" aria-label="Tablo">
-        {BOARDS.map((b) => (
-          <button key={b.key} role="tab" aria-selected={kind === b.key} className="tab" onClick={() => setKind(b.key)}>
-            {b.label}
-          </button>
-        ))}
-      </div>
-      {!board.noPeriod && (
-        <div className="tabs" role="tablist" aria-label="Dönem">
-          {PERIODS.map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
-              {l}
-            </button>
-          ))}
+      <PageHead title="Liderlik" sub={board.note} />
+      <div className="toolbar shelf-bar lb-bar">
+        <div className="tabs seg" role="tablist" aria-label="Tablo">
+          {BOARDS.map((b) => {
+            const [ic, ...t] = b.label.split(' ');
+            return (
+              <button key={b.key} role="tab" aria-selected={kind === b.key} aria-label={t.join(' ')} title={t.join(' ')} className="tab" onClick={() => setKind(b.key)}>
+                <span aria-hidden="true">{ic}</span>
+                <span className="lb-full"> {t.join(' ')}</span>
+                <span className="lb-short"> {b.short}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
+        {!board.noPeriod && (
+          <select className="period-sel" aria-label="Dönem" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            {PERIODS.map(([k, l]) => (
+              <option key={k} value={k}>{l}</option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {isStreak && (
         <>
@@ -112,17 +119,17 @@ export default function Leaderboard() {
       )}
       {!isStreak && !loading && list.length > 0 && (
         <>
-          <div className="podium" style={top.length < 3 ? { gridTemplateColumns: `repeat(${top.length}, 1fr)` } : undefined}>
+          <div className={`podium n${podium.length}`}>
             {podium.map((e) => (
-              <div key={e.user.id} className={`pod ${e.rank === 1 ? 'p1' : ''}`}>
+              <div key={e.user.id} className={`pod p${top.indexOf(e) + 1}`}>
                 <div className="medal">{MEDAL[e.rank - 1] || e.rank}</div>
                 <Avatar user={e.user} size="lg" />
-                <div className="name">{e.user.display_name}</div>
+                <div className="name" title={e.user.display_name}>{e.user.display_name}</div>
                 <div className="val">
                   <CountUp value={e.value} decimals={board.dec} />
-                  <span className="small muted"> {board.unit}</span>
                 </div>
-                <div className="small muted" style={{ wordBreak: 'break-word' }}>{detailText(kind, e.detail)}</div>
+                <div className="pod-unit small muted">{board.unit}</div>
+                <div className="pod-detail small muted" title={detailText(kind, e.detail)}>{detailText(kind, e.detail)}</div>
               </div>
             ))}
           </div>

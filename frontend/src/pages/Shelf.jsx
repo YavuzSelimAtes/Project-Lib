@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../auth.js';
-import { CountUp, Cover, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
+import { useAuth, useGroup } from '../auth.js';
+import { CountUp, Cover, PageHead, Stat, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
 import Calendars from '../Calendar.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
+import FinishedShelf from '../FinishedShelf.jsx';
 
 const FILTERS = [
   ['all', 'Hepsi'],
@@ -22,18 +23,19 @@ const PERIODS = [
 const fmt = (n, d = 0) => (n ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: d });
 
 export default function Shelf() {
-  const { user: me, editProfile } = useAuth();
+  const { user: me } = useAuth();
   const params = useParams();
-  const uid = params.id ? Number(params.id) : me.id;
+  const gid = useGroup();
+  const uid = params.userId ? Number(params.userId) : me.id;
   const own = uid === me.id;
   const [filter, setFilter] = useState('all');
   const [period, setPeriod] = useState('all');
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
 
-  const stats = useAsync(() => api.stats(uid, period), [uid, period]);
+  const stats = useAsync(() => api.stats(uid, period, undefined, gid), [uid, period, gid]);
   const [calRev, setCalRev] = useState(0);
-  const entries = useAsync(() => api.entries({ user_id: uid, type: filter === 'all' ? '' : filter, limit: 200 }), [uid, filter]);
+  const entries = useAsync(() => api.entries({ user_id: uid, type: filter === 'all' ? '' : filter, limit: 200, group: gid }), [uid, filter, gid]);
   const pending = useAsync(() => (own ? api.pending() : Promise.resolve(null)), [own]);
   const requests = useAsync(() => (own ? api.myRequests() : Promise.resolve(null)), [own]);
 
@@ -55,7 +57,7 @@ export default function Shelf() {
     return (
       <Empty icon="🔍" title="Bu üye bulunamadı">
         <div style={{ marginTop: 12 }}>
-          <Link className="btn" to="/">Ana sayfaya dön</Link>
+          <Link className="btn" to={gid ? `/g/${gid}` : '/ben'}>Geri dön</Link>
         </div>
       </Empty>
     );
@@ -63,51 +65,47 @@ export default function Shelf() {
 
   return (
     <>
-      <div className="shelf-head">
-        <div className="grow">
-          <h1>{own ? 'Benim rafım' : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}</h1>
-          <p className="sub" style={{ marginBottom: 8 }}>
-            {own ? 'Okuduklarım, izlediklerim ve rakamlarım.' : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
-          </p>
-        </div>
-        {own && (
-          <div className="shelf-actions">
-            <button className="btn ghost" onClick={editProfile}>
-              ✏️ Profili düzenle
-            </button>
-            <button className="btn" onClick={() => setAdding(true)}>
-              + Yeni ekle
-            </button>
-          </div>
+      <FinishedShelf uid={uid} gid={gid} version={entries.data} />
+      <PageHead
+        title={own ? (gid ? 'Rafım' : 'Hesabım') : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}
+        sub={own ? (gid ? 'Bu grupta görünen kayıtlarım.' : undefined) : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
+      >
+        {own && !gid && (
+          <button className="btn" onClick={() => setAdding(true)}>
+            + Yeni ekle
+          </button>
         )}
-      </div>
+      </PageHead>
 
-      <div className="tabs" role="tablist" aria-label="Tür">
-        {FILTERS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={filter === k} className="tab" onClick={() => setFilter(k)}>
-            {l}
-          </button>
-        ))}
+      <div className="toolbar shelf-bar">
+      <div className="tabs seg" role="tablist" aria-label="Tür">
+        {FILTERS.map(([k, l]) => {
+          const [ic, ...t] = k === 'all' ? [null, l] : l.split(' ');
+          return (
+            <button key={k} role="tab" aria-selected={filter === k} aria-label={k === 'all' ? undefined : t.join(' ')} title={k === 'all' ? undefined : t.join(' ')} className="tab" onClick={() => setFilter(k)}>
+              {k === 'all' ? l : <><span aria-hidden="true">{ic}</span><span className="seg-t"> {t.join(' ')}</span></>}
+            </button>
+          );
+        })}
       </div>
-      <div className="tabs" role="tablist" aria-label="Dönem">
+      <select className="period-sel" aria-label="Dönem" value={period} onChange={(e) => setPeriod(e.target.value)}>
         {PERIODS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
-            {l}
-          </button>
+          <option key={k} value={k}>{l}</option>
         ))}
+      </select>
       </div>
       <ErrorBox error={stats.error} onRetry={stats.reload} />
       {stats.loading && !s ? (
         <Skeleton h={80} />
       ) : (
         s && (
-          <div style={{ opacity: stats.loading ? 0.55 : 1, transition: 'opacity .2s' }}>
+          <div style={{ opacity: stats.loading ? 0.85 : 1, transition: 'opacity .2s' }}>
             <StatCards key={filter} s={s} type={filter} animate={!animated.current} />
           </div>
         )
       )}
 
-      <Calendars uid={uid} filter={filter} rev={calRev} />
+      <Calendars uid={uid} filter={filter} rev={calRev} group={gid} />
 
       {own && pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -152,6 +150,8 @@ export default function Shelf() {
         ))}
       </div>
 
+      {own && !gid && me.groups?.length > 0 && entries.data?.entries.length > 0 && <BulkVisibility entries={entries.data.entries} onDone={entries.reload} />}
+
       {own && requests.data?.requests?.length > 0 && (
         <>
           <h2>Taleplerim</h2>
@@ -189,11 +189,7 @@ function StatCards({ s, type, animate }) {
   const num = (v, dec = 0) => <CountUp value={v} decimals={dec} animate={animate} />;
   const has = (k) => s[k] != null;
   const card = (key, big, label, extra) => (
-    <div className="card stat" key={key}>
-      <b>{big}</b>
-      {label}
-      {extra}
-    </div>
+    <Stat key={key} value={big} label={label} extra={extra} />
   );
   const movieUnk = s.movie_runtime_unknown || 0;
   const epUnk = !!s.episodes_unknown;
@@ -259,5 +255,34 @@ function StatCards({ s, type, animate }) {
       <div className="stats fade-in">{cards.filter(Boolean)}</div>
       {epUnk && (type === 'series' || type === 'all') && <p className="small muted" style={{ marginTop: -8 }}>Sezon bilgisi olmayan dizilerde bölümler sayılamadı; gerçek sayı daha yüksek olabilir.</p>}
     </>
+  );
+}
+
+// Gorunen tum kayitlarin gruplarini tek seferde ac/kapat
+function BulkVisibility({ entries, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const run = async (all) => {
+    const text = all ? 'Listedeki ' + entries.length + ' kaydın hepsi tüm gruplarına açılsın mı?' : 'Listedeki ' + entries.length + ' kaydın hepsi gruplardan gizlensin mi? (Sadece sen görürsün; serin ve istatistiklerin etkilenmez.)';
+    if (!window.confirm(text)) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      for (const e of entries) await api.setEntryGroups(e.id, all ? { all: true } : { none: true });
+      setMsg(all ? 'Hepsi gruplarına açıldı.' : 'Hepsi gizlendi.');
+      onDone();
+    } catch (x) {
+      setMsg(x.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="small row" style={{ margin: '10px 0' }}>
+      <span className="muted">Toplu görünürlük:</span>
+      <button className="btn small ghost" disabled={busy} onClick={() => run(true)}>Hepsi gruplarıma açık</button>
+      <button className="btn small ghost" disabled={busy} onClick={() => run(false)}>Hiçbiri (sadece ben)</button>
+      <span role="status">{msg}</span>
+    </div>
   );
 }

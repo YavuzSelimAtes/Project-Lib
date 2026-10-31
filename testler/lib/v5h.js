@@ -24,6 +24,16 @@ function setup() {
     const c = new Client();
     const l = await c.login(username, PW);
     if (l.status !== 200) throw new Error('giris: ' + l.status + ' ' + l.text);
+    // cok gruplu yapi: feed/liderlik grup kapsamli; test kullanicilari ortak bir test grubunda bulusur
+    if (!ctx.groupToken) {
+      const g = await ctx.admin.post('/api/groups', { name: `V5 Test ${RUN}` });
+      if (g.status !== 201) throw new Error('grup: ' + g.status + ' ' + g.text);
+      ctx.groupId = g.json.group.id; ctx.admin.defGroup = ctx.groupId;
+      ctx.groupToken = (await ctx.admin.get(`/api/groups/${g.json.group.id}/invite`)).json.token;
+    }
+    const j = await c.post(`/api/join/${ctx.groupToken}`, {});
+    if (j.status >= 300) throw new Error('katilim: ' + j.status + ' ' + j.text);
+    c.defGroup = ctx.groupId;
     return { c, id: r.json.user.id, username, user: r.json.user };
   };
   return ctx;

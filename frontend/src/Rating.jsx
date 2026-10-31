@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api } from './api.js';
 import { ErrorBox, Skeleton, useAsync } from './ui.jsx';
+import { useAuth } from './auth.js';
+import { GroupPicker, VisEditor, visBody } from './Visibility.jsx';
 
 export const EMOJIS = ['❤️', '👍', '😂', '😮', '🔥'];
 const SCALE = { 1: 'Çok kötü', 2: 'Kötü', 3: 'İdare eder', 4: 'İyi', 5: 'Çok iyi' };
@@ -87,6 +89,8 @@ export function CongratsButton({ entryId, count = 0, sent = false }) {
 
 // Kitap puanlama: tur secimi + metrikler. Ozet her zaman, form yalnizca can_rate ise.
 export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
+  const { user } = useAuth();
+  const [pick, setPick] = useState(null);
   const rt = useAsync(() => api.ratings(catalogId), [catalogId]);
   const metrics = useAsync(() => api.bookMetrics(), []);
   const [genre, setGenre] = useState(null);
@@ -106,6 +110,8 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
   const genres = metrics.data?.genres || {};
   const list = (g && genres[g]?.metrics) || (g === d.genre ? d.metrics : null) || [];
   const cur = scores || d.mine?.scores || {};
+  const visGroups = (user.groups || []).filter((x) => (d.allowed_group_ids || []).includes(x.id)).map((x) => ({ id: x.id, name: x.name }));
+  const selVis = pick ?? (d.mine ? (d.mine_group_ids || []) : visGroups.map((x) => x.id));
   const complete = list.length > 0 && list.every((m) => cur[m.key] >= 1);
 
   const save = async () => {
@@ -113,7 +119,8 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
     setErr(null);
     setDone(false);
     try {
-      await api.saveRatings(catalogId, g, Object.fromEntries(list.map((m) => [m.key, cur[m.key]])));
+      await api.saveRatings(catalogId, g, Object.fromEntries(list.map((m) => [m.key, cur[m.key]])), visBody(visGroups, selVis));
+      setPick(null);
       setScores(null);
       setOpen(false);
       setDone(true);
@@ -153,6 +160,9 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
         <div className="small" style={{ marginTop: 6 }}>
           Senin puanın: <b>{fmt(d.mine.average)}</b>
         </div>
+      )}
+      {d.mine && !open && visGroups.length > 0 && (
+        <VisEditor label="Puanımı görenler" groups={visGroups} ids={d.mine_group_ids || []} save={(b) => api.setRatingGroups(catalogId, b)} onSaved={rt.reload} />
       )}
       {d.can_rate && (
         <div style={{ marginTop: 8 }}>
@@ -209,6 +219,12 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
                   </div>
                 </div>
               ))}
+              {!d.mine && visGroups.length > 1 && (
+                <div style={{ marginTop: 8 }}>
+                  <span className="small muted">Puanı görecek gruplar:</span>
+                  <GroupPicker groups={visGroups} value={selVis} onChange={setPick} />
+                </div>
+              )}
               <div className="row" style={{ marginTop: 10 }}>
                 <button className="btn small" disabled={busy || !complete} onClick={save}>
                   Kaydet

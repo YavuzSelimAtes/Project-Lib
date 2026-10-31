@@ -5,6 +5,8 @@ class Client {
   constructor(base = BASE) { this.base = base; this.cookies = {}; this.token = null; }
 
   async raw(method, path, { body, headers = {}, rawBody } = {}) {
+    // cok gruplu yapi: feed/liderlik ?group= ister; defGroup verilmisse otomatik eklenir
+    if (this.defGroup && method === 'GET' && /^\/api\/(feed|leaderboards|library)/.test(path) && !/[?&]group=/.test(path)) path += (path.includes('?') ? '&' : '?') + 'group=' + this.defGroup;
     const h = { ...headers };
     if (Object.keys(this.cookies).length) h.cookie = Object.entries(this.cookies).map(([k, v]) => `${k}=${v}`).join('; ');
     if (this.token) h.authorization = `Bearer ${this.token}`;

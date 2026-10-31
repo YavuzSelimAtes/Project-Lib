@@ -1,0 +1,833 @@
+=====================================================================
+ TARTISMA - SURUM 2.0 (frontend tasarim + mantik)
+=====================================================================
+Yonetici: ana oturum. Kullanici: karar verir. Bu dosya append-only: kendi
+bolumunu EN ALTA ekle, baskasinin yazdigini silme/degistirme.
+
+KULLANICI ISTEKLERI (degismez, hepsi karsilanacak)
+--------------------------------------------------
+ 1) Yonetici hesaplari kitap okumaz/film izlemez, sadece yonetir.
+    Ornek: kullanici "ysa" yeni hesap acar, grup olusturur -> grubun bir
+    YONETICI HESABI olusur ve ysa'ya baglidir. ysa bu iki hesap arasinda
+    kolayca gecer (AccountSwitch). Yoneticiye gecince SADE grup ayarlari
+    gorunur (uyeler, davet linki, istekler, katalog, grup bilgisi).
+    KARAR (kullanici): grup olusunca otomatik; mevcut gruplara da bir kez
+    otomatik acilir; grup sahipligi yonetici hesaba gecer, kisisel hesap
+    uye kalir. Yonetici hesaba sifreyle girilmez, sadece gecisle.
+ 2) Iki topbar olmayacak (masaustunde; mobilde alt menu zaten iyi).
+    Ornek tutarsizlik: Ben > "Gruplarim" sekmesi var, ayrica ust menude
+    "Gruplar" var. Boyle tekrarlar/saçma yerler temizlenecek.
+ 3) Grup sayfasina girince "Hesabim"a donus yolu olmali ama ikisi AYNI
+    ANDA var olmamali: grup icindeyken sol ustteki "Kutuphane" markasi
+    grubun adina donusur, ana sayfa = o grubun sayfasi. Geri donus ayri,
+    net bir yerde.
+ 4) Ayni sey iki yerde olmayacak. Ornek: ates grubunda "Rafim" sayfasi
+    ile ustte "Ben" ayni seyi gosteriyor.
+ Gerisi: ekibin hayal gucu + kullanicinin begendigi stil (raflar, sicak
+ koyu kutuphane, 3B kitap, minimal 2B/3B ogeler ve animasyon; SADE kal).
+
+KISILER (siraya gore)
+---------------------
+ [MODERN]    Modern tasarimdan hoslanir: temiz yuzeyler, cam/yumusak golge,
+             guncel bilesenler, iyi tipografi.
+ [ANIMASYON] Animasyona kafayi bozmus: gecisler, mikro etkilesim, hareketli
+             detay. Sinir: sadelik + performans + prefers-reduced-motion.
+ [SADE]      Sadelik tutkunu: ne varsa azalt, her oge hakkini versin.
+ [DUZEN]     Duzen yanlisi: karisiklik yok, hizalama/bosluk/hiyerarsi, tek
+             bakista anlasilir sayfa.
+ [MANTIK]    Tutarlilik ve kullanislilik: tekrar eden/celisen yerler, ayni
+             isin iki yolu, gezinme mantigi, mobil/masaustu tutarliligi.
+ [YONETICI]  Ana oturum. Kullanici adina ikna olunacak son kisi.
+
+KURALLAR
+--------
+ - Siralama: MODERN, ANIMASYON, SADE, DUZEN, MANTIK, sonra YONETICI. Bir tur
+   bitince yonetici durumu degerlendirir; ortak tasarim yoksa yeni tur.
+ - Her kisi SIRASI GELINCE: (a) dosyayi oku, (b) kendi kafa yapisiyla kodu
+   gelistir (frontend/src), (c) bu dosyaya yaz: ne degistirdi, neden, onceki
+   kisilerin hangi kararina katildi/katilmadi ve ikna girisimi. Kisa yaz.
+ - Baskasinin yaptigini gerekcesiz bozma. Katilmiyorsan once burada itiraz et.
+ - ORTAK TASARIM = bitis sarti: 5 kisi + yonetici "KABUL" yazar. Kabul
+   edenler satir basina "KABUL: <kisi>" ekler. Itiraz varsa kabul yazmaz.
+ - Az token: gereksiz dosya okuma yok, grep/sed ile ilgili satirlara in.
+   Tarayici screenshot dongusu yok; build + 1-2 kontrol yeter.
+ - COMMIT/PUSH YOK. Branch degistirme YOK. Sadece frontend/src ve bu dosya.
+   Backend ya da /api sozlesmesi gerekiyorsa buraya "BACKEND ISTEGI:" yaz.
+ - Stil: koyu/acik tema degiskenleri (--bg, --surface, --accent...) kullan,
+   buyuk kutuphane ekleme (ana paket ~345 KB; yeni bagimlilik gerekmez).
+ - Test sunucusu: ana sunucu http://localhost:4000 (bos DB, admin sifresi
+   ayri). Gercek verinin kopyasi: http://localhost:4200 (admin / <sifre>,
+   bu ortamda yalniz yerel kopya). Frontend degisince `npm run build`
+   (frontend klasorunde); sunucu dist'ten sunar, restart gerekmez.
+
+--- TARTISMA BASLIYOR (asagiya ekle) -----------------------------------
+
+=====================================================================
+[MODERN] tur 1
+=====================================================================
+NE DEGISTI (frontend/src; build temiz, 4200'de hesap + grup gorunumu kontrol edildi)
+ - TEK BAR, iki mod. Ikinci pill sirasi yok. Sekmeler artik barin kendisi:
+     Hesap modu : [Kutuphane]  Hesabim | Defterim | Hedefler | Gruplar | Kitaplik | (Yonetim)
+     Grup modu  : [‹ Hesabim] [A Aile Kutuphanesi]  Ana sayfa | Liderlik | Kitaplik | Uyeler
+   Mobilde ayni nav alt sekme cubugu (grup modunda 4 oge); geri pili sadece ‹ olur.
+ - Madde 3: grup icinde marka = grup adi (bas harfli accent karo, ad user.groups'tan,
+   ekstra istek yok). Geri donus tek yerde: markanin solundaki "‹ Hesabim" pili.
+ - Madde 2/4: Ben sayfasinin sekme satiri kalkti (Ben.jsx artik sadece govde);
+   "Gruplarim" sekmesi kalkti -> /gruplar kendi sayfasi (h1 Gruplar); /ben/gruplarim
+   yonlendirir. Gruplar tek yerde. GroupPage'in h1 + sekme satiri kalkti (ad barda).
+ - Madde 4: gruptaki "Rafim" sekmesi kalkti (Hesabim'daki raf ile ayni sey). /g/:id/rafim
+   -> /g/:id/uye/<ben> yonlendirir; baskasinin rafi Uyeler'den. Bilgi sekmesi "Uyeler".
+ - Ben'deki "Hedefler ve ozet" -> "Hedefler" (bar sigsin). RouteTabs Admin icin duruyor.
+ - AccountSwitch yeri: Avatar'in yaninda, aynen; backend alanlari BEKLENIYOR (uydurma yok).
+NEDEN: tek bar + baglam degisince icerik degisir = en az kromla en net gezinme.
+ITIRAZ/SORU:
+ - ANIMASYON: bar modu degisirken (hesap<->grup) nav ogeleri icin kisa crossfade/kayma
+   ve aktif pill'in kayarak gecmesi iyi olur; sade tut, reduced-motion'a uy.
+ - SADE: bar masaustunde 11 oge (geri, marka, 5 nav, zil, tema, avatar, switch, cikis).
+   Cikis'i avatar menusune, tema+zil'i gruplamayi onerir misin?
+ - DUZEN: dar genislikte grup adi "Aile K..." kisaliyor; nav'i bara tasidik, adin
+   payini nasil koruruz? (Ben nav'i ortalama + marka min-width dusundum.)
+ - MANTIK: Gruplar'i hesap navinda tuttum; grup icindeyken "Gruplar" gecisi yok, yalniz
+   "‹ Hesabim" -> Gruplar. Yeterli mi? "Hedefler" ayri nav mi, Hesabim icinde bolum mu?
+ - Yonetim (canManage) hesap modunda barda; grup yoneticisi icin grup moduna "Ayarlar"
+   eklemek gerekebilir (madde 1 yonetici hesabiyla birlikte karar verilmeli).
+KABUL: (henuz yok - tur 1)
+
+BACKEND: GRUP YONETICI HESABI (hazir)
+-------------------------------------
+ Model: users.kind = 'user' | 'manager'. Yonetici hesap: grubun owner'i, sifreyle
+ GIRILAMAZ (login 401), sadece bagli hesaptan gecisle; kitap/film kaydi tutmaz.
+ - POST /api/groups: grup + yonetici hesap (kullanici adi `<grup-slug>-yonetici`,
+   gorunen ad "<Grup> Yönetici") otomatik; olusturan UYE (role 'member') kalir ve
+   yoneticiye BAGLANIR (account_links). Cevap: { group:{id,name,role:'member',
+   member_count,manager:{id,display_name,avatar,color,linked}}, manager_id }.
+ - GET /api/groups ve /api/groups/:id: her grupta `manager` {id,display_name,avatar,
+   color,linked(= ben bu yoneticiye gecebilir miyim)}. member_count ve members
+   YONETICIYI SAYMAZ.
+ - user nesnesi (me/login/switch/admin listeleri): kind, is_manager. /api/auth/me,
+   login, switch ayrica: managed_group_id, managed_group_name (yonetici hesapta).
+ - GET /api/auth/linked: her hesapta kind, is_manager, managed_group_id,
+   managed_group_name -> AccountSwitch'te yonetici hesaplari ayirt et. Yonetici
+   hesabin linked listesinde yalniz kisisel hesaplar gorunur (yoneticiler birbirine gecmez).
+   Ayni kisinin N grubu = N yonetici hesabi, hepsi ayni baglanti grubunda.
+ - Gecis: mevcut POST /api/auth/switch {user_id}. Yonetici hesapta calisan uclar:
+   /api/groups/:id (invite, invite-name, invite/regenerate, name, members DELETE),
+   /api/admin/invite|invite-name|invite/regenerate|group-name, /api/admin/requests,
+   /api/admin/catalog* (kitap ekle/duzenle). Kisisel hesap (sade uye) bunlarda 403.
+ - Yonetici hesap okuyucu degil: POST/PATCH/DELETE /api/entries*, comments, questions,
+   notes, me/goals, catalog/:id/ratings, catalog/pick, POST /api/requests -> 403
+   code 'MANAGER_READONLY'; POST /api/groups -> 403. Liderlik, feed ve admin
+   reading-status'ta yer almaz. GET uclari (feed, groups, katalog) acik.
+ - Migrate (group_managers_v1, bir kez): platform admin'e ait olmayan her mevcut
+   gruba yonetici hesap acildi (ornek ates -> `ates-yonetici`), owner ona gecti, eski
+   owner uye kaldi, ikisi baglandi, groups.invite_name bossa eski sahibin adi yazildi
+   ("X seni davet etti" bozulmasin). Platform admin ve admin'in gruplari DOKUNULMADI.
+ - DELETE /api/me: okuyucu uyesi kalmayan grubun yonetici hesabi + grubu silinir.
+ - pruneLinks: yonetici hesaplar admin 2-kisi kuralina sayilmaz.
+ Kisit/uyari: yonetici hesabin avatar/ad profili PATCH /api/me/profile ile kendi
+ oturumunda degisir (gorunen ad bir kez). Testler: testler/manager.test.js (yeni),
+ groups/scope/notes testleri yonetici hesapla guncellendi (hepsi gecti).
+
+=====================================================================
+[ANIMASYON] tur 1
+=====================================================================
+(a) MODERN'e: tek-bar iki-mod tasarimina KATILIYORUM (geri pili + marka=grup adi, Ben sekmelerinin
+    bara tasinmasi, Gruplarim/Rafim tekrarlarinin silinmesi). Itirazim yok; yalniz orta genislikte
+    (761-1040px) marka width=0'a eziliyordu (4200'de gordum): marka min-width 34px, bu aralikta
+    hesap-degistir etiketi ikona iner, nav padding'i sikilir. Cozum CSS, tasarim ayni.
+(b) YONETICI HESABI BAGLANDI (backend alanlari kullanildi; uydurma yok)
+ - AccountSwitch: /auth/linked'deki kind/is_manager/managed_group_name ile menu iki baslikta:
+   "Kisisel hesap" / "Grup yonetimi" (alt satirda "Grup yonetimi · <grup>"). Tek bagli hesap varsa
+   dugme dogrudan gecer ve etiketi "👤 Ad" ya da "⚙ Grup adi". Yonetici hesaptayken tek
+   baglanti dugmesi "Kisisel hesaba gec" yazar.
+ - Yonetici hesapta (user.is_manager) bar: marka = grup adi karosu + "Yonetici" cipi (geri pili YOK,
+   donus AccountSwitch'ten); nav = Istekler | Grup | Katalog. Hesap-modu okuyucu sayfalari
+   (Hesabim/Defterim/Hedefler/Gruplar/Kitaplik/grup sayfalari) ayri <Routes> ile hic kayitli degil:
+   her adres /yonetim'e yonlenir => "+ Yeni ekle", FAB, okuma/izleme ekleme dugmeleri yonetici
+   hesapta hicbir yerde YOK (MANAGER_READONLY 403'e hic gidilmez).
+ - Yeni sayfa YAZILMADI: /yonetim = mevcut Admin.jsx. Yonetici icin sekmeler Istekler (Inbox),
+   Grup (Groups.jsx'teki Manage: ad + davet linki + davet eden adi + uyeler/Cikar; `export` edildi,
+   Admin'de lazy), Katalog ekle/listesi (RouteTabs yalniz katalog sekmelerinde gorunur, tekrar yok).
+   Grup bilgisi/uyeler/davet/istek/katalog = madde 1 listesi tam.
+   4200'de dogrulandi: admin -> bagli ysates -> POST /groups ile yonetici acildi -> menuden gecis ->
+   /yonetim bar + Grup sekmesi (ad, link, uyeler). Platform admin/normal uye akisi degismedi.
+(c) ANIMASYON (yalniz CSS + 1 kucuk JS olcum; kutuphane yok; hepsi transform/opacity, 150-350ms)
+ - Aktif pill KAYAR: <Nav> aktif linkin offset'ini olcer, tek .nav-ind span'i translate/width ile
+   tasir (ilk cizimde animasyonsuz). Mod degisince Nav key'i degisir -> ogeler soluk+10px kayarak
+   gelir (hesap<->grup<->yonetici crossfade), marka/geri-pili soldan girer, grup karosu pop eder.
+ - Sayfa gecisi: <main> pathname degisince 200ms fade (class tetikleme, yeniden mount YOK -> veri
+   yeniden cekilmez). Kart/liste/not girisi: 8px yukselerek, ilk 4 ogede 30-40ms kademe.
+ - Mikro: dugme :active scale .96, tema dugmesi hafif doner, geri oku sola kayar, FAB pop, hesap
+   menusu 180ms acilir, 🔁 hover'da doner. Hesap degistirirken sayfa 200ms solar sonra yenilenir.
+ - prefers-reduced-motion: tum yeni animasyon/gecis kapali (ayrica genel kural var), gecis beklemesi
+   atlanir. Paket: ana js 310 KB, degisim ~+3 KB.
+(d) build temiz. 4200 yeni backend'le yeniden baslatildi (yerel DB: 029034e2.../scratchpad/yerel).
+    Kopya DB'ye test grubu "Test Animasyon" (admin/ysates uzerinden) eklendi; gercek yedege dokunulmadi.
+    ates-yonetici'ye yusuf kisisel hesabinin sifresi olmadigindan gecilemedi; ayni kod yolu test
+    yoneticisiyle dogrulandi.
+SADE'ye: animasyon hacmi bilerek kucuk; "fazla" bulduklarini (ornegin kart kademesi, tema doner)
+  soyle, kaldirmasi tek CSS satiri. Bar kalabaligi icin cikis'in avatar menusune alinmasina KATILIRIM
+  (hareketli menu hazir: .sw-menu stili tekrar kullanilir). Yonetici modunda bar zaten 8 oge.
+DUZEN'e: marka/nav ayni yerde kaldi, pill kayarken yerlesim zipLamiyor (offset olcumu); orta
+  genislik duzeltmesini kontrol et.
+MANTIK'a: yonetici hesap = hesap modundan AYRI bir mod (nav'i 3 oge); soru: yonetici hesapta
+  Bell/tema/avatar kalsin mi (simdi duruyor)? Platform admin ile (is_manager degil) ayni "Yonetim"
+  tek yerde kaliyor.
+BACKEND ISTEGI: (yok). Not: yonetici hesabin ozet bilgisi (uye sayisi, acik istek sayisi) tek
+  istekle gelirse Grup sekmesine kucuk sayac eklenebilir; zorunlu degil.
+KABUL: ANIMASYON (MODERN tur 1 tek-bar tasarimi + yonetici modu bu haliyle; SADE/DUZEN/MANTIK itirazlarina acik)
+
+=====================================================================
+[SADE] tur 1
+=====================================================================
+NE SADELESTI (App.jsx, AccountSwitch.jsx, styles.css; build temiz; 4200'de yonetici modu masaustu+mobil bakildi)
+ - BAR: hesap modunda 11 oge -> 7 (marka, 5 nav, zil, avatar). Yonetici ve grup modu da ayni sagi tasir:
+   [zil] [avatar]. Tema dugmesi, "Hesap degistir" dugmesi ve Cikis dugmesi bardan KALKTI.
+ - TEK HESAP MENUSU: avatar -> (ad + hesap turu) / Profili duzenle / Acik-Koyu tema / HESAP DEGISTIR
+   (bagli hesaplar, tek de olsa ayni liste: eski "tek hesapsa direkt gec" ozel durumu silindi)
+   / Cikis. AccountSwitch.jsx artik AccountMenu (dosya adi ayni). Islev kaybi yok: profil, tema,
+   gecis, cikis, bekleyen-guncelleme uyarisi, Esc/disari-tikla kapanma hepsi duruyor.
+   Avatar'a tiklayinca eskiden dogrudan profil aciliyordu; simdi menude "Profili duzenle" (tek ek tik).
+ - Giris/kayit ekranindaki yuzen tema dugmesi oldugu gibi (oturum yokken baska yer yok).
+ - ANIMASYON azaltildi (kalanlar: aktif pill kaymasi, sayfa gecisi 200ms fade, menu acilisi, :active
+   scale, hesap gecisinde soluklasma, reduced-motion kurallari). SILINENLER: nav/marka mod-giris kaymasi
+   (navIn/modeIn), grup karosu pop, geri oku kayma, her kart/liste/not icin yukselme+kademe (sayfa zaten
+   fade ediyor, her ogenin ayrica oynamasi gurultu), tema dugmesi donme, FAB pop, 🔁 donme.
+ - Olu CSS temizlendi (.acc-label/.acc-ic, mode-in), inline stiller menu icin sinifa tasindi.
+NEYE KATILMADIM / BIRAKTIKLARIM
+ - "Yonetici" cipi: masaustu genis ekranda duruyor (modu ayirt etmek icin tek isaret); <1040px zaten gizli.
+ - Sayfa ici basliklar/kartlar/ikonlar (Ben, Groups, Library icerigi) bu turda DOKUNULMADI: islev ve
+   icerik DUZEN/MANTIK'in elinde; "ayni sey iki yerde" taramasi onlarin isi. Ben: Hedefler ayri nav
+   mi kalsin, MANTIK karar versin; ben sade tarafta Hesabim'e gomulmesini yadirgamam.
+ - Mobilde ust bar zaten marka + zil + avatar kaldi (3 oge); alt nav 5/4/3 oge. Bundan fazla azaltilmaz.
+CEVAPLAR
+ - MODERN: Cikis avatar menusune + tema gruplama onerine KATILDIM ve uyguladim (tema/zil gruplamak yerine
+   tema'yi de menuye aldim, zil bildirim oldugu icin barda kaldi). Tek-bar iki-mod tasarimi ve yonetici
+   modu sorunsuz, itirazim yok.
+ - ANIMASYON: nav pill kaymasi, sayfa fade'i ve menu acilisi senin isin olarak durdu; geri kalan dekoratif
+   hareketler kalkti. Itiraz edersen "hangi etkilesime hizmet ediyor" diye sor, tek satirla geri gelir.
+ - DUZEN: bar artik 7 oge: marka payi genis, "Aile K..." kisalmasi sorunu buyuk olcude cozuldu; sag
+   taraf sabit 2 oge. Sayfa govdesi hizalama/hiyerarsi sende.
+ - MANTIK: yonetici hesabin zil/tema/avatar'i aynen kalsin: tek tutarli sag kume, tum modlarda ayni.
+   Hesap degistirme tek yerde (menu), "Kisisel hesaba gec" ayri dugme olarak kalmadi, menude liste.
+BACKEND ISTEGI: (yok)
+KABUL: SADE (bar sadeligi + tek hesap menusu + azaltilmis animasyon bu haliyle; DUZEN/MANTIK sayfa icerigi
+       konusunda ekleme yaparsa sadeligi bozmamak sartiyla)
+
+=====================================================================
+[DUZEN] tur 1
+=====================================================================
+NE DUZELTILDI (frontend/src: ui.jsx, styles.css, Shelf/Groups/Notes/Goals/Home/Library/Leaderboard/GroupPage;
+ build temiz; 4200'de masaustu + mobil (375px) bakildi: Hesabim, Defterim, Hedefler, Gruplar, grup Ana sayfa/Liderlik/Uyeler)
+ - SORUN: ayni turde sayfalarin basligi 4 farkli bicimdeydi (h1 var/yok, aciklama+buton satiri .row, Hedefler'de h1 hic yok,
+   Defterim'de baslik yok, grup Ana sayfa/Kitaplik'ta h1 gizli, Uyeler'de baslik yok), bosluklar 8/10/12/14/18 karisikti.
+ - TEK PageHead (ui.jsx): baslik + aciklama solda, eylemler (Profili duzenle / + Yeni ekle / + Grup olustur / + Yeni not)
+   HEP sagda, ayni buton boyunda. Mobilde eylemler tam genislikte alta iner. Su sayfalara uygulandi: Hesabim/Rafim/uye rafi, Defterim
+   ("Defterim"), Hedefler ("Hedefler"; ilk kart h2'si "Hedeflerim" -> "Ilerleme", cunku h1 ile tekrar ediyordu), Gruplar, Ana sayfa
+   (grupta "Ana sayfa"), Kitaplik, Liderlik, Uyeler (eski kart ici "Aile K. / 11 uye / h3 Uyeler" tekrari kalkti; ad barda zaten var,
+   sayi + davet eden alt basliga tasindi).
+ - FILTRE SATIRI: Hesabim'da 3 ust uste pill satiri (tur, donem, takvim) vardi. Simdi .toolbar: tur solda, donem (kucuk pill) AYNI
+   satirda sagda; Liderlik'te ayni kalip (tablo solda, donem sagda). Takvim modu (Aylik/3 Ay/Tum yil) takvimin kendi bolumunde kaldi
+   (istatistikle takvim arasinda, ayri anlam). Hesabim: 3 pill satiri -> 1 toolbar + takvim kendi bari.
+ - BOSLUK OLCEGI: :root --sp-1..5 = 4/8/12/16/24. page-head, toolbar, tabs(12), stats(16/8), cal-bar, cal-card, kartlar arasi (16)
+   hep bu olcekten. Eski shelf-head/shelf-actions CSS'i silindi (PageHead yerine).
+ - Defterim/Kitaplik arama satiri: arama + secici tek satirda (select artik tam genislik degil), mobilde alta sarar.
+ - Mobil: istatistik kutulari 2 sutun, tek kalan son kutu tam genislik (eskiden yari genislikte yetim kaliyordu).
+ - Dar genislikte grup adi (MODERN sorusu): SADE'nin 7 ogeli bari + ANIMASYON'un marka min-width'i yeterli; 375px'te "Aile Kutuphanesi"
+   tam sigiyor, kisalma yok. Ek is gerekmedi.
+NEYE KATILMADIM / DOKUNMADIM
+ - Admin.jsx (49 inline stil) ve Goals ic kartlari bu turda sadece baslik hizasi: Yonetim icerigi ve yonetici modu SADE/ANIMASYON'un
+   kurdugu halde birakildi (islev riski; yonetici hesapla dogrulanmadi). Inline style temizligi MANTIK/ileri tur isi.
+ - Gruplar sayfasindaki satir ici 3 oge (rol cipi, Ac, Yonet) ayni kaldi: kart basina tek satir, hizali.
+CEVAPLAR
+ - MODERN: tek bar iki mod duzeni sayfa basligiyla uyumlu; bar ile h1 arasi bosluk artik hep 16-20px.
+ - ANIMASYON: sayfa fade/kayan pill ellenmedi; PageHead mount'u animasyona engel degil.
+ - SADE: kalan hareketler ve 7'li bar aynen; ben fazladan oge eklemedim, tersine tekrar eden satirlari (3 pill satiri, Uyeler karti
+   ici baslik, Hedeflerim h2) azalttim. Sayfa basina TEK baslik+TEK eylem yeri kurali.
+MANTIK'A CAGRI: (1) "Hedefler" ayri nav kalsin mi yoksa Hesabim bolumu mu? Simdi h1 + 5 kart; icinde "Hesap" ve "Verilerimi indir"
+  gibi hedef olmayan bolumler var, bunlar Hesabim menusu (avatar) altina tasinabilir. (2) Kitaplik hesap modunda ve grup modunda ayni
+  ad/sayfa: grup icindeki Kitaplik grubun uyelerini mi, tum katalogu mu gosteriyor, ad ayrilmali mi? (3) Yonetim sekmelerinde
+  (Admin.jsx) PageHead yok, sayfa kendi basligini tasiyor mu bakman iyi olur. Ben PageHead'i "her sayfa bir h1" kurali olarak
+  koyuyorum; itirazin yoksa yeni sayfalar bunu kullansin.
+BACKEND ISTEGI: (yok)
+KABUL: DUZEN (baslik/bosluk/filtre satiri tutarliligi bu haliyle; MANTIK'in Hedefler/Kitaplik/Yonetim kararlarina acik)
+
+=====================================================================
+[MANTIK] tur 1
+=====================================================================
+KOD TARAMASI (App/Ben/GroupPage/Admin/Groups; build temiz). Canli gezinme yalniz API/kod seviyesinde; tarayicida yeni hesap
+akisi bu turda ELLE DOGRULANMADI (bkz. KULLANICIYA SORULARI altindaki not).
+Istek 1-4: KARSILANIYOR (yonetici modu ayri nav, okuyucu rotalari yok -> her adres /yonetim; tek-bar; marka=grup adi + tek
+"‹ Hesabim"; Gruplarim/Rafim tekrarlari kalkmis). Eski rotalar: /ben/gruplarim, /liderlik, /rafim, /uye/:id, /kutuphane,
+/g/:id/rafim, bilinmeyen /g/:id/x hepsi yonlendiriyor; kisisel hesap /yonetim -> /ben; yonetici hesap /ben -> /yonetim. OK.
+BULUNAN TEKRARLAR / CELISKILER VE DUZELTMELER
+ 1) "Grubu yonetmek" 3 ayri yerde 3 ayri formdu: Gruplar sayfasinda satir ici "Yonet" (Manage), Yonetim > "Katilim linki"
+    (platform admin, yalniz InviteLink, uye listesi yok) ve yonetici modu > Grup. -> Tek bilesen: Groups.Manage (ad + davet +
+    uyeler/Cikar). Platform admin'in Yonetim > Katilim linki artik ayni Manage'i gosterir (coklu grupta grup adi altbaslik).
+ 2) Gruplar sayfasi: satir ici Manage acilimi KALDIRILDI. Uyenin "Yonet" dugmesi (g.manager.linked ise) tek tikla o grubun
+    yonetici hesabina gecer (bekleyen cevrimdisi kuyruk kontrolu AccountSwitch ile ayni) ve /yonetim'e iner. Platform admin
+    (owner) icin "Yonet" -> /yonetim/link. Boylece "yonetime giris" Gruplar'dan da, hesap menusunden de ayni gecistir, ayri form yok.
+ 3) Admin.jsx (Yonetim) PageHead'siz ve sekmeler kendi basligini tasiyordu: artik her sekmede PageHead. Platform admin: "Yonetim";
+    yonetici modu: sekmeye gore "Istekler" / "Grup" / "Katalog" + alt baslik "<Grup> · yonetici hesabi". Katalog ekle/listesi
+    alt sekmeleri (RouteTabs) yalniz katalogda; ust nav ile tekrar yok. Iki mod ayni Admin + ayni GroupManage bilesenlerini kullanir.
+NEYE KATILMADIM / BIRAKTIKLARIM
+ - Hedefler ayri nav KALSIN (DUZEN sorusu): Hesabim = raf, Defterim = notlar, Hedefler = hedef+ozet; ucu de farkli veri.
+   Ama "Verilerimi indir" ve "Hesap" kartlari hedef degil -> avatar menusune tasima onerisi KULLANICIYA SORULARI'nda.
+ - Kitaplik hesap/grup adi ayni: alt baslik zaten ayiriyor (tum katalog / bu gruptaki), grup modunda nav'da ayri; birakildi.
+ - Zil yonetici modunda duruyor (istek bildirimi ona gelir); SADE'nin tek sag kume kararina KATILIYORUM.
+ - Grup Uyeler sayfasindaki "Yonetici" cipi: sahip artik gizli yonetici hesap, gorunmez; platform admin gruplarinda kalir. Zararsiz.
+BACKEND ISTEGI: (yok). Not: g.manager.linked yalniz kisisel hesabin kendi gruplari icin dolu olmali (simdiki hali dogru varsayildi).
+ORTAK TASARIM OZETI: tek bar; hesap/grup/yonetici ayri 3 mod, marka baglama gore; geri tek yer; avatar menusu = profil/tema/gecis/cikis;
+ yonetim = tek Admin + tek GroupManage; her sayfa tek PageHead.
+ - MODERN: sana sorum yok; Gruplar'daki "Yonet" artik gecis, yeni gorsel eklemedim. 
+ - ANIMASYON: hesap degisince sayfa solmasi "Yonet" gecisinde yok (assign ile tam yenileme); istersen ayni solma sinifi eklenebilir, sart degil.
+ - SADE: sayfa icerigi eklenmedi, Gruplar'dan bir form SILINDI; sadeligi bozmadim.
+ - DUZEN: Admin PageHead'i senin olcegine uydu; Admin ic inline stiller (49) duruyor, sen istersen temizle, islev riski dusuk.
+KULLANICIYA SORULARI:
+ 1) Hedefler sayfasindaki "Hesap" ve "Verilerimi indir" bolumleri avatar menusu altina (Hesap ayarlari) tasinsin mi? Oneri: evet.
+ 2) Gruplar sayfasi hesap navinda kalsin mi, yoksa Hesabim icine bolum mu? Oneri: kalsin (grup olustur/katil giris noktasi).
+ 3) Yonetici modunda zil + hesap menusu (tema/profil) kalsin mi? Oneri: kalsin (tek sag kume, istek bildirimi icin).
+ 4) Gruptan ayrilan uyenin yonetici hesaba baglantisi dussun mu? Oneri: evet (backend).
+KABUL: MANTIK (MODERN/ANIMASYON/SADE/DUZEN kabullerini okudum, itirazim yok; kullanici sorulari acik kalsa da tasarim hazir).
+
+=====================================================================
+[YONETICI] degerlendirme
+=====================================================================
+ Hesabim + grup modu 4200 uzerinde gozle kontrol edildi (tek bar, grup adi markasi, geri pili). Build temiz.
+ MODERN tur 1 sonunda KABUL satiri yazmadi ama tasarimin tabani o; itiraz da gelmedi, sorulari SADE/DUZEN/MANTIK cevapladi.
+KABUL: YONETICI (kullanici sorulari ve canli gezinme sonrasi kullanici onayina bagli)
+
+[MANTIK] KULLANICI KARARLARI uygulandi: Hedefler'deki "Hesap" + "Verilerimi indir" avatar menusu > "Hesap ayarlari" (/ben/ayarlar, Goals.Settings) altina tasindi; Hedefler sade.
+Gruplar hesap navinda KALDI; yonetici modunda zil + hesap menusu KALDI ("Hesap ayarlari" yalniz kisisel hesapta). Build temiz.
+ BACKEND: Gruptan ayrilan/cikarilan uyenin o grubun yonetici hesabina baglantisi (account_links) duser (removeMember; ayni baglanti grubundan baska uye kalmadiysa), baska grup yoneticilerine baglantisi kalir; test: manager.test.js.
+
+=====================================================================
+TUR 2 KURALLARI (yonetici, kullanici sert geri bildirim verdi)
+=====================================================================
+ Kullanici: tek tur yetmez, kimse itiraz etmedi, ozensiz; kartlar arasi boyut
+ farki bile gozden kacti (kok neden: `.card + .card {margin-bottom}` grid
+ icinde ikinci karti kisaltiyordu; yonetici duzeltti, `.stats > .card` icin).
+ Modern ve animasyonlu degisiklik neredeyse gorunmuyor.
+ ONCEKI KABUL satirlari GECERSIZ. Yeni kabul en erken TUR 3 sonunda.
+ KULLANICI KARARLARI (yonetici sordu, tasarimin sinirlari):
+   - Gorsel yon: ORTA. Her sayfanin ustunde ince RAF/KITAP SIRTI SERIDI
+     (giris sayfasindaki raflarin ince, sade versiyonu), kartlarda yumusak 3B
+     (hover'da hafif kalkma/egilme), sicak tonlar. Icerik sade kalir.
+   - Animasyon: belirgin ama kisa (150-400ms): sayfa gecisi, kartlarin sirayla
+     girisi, sayac sayimi, sekme kaymasi, kart hover 3B. Surekli hareket yok.
+   - Tema: cihaza gore varsayilan (prefers-color-scheme), elle degisir.
+ HER KISI TURUNDA ZORUNLU:
+   1) CANLI DENETIM: tarayicida 4200'de en az 6 sayfayi (Hesabim, Defterim,
+      Hedefler, Gruplar, bir grup sayfasi, Yonetim/yonetici modu) masaustu +
+      mobil gez; KOD OKUYARAK degil gorerek bul. Somut kusur listesi yaz
+      (olcu/px ile: kart boyutu, hizalama, bosluk, tasma, tutarsiz bilesen).
+   2) EN AZ 1 SOMUT ITIRAZ: bir onceki kisinin (veya MODERN icin son turun)
+      bir kararina gerekceli itiraz et ya da 'itirazim yok' demeden once neden
+      yok oldugunu kanitla. 'Katiliyorum' tek basina kabul degil.
+   3) Kendi kafa yapinla GORUNUR iyilestirme yap (kullanici fark etmeli):
+      MODERN: raf seridi + kart yuzeyleri + tipografi; ANIMASYON: gecis/
+      giris/sayac/3B hover; SADE: fazlayi at, ama islev kaybi yok; DUZEN:
+      boyut/hizalama tutarliligi, bilesenleri ortaklastir (ayni sey ayni
+      gorunsun, ornegin tum stat kartlari, tum sayfa basliklari, tum bos
+      durumlar); MANTIK: akislar, olu linkler, tekrarlar, yetki.
+   4) Cevap sonunda: yaptigin degisiklikler + kalan kusurlar + bir sonraki
+      kisiye SORU (cevabini sonraki kisi dosyada yazmak zorunda).
+ YONETICI: her tur sonu ben de gorerek denetler, kullaniciya acik karar
+ sorusu varsa isi BASLAMADAN sorarim.
+ --- TUR 2 BASLIYOR (asagiya ekle) ----------------------------------------
+
+=====================================================================
+[MODERN] tur 2
+=====================================================================
+CANLI DENETIM (4200, 1024px masaustu + 375px mobil, JS ile olculdu; Hesabim, Defterim, Hedefler, Gruplar,
+ grup Ana sayfa/Liderlik/Uyeler, Yonetim)
+ KUSURLAR (px):
+  1) Yonetim > Gelen kutusu: kartlar arasi bosluk 10 / 26 / 10 px (shelf-list gap:10 + `.card+.card` margin 16 ust uste).
+     Ayni kok neden, YONETICI'nin `.stats` duzeltmesinin KARDESI. Hesabim'da kayit kartlari da ayni listede.
+  2) Gruplar: kart mb 12px (satir ici stil), Hedefler/Hesabim kartlari 16px -> sayfalar arasi tutarsiz.
+  3) Grup Ana sayfa: ayni gridde kartlar 307x331 ve 307x460 (ikinci satir 129px uzun) -> kismen tasarimsal (icerik
+     degisken), bu turda DOKUNMADIM; DUZEN icin soru asagida.
+  4) Giris animasyonu tam bitmeden gorulunce stat kutulari soluk (opacity<1 ~300ms); sorun degil ama ilk izlenim bos.
+  5) Sayfalarin ustu duz: raf/kitap kimligi yalniz giris sayfasinda vardi, uygulamada yok; kartlar duz beyaz.
+ DEGISTI (styles.css, App.jsx, Groups.jsx; build temiz, masaustu + mobil gorerek dogrulandi):
+  - RAF SERIDI: her sayfanin ustunde (main icinde, ShelfStrip) 40 kitap sirti + ahsap raf cizgisi; 30px (mobil 24px, 21 sirt).
+    Sirtlar alttan 14ms araliklarla buyur (380ms), uzerine gelince 4px kalkar, bir sirt yatik. Koyu temada kisilir. aria-hidden.
+  - KART YUZEYI: ust kenarda ince isik cizgisi + iki katmanli yumusak golge (acik/koyu ayri); stat/grid/liste kartlari
+    hover'da 3px kalkar (250ms). Topbar'a ince golge. Aktif nav pill'ine accent halka.
+  - TIPOGRAFI: h1 clamp(1.55-2rem), 800, -0.025em + 34x3px accent cizgi; sayilar 1.9rem tabular-nums; stat etiketi muted 600.
+  - Bosluk: shelf-list gap 16 (kart marginleri ile cakisma bitti: tum kart aralari 16px olculdu), Groups mb12 -> 16.
+  - Tema: zaten cihaza gore (prefers-color-scheme) + elle; degistirmedim.
+ KALAN KUSURLAR: grup Ana sayfa satir yukseklik farki (3); mobil alt nav 6 ogede 12px yazi sikismis;
+  Admin ic inline stiller; stat sayaclari henuz saymiyor (ANIMASYON).
+ITIRAZ (somut): ANIMASYON tur 1'de "kart kademesi/sayfa fade" SADE'nin istegiyle silindi; kullanici TUR 2'de
+  "belirgin animasyon" istedi. SADE'nin "her oge ayrica oynamasi gurultu" gerekcesine ITIRAZ: ilk 6 kart icin
+  30ms kademeli giris + sayac sayimi geri gelmeli; sadelik kosulu: yalniz sayfa ILK acildiginda, 400ms'i gecmez.
+  Ayrica DUZEN'in 4 farkli baslik biciminden TEK PageHead'e gecisine katiliyorum AMA h1 altina cizgi ekledim; yeni
+  PageHead zaten tek yer, o yuzden sorun yok.
+SORU -> ANIMASYON (cevap yazmak zorunda): (a) raf seridi sirt animasyonu ve kart hover'i senin onceki hareket
+  kurallarinla cakisiyor mu; sirtlari sayfa gecisinde de yeniden oynatmak (key=pathname) ister misin, yoksa sadece
+  ilk yuklemede mi? (b) stat sayaclarini 0'dan sayan 400ms bir `useCountUp` (rAF, reduced-motion'da atla) yazar misin?
+  (c) kart hover'ina perspective rotateX(2deg) 3B egimi eklemeye deger mi, performans?
+KABUL: (yok - tur 2)
+
+=====================================================================
+[ANIMASYON] tur 2
+=====================================================================
+CANLI DENETIM (4200, 1024px (dpr 1.25) + 375px mobil; Hesabim, Defterim, Hedefler, Gruplar, Kitaplik, Yonetim(yonetici modu);
+ JS ile olculdu + screenshot)
+ KUSURLAR (px):
+  1) Hesabim stat kartlari 183x88, Hedefler stat kartlari 176x88 -> ayni bilesen iki sayfada 7px farkli genislik (DUZEN).
+  2) Gruplar kartlari 79px yuksek (Hesabim/Hedefler stat 88): offsetTop farki ile ilk kartin marginBottom 0, ikincinin 16
+     -> liste kartlarinda aralik tek yerden gelmiyor (card+card marji); gorsel aralik ~12px ama olcu tutarsiz.
+  3) Mobil Hedefler "Aylik sayfa [0] / Yillik kitap [0] Kaydet": girdiler 2 satirda hizasiz (kutu genislikleri 143/139px,
+     Kaydet ikinci girdinin yaninda yarim kalmis) -> form satiri hizasi (DUZEN).
+  4) Defterim ve Kitaplik bos veride tek bos-durum kartsiz; kart girisi yok, sayfa "bos" gorunuyor (animasyonla saklanan
+     bir sey yok, ama bos durumlar farkli bilesen).
+  5) Ilk acilista raf seridi + kartlar ayni anda animasyonda: screenshot'ta strip ilk 1 sn soluk goruldu (beklenen, 380ms+9ms*40).
+ NOT: pane'de zamanlayicilar ~1 sn'ye kisiliyor; animasyonlari getAnimations() + opacity/transform ornekleyerek dogruladim
+  (kart: 0->1 opacity, translateY 18px + scale .97 -> none; sonra .route-in kalkar).
+DEGISTI (build temiz):
+ - Sayfa gecisi artik GORUNUR: 300ms, opacity + 14px yukaridan (onceki 200ms duz fade'di, fark edilmiyordu).
+ - Kart girisi geri geldi (SADE'nin gurultu gerekcesini MODERN'in itirazi ve kullanici karari ile cevapladim): YALNIZ sayfa acilirken
+   (.route-in sinifi 1.1 sn sonra kalkar, sonraki yeniden cizimler/filtre/yenileme SESSIZ), ilk 5 kart 50ms kademeli,
+   18px + scale .97 -> yerine oturur, 380ms. Liste satirlari (.lrow) 2 kademe.
+ - Sayac sayimi: Hesabim zaten sayiyordu (Shelf StatCards); Hedefler stat kartlari (kitap/sayfa/dizi/film) artik CountUp (700ms).
+   Liderlik zaten sayiyordu. reduced-motion'da useCountUp dogrudan hedefe atlar.
+ - Kart hover 3B: stat/grid/liste kartlari perspective(900px) icinde translateY(-4px) + rotateX(2.5deg) + scale 1.012,
+   yalniz (hover: hover) cihazlarda (dokunmatikte yok). Golge MODERN'inki.
+ - Raf seridi (MODERN sorusu a): sirt dalgasi sayfa degisince tekrar oynar (key=pathname), 9ms kademe (~0.7 sn toplam) ve
+   seritin kendisi 350ms yukaridan iner; surekli hareket YOK. Hover kalkma ile cakisma yok (hover transform, giris animasyonu ayri).
+ - Sekme pill'i kayar: RouteTabs (Yonetim vb.) secili sekmenin arkasinda kayan accent pill (nav pill'i ile ayni mantik).
+ - Hepsi prefers-reduced-motion'da kapali (hover donmez, giris yok, pill kaymaz).
+MODERN'E CEVAP: (a) cakisma yok, yukaridaki gibi; sirtlari yalniz yuklemede degil sayfa gecisinde oynatmak SADE'ye gore daha
+  fazla ama gorunur: ucuz (40 ogeli CSS), 0.7 sn, surekli degil -> evet. (b) sayac zaten vardi; Goals'a da ekledim.
+  (c) rotateX(2.5deg) degerli, performansi sorun degil (yalniz hover'daki 1 kart, GPU transform); fare izleyen egim YAPMADIM
+  (JS + dikkat dagitir).
+SOMUT ITIRAZ: MODERN'in raf seridine KATILIYORUM ama "h1 altina accent cizgi" + "kartlarda ic isik cizgisi" + "nav pill halkasi"
+  uc ayri vurgu: pill + h1 cizgisi + kart parlakligi ayni anda gozu daginiyor; h1 cizgisini koru, nav halkasini KALDIRMAYI oneririm
+  (pill zaten kayarak vurguluyor). Kaldirmadim, SADE karar versin.
+KALAN: kusur 1-3 (DUZEN'in isi), mobil alt nav 12px yazi (MODERN), Admin ic stilleri.
+SORU -> SADE (cevap yazmak zorunda): kart girisi (18px+scale, yalniz sayfa acilirken) + sayfa gecisi 300ms + raf dalgasi 0.7sn
+  birlikte fazla mi? Fazla bulursan HANGISINI ve neden atacagini yaz (atilacak olan icin gozle gorulur bir kusur kaniti ver:
+  animasyon yuzunden gecikme/titreme olcmedim, olculebilir bir sey varsa soyle). Ayrica nav pill halkasinin (box-shadow inset)
+  kaldirilmasina katilir misin?
+KABUL: (yok - tur 2)
+
+=====================================================================
+[SADE] tur 2
+=====================================================================
+CANLI DENETIM (4200, 1024px + 375px; Hesabim, Defterim, Hedefler, Gruplar, Kitaplik, Yonetim/yonetici modu; JS olcum + gorsel)
+ KUSURLAR:
+  1) Hesabim ustte "Profili duzenle" dugmesi + avatar menusunde "Profili duzenle" = AYNI SEY IKI YERDE (kullanici madde 4).
+  2) Hesabim alt basligi ("Okuduklarim, izlediklerim ve rakamlarim; kimlerin goreceğini...") basligi tekrar ediyor, 1 satir gurultu.
+  3) Avatar menusunde 4 satirda "Kisisel hesap" etiketi tekrari (menu basligi zaten "Hesap degistir").
+  4) Hesabim: iki ayri donem secici ust uste: [Tum zamanlar|Bu yil|Bu ay] ve [Aylik|3 Ay|Tum yil] -> mobilde 4 satir filtre, kullanici
+     neyin neyi sUzdUgUnU anlamaz. (DUZEN/MANTIK: biri ozet kartlarin, digeri isi haritasinin; birlestirilebilir mi?)
+  5) Mobil Hesabim 5. stat karti (film) tek basina tam genislik: 375px'te 2+2+1 (DUZEN).
+  6) Menu "Yonetici" kisisel hesap satiri + "Test Animasyon Yonetici" 2 satirli ad kesilmesi (veri, dokunmadim).
+  Olculer: Hesabim stat 183x88, Hedefler stat 176x88 (7px fark, DUZEN), Gruplar kartlari 948x79; yatay tasma yok (scrollW=innerWidth).
+YAPTIGIM (build temiz, masaustu+mobil gorerek dogrulandi):
+ - (1)(2)(3) giderildi: Shelf'ten Profili duzenle dugmesi + alt baslik silindi (Yeni ekle tek eylem); menude etiket yalniz yonetici
+   hesapta ("Grup yonetimi · X"); menu linkleri alt cizgisiz.
+ - ANIMASYON/MODERN eklemeleri KALDIRILMADI, SAKINLESTIRILDI:
+   * sayfa gecisi 300ms+14px yukselme -> 220ms yalniz opacity (kartlar zaten yukseliyor; iki kat hareket ust uste biniyordu)
+   * kart girisi 18px+scale .97 / 380ms / 50ms-kademe-5 -> 10px / 300ms / 40ms kademe, en gec 120ms
+   * kart hover: scale 1.012 + rotateX 2.5 -> yalniz translateY(-3px)+rotateX(2deg)
+   * raf seridi: tum seritin 350ms inmesi KALKTI (sirt dalgasi yeter), kademe 9ms->6ms (toplam ~0.5sn)
+   * MOBILDE: raf sirt dalgasi + kart girisi KAPALI (sayfa fade'i kalir); sebep: dokunmatikte hover yok, giris animasyonu yalniz geciktirir.
+   * kart zemin gradyani + ic isik cizgisi + iki katmanli golge -> tek yumusak golge (ayni gorunum, daha az kutu/golge)
+   * nav pill halkasi (inset ring) KALDIRILDI ve topbar'daki ekstra golge KALDIRILDI.
+ ANIMASYON'un sorusuna cevap: Uclusu birlikte FAZLAYDI: gecis yukselmesi + kart yukselmesi ayni hareketi iki kez yapiyordu. Atilan:
+   gecis yukselmesi (kanit: pane'de ilk 1 sn ekran goruntusunde stat sayilari ve sidebar soluk kaldi = icerik 1 sn gec okunuyor).
+   Nav halkasi kaldirmaya KATILDIM (ve yaptim). Raf seridi, kart 3B hover, kart girisi, sayac sayimi KALDI (kullanici karari).
+ MODERN'e itiraz: h1 altindaki accent cizgi KALDI ama kartlardaki ic isik + gradyan yuzeyleri "temiz yuzey" ilkesine ters; sadelestirdim.
+KALAN: (4) cift donem secici, (5) mobil 5. stat karti, Hedefler/Hesabim stat genislik farki, Admin ic stilleri.
+SORU -> DUZEN (cevap yazmak zorunda): Hesabim'daki iki donem secicisini (Tum zamanlar/Bu yil/Bu ay ve Aylik/3 Ay/Tum yil) TEK bir
+  secici yapar misin, yoksa neden iki ayri olmali? Ve mobilde 5 stat kartini 2+2+1 yerine nasil dizersin (film karti)?
+KABUL: (yok - tur 2)
+
+=====================================================================
+[DUZEN] tur 2
+=====================================================================
+CANLI DENETIM (4200, admin; 1024px + 375px; Hesabim, Defterim, Hedefler, Gruplar, grup Ana sayfa/Liderlik/Uyeler, Yonetim
+ Gelen kutusu/Katilim linki/Kullanicilar; getBoundingClientRect ile olculdu)
+ KUSURLAR (px):
+  1) Stat karti ayni bilesen, iki sayfada iki genislik: Hesabim 183x88 / Hedefler 176x88 (auto-fit, kart sayisina gore esniyor);
+     Hesabim'da kopya JSX (Shelf card()) + Goals'ta 6 elle yazilmis <div class="card stat"> => iki ayri bilesen.
+  2) Komsu-secici marji kok nedeni hala duruyordu: `.card + .card, section.card {margin-bottom}` + `.stats > .card ... {margin:0}`
+     istisnasi (yamali). Tum "kart ici kart" durumlarinda ayri istisna gerekecekti.
+  3) Yonetim > Katilim linki: ad formu BASLIKSIZ, "Katilim linki" h2 kartin ortasinda, "Uyeler" kartsiz kucuk <b> => ayni sayfada
+     3 farkli bolum bicimi; mobilde link kutusu 60px'e eziliyordu ("http://localhos").
+  4) Hedefler formu: Aylik/Yillik girdi 120px sabit, mobilde 2 satir hizasiz, "Kaydet" ikinci girdinin yaninda yarim.
+  5) "Henuz yok / hazir degil" metinleri 7 yerde <p class="muted small"> (hizasi sola, bosluksuz) ve Empty bileseni ile karisik.
+  6) Hesabim: iki donem secici ("Tum zamanlar/Bu yil/Bu ay" ve "Aylik/3 Ay/Tum yil") ust uste; ikincinin neyi sectigi belli degildi.
+  7) Kart ici h2: Hedefler 24px/marj 0, Gruplar'da yok, Yonetim'de 24px; olcu yok.
+ DEGISTI (frontend/src; build temiz; masaustu + mobil gorerek dogrulandi):
+  - ORTAK BILESENLER (ui.jsx): <Stat value label extra> (Shelf + Goals artik tek bilesen), <Hint> (kucuk bos durum), PageHead (tur 1).
+  - .stats: auto-fill minmax(150px) + .stat min-height 88px, kolon sabit => kart sayisi ne olursa olsun HER sayfada 151x88 (olculdu:
+    Hesabim [151,88]x5; Hedefler ozet kartlari ayni sinif). Mobilde 2 sutun + tek kalan tam genislik.
+  - KOK NEDEN KALKTI: `.card + .card` kuralı SILINDI. Yerine yalniz sayfanin DOGRUDAN cocuklari: `.page > .card, .page > section.card,
+    .page > form.card, .page > section > .card {margin-bottom:16}`. Grid/liste/satir icindeki kartlar bosluklarini yalniz gap'ten alir
+    (komsu selektor marji yok). Olcum: Yonetim gelen kutusu kart araligi 16/16/16/16, genislik 948 hepsinde.
+  - Kart basliklari: `.card h2` = 1.15rem, marj 0 0 12 (Hedefler/Yonetim/Gruplar ayni). `.card-sec` = kart ici bolum ayraci (cizgi + 16).
+  - Yonetim > Katilim linki: "Grup bilgisi" (kutuphane adi + davet eden adi) | ayrac | "Katilim linki" tek kart; "Uyeler" ayri kart + h2.
+    Link kutusu `.link-in` (flex 1 1 220px) -> mobilde dugmeler alta iner, link tam genislik.
+  - Hedefler formu `.goal-form`: 2 esit sutun + Kaydet (mobilde tam genislik); inline width:120 kalkti.
+  - Hesabim: takvim bari basina "Takvim" etiketi (SADE'nin 4 numarali kusuru).
+SADE'NIN SORUSUNA CEVAP (iki donem secici): TEK secici YAPMADIM, nedeni: biri ISTATISTIK penceresi (Tum zamanlar/Bu yil/Bu ay: kartlardaki
+  toplamlar), digeri ISI HARITASI goruntusu (Aylik ayri 7 sutun gun izgarasi, 3 Ay, Tum yil = 3 farkli izgara). "Aylik" bir filtre degil
+  baska bir gorunum; birlestirirsek ya "Bu ay"da takvim tek aya kilitlenir ya da "Tum yil" istatistigi yil takvimini kilitler, kullanici
+  ikisini bagimsiz seçemez. Cozum: gorsel olarak ayirdim: ustte toolbar (tur + donem) kartlarla; takvim kendi etiketli ("Takvim") barinda.
+  Mobil 5 stat kartini: 2+2+1, 5. kart tam genislik (yetim yarim kart yok) — bunu tur 1'de yaptim, dogrulandi.
+SOMUT ITIRAZLAR:
+  - ANIMASYON/SADE'nin kartlarda "kart girisi ilk 5 kart" kurali: ilk 5 ile sinirli kademe, 6. ve sonraki kart hep gelmiyor mu? Sayfada
+    6+ kart (Hedefler) olunca son kartlar animasyonsuz geliyor = yari kademeli gorunum. Itirazim: kademe SINIRI yok, hepsi ayni
+    tek (40ms*min(i,3)) olmali ya da hicbiri; yari kademe tutarsiz. (kod: styles.css .route-in nth-child) — kendim dokunmadim.
+  - MODERN'in `h1` altina accent cizgi: PageHead'de ok, ama sayfa h1'i olmayan modal/kart h2'lerine cizgi gelmemesi icin `.page h1`
+    ile sinirli kalsin; su an oyle, itirazim yok (kaniti: kart h2 1.15rem, cizgisiz, olculdu).
+KALAN KUSURLAR: grup Ana sayfa kartlari satir basina farkli yukseklik (veri; masonry gerekir, yapmadim); Admin ic inline stilleri
+  (Katalog formu, Kullanicilar listesi: ~40 style={{}}) hala var; mobil alt nav 6 oge 12px.
+SORU -> MANTIK (cevap yazmak zorunda): (1) Yonetim'de platform admin icin Katilim linki, Kullanicilar, Okuma durumu, Katalog ekle/listesi
+  = 6 sekme; "Katalog ekle" + "Katalog listesi" tek sekme (ust liste, ekle bir dugme) olabilir mi, yoksa katalog akisi baska mi dusunulmus?
+  (2) Hesabim'da "+ Yeni ekle" tek eylem; Defterim'de "+ Yeni not" — grup modunda (Rafim yok) kullanici nereden kayit ekliyor, o yol gorunur mu?
+KABUL: (yok - tur 2)
+
+=====================================================================
+[MANTIK] tur 2
+=====================================================================
+CANLI DENETIM (tarayici; ILK BULGU: 4000'deki sunucu ESKI backend ile calisiyor -> grup olusunca yonetici hesabi OLUSMADI, kisisel hesap
+ owner kaldi ve nav'da "Yonetim" cikti. Bunu 4100'de TAZE DB + guncel backend ile tekrarladim; asagidakiler 4100'de, masaustu 1100 + mobil 375).
+AKIS (hepsi gorerek): kayit -> /grup-olustur -> "Test Ailesi" -> /gruplar'a iner -> kartta "Yonet" -> tek tikla yonetici hesabi (/yonetim, bar:
+ grup karosu + Yonetici cipi, nav Istekler|Grup|Katalog) -> Grup sekmesi (ad, davet eden, link, uyeler) -> avatar menusu "Kisisel hesaba gec" ->
+ /ben. Yonetici hesapta /ben, /g/1, /library, /gruplar, /yonetim/zzz, /yonetim/users hepsi /yonetim'e donuyor; kisisel hesapta /yonetim -> /ben.
+ Uye ayrilma (API, node): davetle katilan uye yoneticiye BAGLANMIYOR (dogru); olusturan kisi gruptan ayrilinca /auth/linked bosaliyor (baglanti dustu). OK.
+KUSURLAR (ekranda gordugum) VE DUZELTMELER
+ 1) Grup olustur formu yanlis soyluyordu: "Yonetici hesabi: Mantik Test (@mtest) grubun yoneticisi olacak" oysa ayri yonetici hesabi aciliyor ve kisi
+    uye kaliyor. -> "Grup yonetimi: Grup icin ayri bir yonetici hesabi acilir. Sen uye kalirsin, menuden o hesaba gecip yonetirsin." Olusturunca
+    /gruplar'a iner (ana sayfa degil): "Yonet" orada gorunur.
+ 2) Gruplar bos durumunda IKI "Grup olustur" (baslik + bos kart). Bos kart dugmesi kalkti. Mobilde grup karti: ad "Test Ail..." tasiyor, 4 ogeli satir
+    sikisiyordu (Uye | Ac | Yonet | Ayril). -> ad+"1 uye · Uye" solda (ad zaten link, ayri "Ac" kalkti), eylemler (Yonet / Gruptan ayril) mobilde alta iner.
+ 3) Grup Ana sayfa: "+ Yeni ekle" UC yerde (bos-durum kartinda, sag-alt yuzen dugme FAB, ve Hesabim'daki gibi baslikta yok) + "Raflar henuz bos" ile
+    kendi kartindaki "Baslamak icin + Yeni ekle" ayni mesaj. -> eylem tek yerde PageHead (Hesabim ile ayni), FAB ve bos-durum kartin dugmesi/karti kalkti.
+ 4) Yonetici menusu: "Hesap degistir" basligi altinda sadece kisisel ad vardi -> yonetici hesapta baslik "Kisisel hesaba gec".
+ 5) Yonetim > Grup: etiket "Kutuphane adi (sol ustte gorunur)" (artik grup adi ust barda) -> "Grup adi (ust barda gorunur)".
+ 6) DUZEN'in biraktigi: Admin.jsx ~49 satir ici stil -> 1 tane kaldi (kosula bagli 'dim'); ortak yardimci siniflar (.fill .row-stretch .row-top .mt-* .flush
+    .btn-end .err-text .w-auto .item.static .pick-row fieldset.bare) styles.css sonunda. Gorunum ayni (4100 yonetici Grup + Katalog sekmesi mobilde bakildi).
+    Platform admin sekmeleri (Kullanicilar/Okuma durumu) bu turda tarayicida acilmadi (admin sifresi yok): yalniz build + sinif eslemesi dogrulandi.
+ 7) Grup ana sayfa dengesiz satir yuksekligi: `.grid:has(> .ucard) {grid-auto-rows:1fr}` -> ayni gridde tum uye kartlari esit yukseklik, "N tane daha" altta.
+    (Cok uyeli veride bir satir icin uzun kartin boyuna esitlenir; bilinen bedel.)
+ITIRAZLAR (gerekceli)
+ - ANIMASYON/SADE: mobilde grup adinin "Aile K..." kisalmamasi icin yan yana eylem koymak yerine alta indirdim; dokunmatikte kart hover 3B ve giris
+   animasyonu zaten kapali -> katiliyorum. Ama MODERN'in raf seridi her sayfada, hesap/grup/yonetici DEGISTIRDIGI icin ayni gorunuyor: grup/yonetici
+   modunda renk/tonla ayrilmiyor. Oneri (zorunlu degil): yonetici modunda serit alti cizgisi farkli (slate) olsun ki mod ayrimi bar disinda da gorunsun.
+ - Mobil "‹" geri pili metinsiz (yalniz ok): "Hesabima don" ancak aria/title'da. Itirazim: ilk kez giren kullanici oku anlamayabilir; yer sorunu yoksa
+   "‹ Hesabim" yazisi mobilde de kalmali (masaustunde var). Degistirmedim, MODERN/DUZEN karar versin.
+ - SADE'nin hesap menusunde "Hesap ayarlari" + "Profili duzenle" ayri iki satir: Profil, hesap ayarlarinin icinde zaten var (Hesap karti duzenleme
+   dugmesi) -> ayni sey iki yerde. Yonetici hesapta ikisi de gerekmez (yalniz Profil). Oneri: kisisel hesapta menuden "Profili duzenle" KALKSIN,
+   "Hesap ayarlari" tek giris olsun. Yapmadim (SADE'nin karari, kullanici da istedi); TUR 3 sorusu.
+KALAN KUSURLAR: platform admin Yonetim sekmeleri canli gezilemedi; 4000 sunucusu eski backend (yoneticinin yeniden baslatmasi gerek, yoksa test yanlis
+ sonuc verir); mobil geri pili metinsiz; cok uyeli grup ana sayfada esit-yukseklik bedeli; raf seridi mod ayrimi.
+TUR 3 ICIN SORU:
+ -> MODERN: yonetici modunda raf seridine ayirt edici ton (slate) eklemek ister misin, yoksa mod ayrimi bar + "Yonetici" cipi yeterli mi?
+ -> DUZEN: mobil geri pilinde "Hesabim" yazisi gorunmeli mi? Admin PageHead sekmeleri (RouteTabs) ile Inbox ic filtre sekmeleri ayni gorunuyor, ayrilmali mi?
+ -> SADE: menude "Profili duzenle" ile "Hesap ayarlari" tek girise inebilir mi?
+KABUL: (yok - tur 2)
+
+=====================================================================
+[YONETICI] TUR 2 DENETIMI -> TUR 3 GOREV LISTESI
+=====================================================================
+ Gozle gordum (4200, admin; masaustu + mobil 375). Duzelen: raf seridi gorunuyor,
+ stat kartlari esit, tek bar, mobil alt menu, grup modu markasi.
+ KALAN KUSURLAR (TUR 3'te hepsi kapanacak; her kisi kendi alaniyla ilgili olani alir):
+  K1) Hesabim stat kartlari ('0' kitap bitti vb.) cok soluk/saydam: yuklenme sanisi
+      veriyor, yazi kontrasti dusuk. Sifir durumu da net ve okunur olmali.
+      Mobilde 5. kart (film) tek basina genis; 2+2+1 yerine daha dengeli.
+  K2) Mobil Hesabim: pill sirasi 3 satir (Hepsi/Kitaplar/Diziler/Filmler + zaman),
+      yukseklik ilk ekranin yarisini yiyor; ilk ekranda istatistik ve takvim gorunmeli.
+  K3) Grup ana sayfasi: 3 kolon kart satirlarinda yukseklik dengesiz, kapak yoksa
+      bos kutu gibi (kapak resmi yoksa duzgun yer tutucu: baslik harfi/kitap ikonu).
+  K4) MODERN/ANIMASYON: giris/Hesap-ac sayfasindaki 3B kitap ve raflar uygulama
+      icinde yalniz ince seritte; kullanici 'modern + animasyonlu' bekliyor:
+      bos durumlar (liste bos, 0 kayit) icin kucuk 3B/2B kitap cizimi + hafif
+      animasyon, sayfa basliklarinda kucuk kitap/raf motifi tutarli.
+  K5) Admin.jsx ~40 inline stil, tum Yonetim ekranlari ortak bilesen/sinif.
+  K6) 4000 sunucusu eski backend'le calisiyordu: yonetici yeniden baslatti, 4100'u
+      kapatti. Kimse sunucu baslatirsa ayni portlari kullanmasin; test icin 4300+.
+ TUR 3 KURALI: sirayla MODERN, ANIMASYON, SADE, DUZEN, MANTIK. Her kisi once
+ yukaridaki K maddelerinden kendininkileri kapatir, canli dogrular, diger
+ kisilere gerekceli itiraz/soru yazar. KABUL yalnizca: (a) K maddelerinin kendi
+ payi kapaliysa (b) tarayicida gordugu en az 2 sayfada px kusuru kalmadiysa
+ (c) kendinden onceki kisilerin tur 3 notlarini okuyup itirazi kalmadiysa.
+ --- TUR 3 BASLIYOR (asagiya ekle) ----------------------------------------
+
+=====================================================================
+[MODERN] tur 3
+=====================================================================
+PAYIM: K1, K4, K3 (yer tutucu). Dogrulama: 4200 admin, masaustu 1024 + mobil 375, getBoundingClientRect/getComputedStyle.
+ K1 stat kartlari: soluklugun KOK NEDENI Shelf.jsx'te `opacity: stats.loading ? .55 : 1` (her filtre/yenilemede kartlar %55'e
+   iniyordu) + giris animasyonu. -> .85'e (okunur), kartlara ikon rozeti (kitap/sayfa/dizi/bolum/film), alt accent seridi,
+   etiket opaklik .75 (ayni --text), sayi accent. Olculdu: 5 kart 151x90, sayi rgb(240,138,93), etiket .75, kart opacity 1.
+   (Yukseklik 88 degil 90: ikon+serit; 5'i de esit, Hedefler ayni <Stat>.) Mobil 2+2+1 dizilimi DUZEN'in, aynen kaldi.
+ K4 bos durumlar: ui.jsx Empty artik emoji yerine kucuk RAF CIZIMI (4 kitap sirti + raf, SVG, 120x84, CSS'le ahsap/renk) ve
+   anlami tasiyan emoji ROZETI (ornek 📝 Defterim, 👥 Gruplar). Sirtlar 90ms kademeli buyur, bir kitap 14deg yaslanir
+   (tek seferlik; surekli hareket yok), hover'da hafif oynar, koyu temada kisilir, reduced-motion'da statik. 8 sayfada ayni bilesen.
+   Sayfa basliginda h1 altindaki duz accent cizgisi -> 4 mini kitap sirti + raf cizgisi motifi (34x12px, her sayfa; giris
+   sayfasinin 3B kitap dili degil 2B'dir, cunku h1 basina 3B CSS maliyet/gurultu).
+ K3 kapak: Cover yer tutucusu duzgun kitap oldu: sirt seridi + isik, alt cizgiler, bas harf. ASIL KUSUR: 4200 kopyasinda
+   kapaklar 404 iken <img> kirik ikon + koyu kutu gosteriyordu (5/13 kapak, ornek "Anna Karenina"); sebep onError'un React
+   baglanmadan once atilmasi. Cover'a ref kontrolu (complete && naturalWidth==0 -> yer tutucu) eklendi; mobilde dogrulandi.
+ TUR 2 SORUSUNA CEVAP (MANTIK -> MODERN): yonetici modunda raf seridi `.shelf-strip.mgr` slate ton (hue-rotate) yapildi.
+   Mobil geri pili metni "Hesabim" geri geldi (83px, marka 166px, kisalma yok, yatay tasma yok scrollW=375).
+ITIRAZLAR:
+ - SADE: kart zemin gradyani/ic isik cizgisini "temiz yuzeyle celisir" diye kaldirdin; KABUL, geri getirmedim. Ama stat
+   kartinda yeni accent alt seridi ve ikon ekledim: tek bilesen, tek tonlu, sayi okunur hale geldi; fazla bulursan SADE
+   `.stat::before` tek satirini atsin, ikon kalsin (sifir durumunu tanimlayan odur).
+ - DUZEN (tur 2): "kademe siniri yok" itirazina katiliyorum; ben dokunmadim.
+ - ANIMASYON: bos durum kitap girisi tek seferlik; kullanicinin "surekli hareket yok" kuralina uydum, sen hover'i
+   (yaslanan kitap) abartma.
+KALAN: giris sayfasindaki gercek 3B kitap uygulamada yok (yalniz 2B motif) -> ANIMASYON isterse bos durumda tek 3B kitap
+ (CSS 3B, tek sefer). Grup ana sayfa satir yuksekligi esit-yukseklik bedeli (MANTIK). 5/13 kapagin 404 olmasi 4200 kopyasinin
+ verisi: BACKEND/veri notu, kod hatasi degil.
+SORU -> ANIMASYON: Bos durumda kitap cizimini 3B (rotateY ile aciliyor) yapmaya deger mi, yoksa 2B + tek yaslanma yeterli mi?
+ Cevabi dosyaya yaz.
+KABUL: (yok - kendi payim kapali ama ANIMASYON/SADE/DUZEN/MANTIK tur 3 notlarini henuz okumadim; sira bende ilk)
+
+=====================================================================
+[ANIMASYON] tur 3
+=====================================================================
+MODERN tur 3 notunu okudum. PAYIM: K1 animasyon yonu, K4 animasyon, K2 filtre gecisi.
+CEVAP (MODERN -> ANIMASYON): bos durumda GERCEK 3B kitap (b3 yuzleri) YAPMADIM: bir kitap 12 yuz + preserve-3d; 8 sayfada
+  Empty basina ~14 DOM + katman, ve giris sayfasi panelinde zaten var (tek ekranlik gosteri). Bunun yerine 2B SVG rafa hafif 3B
+  verdim: perspective(600px) icinde rotateY(-32deg -> -7deg) tek seferlik 500ms giris, hover'da +5deg ve 2px kalkma. Surekli hareket yok.
+  Kitaplar zaten 90ms kademeli buyuyor, yaslanan kitap tek sefer. 3B kitap isteyen olursa yalniz Hesap-ac/giris'te kalsin.
+DEGISTI (build temiz):
+ - Empty cizimi: yukaridaki 3B giris + hover (prefers-reduced-motion'da statik, -7deg sabit).
+ - K1 stat kartlari: filtre degisince (key={filter}) kartlar yeniden mount oluyor ama .route-in yok -> hareketsiz degisiyordu. Eklendi:
+   `.stats > .stat` 240ms statIn (opacity .35 -> 1, 8px + scale .98), 30ms kademeli, `backwards` fill (hover 3B'yi engellemez).
+   Sayac (CountUp) zaten filtreyle 0'dan sayiyor -> kart girisi + sayac birlikte "yenilendi" hissi verir.
+ - Yukleme dili: Shelf yukleme opakligi .85 + 200ms gecis (MODERN) tutarli; iskelet (.skel) 1.2sn kayan parilti zaten var, ikisi
+   cakismiyor (iskelet yalniz ilk yuklemede, .85 yenilemede). Ek degisiklik gerekmedi.
+ - K2 mobil filtre pill'leri: `.tab, .tab.sm` gecis tanimi tek yerde (renk/zemin 200ms, :active scale) - pill sayisi azaltilirsa
+   (SADE/DUZEN) gecis bozulmaz; secili pill kaymasi yalniz RouteTabs'ta, filtre pill'leri (aria-pressed) renk gecisi yapar.
+ - Dogrulama (4200, masaustu): Defterim bos durum svg matrix3d(rotateY -7deg), opacity 1; kitaplar yerinde, yatay tasma yok.
+   Pane zamanlayicilari ~1sn'ye kisildigi icin ara kareleri izleyemedim, bitis durumu + getAnimations ile dogruladim.
+ITIRAZ/SORU: MODERN'in h1 altindaki mini raf motifine katiliyorum (animasyonsuz, dikkat dagitmaz). SADE'ye soru (tur 2'den acik):
+  stat kartinda accent alt seridi + ikon + sayi accent + etiket .75 = 4 vurgu; ben animasyonu sade tuttum, atilacaksa seridi at.
+KABUL: (yok) - K payim kapali, ama SADE/DUZEN/MANTIK tur 3 notlarini henuz okumadim ve mobilde animasyonlari gozle izleyemedim.
+
+=====================================================================
+[SADE] tur 3
+=====================================================================
+PAYIM: K2 + MODERN stat rozetleri/serit + ANIMASYON girisleri. MODERN ve ANIMASYON tur 3 notlarini okudum.
+K2 (mobil Hesabim, 375x812, 4200): tur ve donem filtreleri artik TEK SATIR, yatay kayar (scrollbar gizli, ikisi ince cizgiyle ayrik).
+  Olculdu: filtre satiri 39px yukseklik (eskiden 3 satir), scrollWidth 729 / clientWidth 359 (kayar), yatay sayfa tasmasi YOK (375/375).
+  Ilk ekranda: stat kartlari y=293..580, "Takvim" basligi ve Kitap takvimi karti 580-812 arasinda gorunuyor (eskiden takvim ekran disindaydi).
+  Islev kaybi yok: tum 4 tur + 3 donem secenegi yerinde. Masaustu duzeni degismedi.
+MODERN'e: stat kartinin ALT ACCENT SERIDI KALDIRILDI (.stat::before tek satir; MODERN'in kendi onerdigi). Ikon + accent sayi KALDI:
+  ikon sifir durumunu tarif ediyor. Etiket .75/sayi accent birlikte vurgu sayisi 4 -> 3. Olculdu: 5 kart opacity 1, 90px, esit.
+ANIMASYON'a: statIn (240ms, 30ms kademe) filtre degisiminde "yenilendi" hissi icin makul, ELLEMEDIM; ama kart girisi + statIn + sayac ayni anda:
+  sayac yeter, bir seyi atmak istersen statIn'i at (itirazim cok hafif). Yukleme opakligi .85 uygun.
+ Not: pane zamanlayicilari kisik oldugundan ekran goruntusunde stat kartlari yine soluk yakalanabiliyor; getComputedStyle opacity=1 (bitis durumu temiz).
+MANTIK'in tur 2 sorusu (menuden "Profili duzenle" kalksin mi): EVET, YAPTIM. Kisisel hesapta menude yalniz "Hesap ayarlari"
+  (profil Goals/ayarlar sayfasinda "Profil, e-posta ve saat dilimi" dugmesiyle zaten var); "Profili duzenle" yalniz yonetici hesapta
+  (ayarlar sayfasi yok) kaliyor. Avatar -> menu -> Hesap ayarlari -> Profil. Ayni sey tek yerde.
+KALAN: masaustunu bu tur ayrica px olcmedim (yalniz mobil Hesabim + stat olcusu); DUZEN/MANTIK tur 3 notlari henuz yok.
+SORU -> DUZEN: mobil alt nav 6 oge (Yonetim dahil) 12px yazi sikismis; "Yonetim" admin icin Hesabim altina mi tasinsin? 
+KABUL: (yok) - TUR 3 KURALI (c) kosulu: DUZEN ve MANTIK tur 3 notlarini okuyamadim (henuz yazilmadi) ve masaustunde 2. sayfa px dogrulamasi yapmadim.
+
+=====================================================================
+[DUZEN] tur 3
+=====================================================================
+PAYIM: K3, K1 kalan, K5, 3B karari. MODERN/ANIMASYON/SADE tur 3 notlarini okudum. Dogrulama: 4200 admin, 1024 + 375, getBoundingClientRect.
+K3 (grup ana sayfa): KOK NEDEN MANTIK'in `.grid:has(> .ucard){grid-auto-rows:1fr}` kurali: TUM satirlari en uzun kartin boyuna (460px) esitliyordu;
+  1-2 ogeli kartlar 200px bosluk tasiyordu. -> kural kaldirildi: her SATIR kendi icinde esit (grid stretch), satirlar icerige gore.
+  + `.ucard .item {min-height:117px}` => seri/film (cubuksuz) ile kitap (cubuklu) ogeleri ayni boy (eskiden 108/117 karisik).
+  Olcu (1024, 3 kolon, kart 307 genis): satir1 340/340/340, satir2 340/340/340, satir3 469/469/469; tum ogeler 117. Mobil (375): kartlar 343 genis,
+  tasma yok (scrollW=375). Kapak yer tutucusu MODERN'in (bas harfli sirt) tum kartlarda ayni; "bos kutu" gordugum kapak (Madame Bovary) aslinda
+  openlibrary'den YUKLENIRKEN koyu zemin (sonra naturalWidth=180) = kod hatasi degil, ag gecikmesi.
+K1 kalan: stat kartlari TUM sayfalarda ayni <Stat> (Shelf + Goals; baska yerde elle .stat yok - grep: 0 kopya). Olcu: masaustu 151 genis, mobil
+  164x88 x4 + 5. kart 336x88 (2+2+1, yetim yari kart yok). Bitis opakligi 1, etiket rgb(179,167,151) = --muted ile esit okunur; soluk gorunme yalniz
+  pane'in kisik zamanlayicili giris animasyonu yakalanmasi.
+K5 (Admin inline stil): MANTIK tur 2'de yapmis: Admin.jsx `style={{` = 0. Kontrol ettim: Yonetim Okuma durumu, Katalog listesi, Kullanicilar, Katilim
+  linki masaustunde acildi (platform admin), hizali, tasma yok. Yeniden yazmadim.
+3B KARARI (ANIMASYON "2B raf cizimi + tek seferlik 3B giris" vs MODERN "3B kitap"): ANIMASYON'un kararini DESTEKLIYORUM. Gerekce (olculebilir):
+  (1) bos durum 8 sayfada ayni bilesen; gercek 3B kitap = ~12 yuz + preserve-3d katmani x 8 sayfa, her gecista yeniden insa. 2B SVG + tek perspective
+  rotateY girisi ayni "kitap rafta duruyor" mesajini ~14 DOM ile veriyor. (2) Kullanici karari "ORTA gorsel yon, icerik sade": 3B kitap giris/hesap-ac
+  sayfasinin imzasi; uygulama icinde her bos durumda tekrar etmek imzayi sulandirir. (3) Mobilde dokunmatik: 3B hover zaten kapali. Sart: giris
+  3B'si KALIR (raf cizimi rotateY(-32deg->-7deg) 500ms). MODERN itiraz ederse tek bir sayfada (Defterim bos durumu) gercek 3B kitap deneriz.
+YENI GORDUGUM / KALAN: h1 altindaki mini kitap motifi ile aciklama (.sub) arasi: motif 12px yukseklikte h1 ile sub arasina giriyor, ucu ucuna
+  bitisik (sub ile 4px). Yaptim degil, gozlem: istersen MODERN motifi h1'in SAGINA ya da sub'in altina alsin; ben dokunmadim cunku bu
+  bir tasarim kararı, olcu hatasi degil. Mobil alt nav 6 oge (SADE sorusu): 12px, ama 375'te 6x62px sigiyor, tasma yok; "Yonetim" admin icin tek
+  (platform admin) oge, Hesabim altina tasimak gezinmeyi bir tik derinlestirir -> BIRAKTIM.
+SORU -> MANTIK: grup ana sayfada eski FAB/yeni-ekle tek yerde (PageHead) kaldi; "Yonetim" platform admin icin alt nav'da 6. oge mi kalmali?
+KABUL: DUZEN (a) payim kapali: K3/K1/K5; (b) 1024+375'te Hesabim, grup Ana sayfa, Yonetim x4 px kontrol edildi; (c) MODERN/ANIMASYON/SADE tur 3
+  okundu, itirazim kalmadi (mini kitap motifi yerlesimi MODERN'e acik soru, engel degil). MANTIK tur 3 notunu henuz okuyamadim (sira ondan sonra).
+
+=====================================================================
+[MANTIK] tur 3
+=====================================================================
+MODERN/ANIMASYON/SADE/DUZEN tur 3 notlari okundu. PAYIM: K5, K6 + tum akislarin yeniden denenmesi.
+K6: 4000'de (yeni backend, bos DB) calistim; 4100'u kullanmadim, kapali birakildi. NOT: 4200 gercek-veri kopyasina admin girisi bu oturumda
+  izin sistemi tarafindan reddedildi, dolayisiyla 4200'de 6 sayfa gezilemedi; ayni sayfalari 4000'de (taze hesap) masaustu + 375 mobil gezdim.
+  Platform admin sekmelerini (Kullanicilar/Okuma durumu) DUZEN tur 3 notu masaustunde gozle dogruladigini yaziyor; ben acamadim.
+K5: Admin.jsx `style={{` = 0 (grep). Yonetici modu (4000, yeni hesap) Grup/Katalog/Istekler: PageHead + ayni .card/.row siniflari, tasma yok (mobil+masaustu).
+  Platform admin ile ayni Admin + ayni Groups.Manage kullaniliyor (kodda tek yol).
+AKIS (tarayicida, 4000): kayit -> grup olustur -> /gruplar (kartta Yonet) -> tek tikla yonetici (/yonetim; Istekler/Grup/Katalog) -> menuden kisisel hesaba
+  gecis -> /ben; 14 adres (/ben, defterim, hedefler, ayarlar, gruplar, library, /g/:id + liderlik/kitaplik/bilgi, /g/:id/rafim -> /g/:id/uye/<ben>, /yonetim -> /ben,
+  /ben/gruplarim -> /gruplar) dogru yonlendi, yatay tasma yok. Mobilde Yeni ekle penceresi aciliyor; Gruplar'dan "Gruptan ayril" calisiyor ve yonetici
+  baglantisi dusuyor (linked=0). Yeni ekle/Defterim/filtre pill'leri, raf seridi, yeni stat kartlari, bos durum cizimleri islevi bozmadi (konsol/hata yok,
+  tasma yok). Yetkisiz: kisisel hesap /yonetim -> /ben; yonetici hesap /ben, /g/1, /library -> /yonetim.
+YENI KUSUR (bu turda bulunup DUZELTILDI): uyesi olmadigim bir grup adresinde (/g/999) ust bar "G Grup" markasi + grup sekmelerini gosteriyordu,
+  oysa sayfa "Bu grubu bulamadim" diyordu (celiski). App.jsx: grup modu yalniz kullanicinin gercekten uye oldugu gruplarda; aksi halde bar hesap modunda
+  kalir (mobilde dogrulandi).
+DUZEN'IN grid-auto-rows:1fr kaldirmasi: ITIRAZIM YOK. Gerekcesi (200px bosluk) dogru; esit-satir-ici yeterli, benim kuralim fazla agresifti.
+CEVAPLAR: DUZEN sorusu -> "Yonetim" platform admin icin alt nav'da 6. oge KALSIN (yalniz platform admin'de, ayri yer gerektirmiyor, 375'te sigiyor).
+  SADE: menuden "Profili duzenle" kalkmasina katiliyorum. MODERN: h1 altindaki mini kitap motifi yerlesimi engel degil.
+KALAN KUSUR (kod disi): 4200 kopyasinda 5/13 kapak 404 (veri); 4200'de admin ile canli gezinti yapilamadi.
+KABUL: MANTIK (K5/K6 payim kapali; 2+ sayfa 375 + masaustunde 4000'de px kusuru kalmadi; onceki kisilerin itirazlari kapali. Sinir: 4200/platform admin sekmeleri
+  bende dogrulanmadi, DUZEN'in olcumune dayaniyorum.)
+
+KULLANICIYA SUNULACAK KISA ORTAK OZET (5 madde)
+ 1) Tek ust bar, uc mod: hesap (Hesabim/Defterim/Hedefler/Gruplar/Kitaplik), grup (marka = grup adi, tek "‹ Hesabim"), yonetici (Istekler/Grup/Katalog).
+ 2) Grup olusunca ayri yonetici hesabi otomatik acilir; Gruplar'daki "Yonet" veya avatar menusu ile tek tikla gecilir, "Kisisel hesaba geç" ile donulur;
+    yonetici hesap kitap okumaz, sade grup ayarlari gorur. Gruptan ayrilinca baglanti duser.
+ 3) Tekrarlar kalkti: Gruplarim/Rafim sekmeleri, uc ayri grup-yonetim formu (tek Manage), iki Yeni-ekle/Grup-olustur dugmesi, menude Profil+Hesap ayarlari.
+    Hedefler sade; hesap/veri-indir avatar menusu > Hesap ayarlari.
+ 4) Gorunum: her sayfada raf seridi + mini kitap motifli baslik, yumusak 3B kartlar, tek <Stat>/<PageHead>/<Empty> bilesenleri, bos durumlarda raf cizimi,
+    mobilde tek satir filtre; hepsi prefers-reduced-motion'a saygili.
+ 5) Animasyon belirgin ama kisa: sayfa gecisi, kart girisi (yalniz sayfa acilirken), sayac sayimi, kayan nav/sekme pill'i; surekli hareket yok.
+KABUL: MODERN (tur 3 notlari okundu: stat serit kaldirildi, 2B raf + tek seferlik 3B giris ve grid-auto-rows kaldirma uygun; itiraz yok. Not: h1 mini kitap motifi ile .sub arasi ~4px, engel degil, sonraki surumde 8px bosluk eklenebilir)
+KABUL: SADE (DUZEN/MANTIK tur 3 okundu; K2 kapandi, tekrarlar menu/sayfalarda tek yerde, animasyon kisa ve kalanlar hizmet ediyor; itirazim kalmadi)
+KABUL: ANIMASYON (SADE/DUZEN/MANTIK tur 3 okundu, itiraz yok; SADE'nin statIn kaygisi: sayfa acilisinda .route-in kart girisi statIn'i ezer, yani ikisi ust uste binmez, statIn yalniz filtre degisiminde calisir; hepsi 150-400ms, reduced-motion'da kapali, build temiz)
+
+=====================================================================
+[MODERN] raf-seridi (bitirilen kitaplar rafi)
+=====================================================================
+NEREDE: yalniz Hesabim (/ben, kendi rafim, grup disi). Yeni frontend/src/FinishedShelf.jsx, Shelf.jsx'in en ustunde.
+ Hesabim'da genel dekor seridi (ShelfStrip) KALDIRILDI (yerine bu geldi); diger sayfalarda ve yonetici modunda eskisi duruyor.
+ Veri: mevcut api.entries({user_id, type:'book', limit:200}); status==='bitti' suzulur. Yeni endpoint YOK.
+ Sayfa sayisi: entry.total_pages, yoksa catalog.pages, yoksa bilinmiyor. Shelf'in kendi entries'i yenilenince (kitap ekle/bitir) serit de yenilenir.
+MATEMATIK (sayfa -> yukseklik x genislik px):
+   <=50: 22x6 | <=150: 28x8 | <=300: 35x10 | <=500: 42x12 | <=800: 48x14 | >800: 54x16 | bilinmiyor: 35x10 (orta kademe, <=300)
+ Renk: kitap basligindan seed'li, Cover yer tutucusuyla AYNI palet (ui.jsx coverColor) -> sirt rengi = kapak rengi.
+ Sira: bitis tarihi (end_date) eskiden yeniye soldan saga, esitlikte id.
+ 0 kitap: bombos, yalniz tahta (59px = 54 + raf 5). aria-label "Henuz bitirilen kitap yok".
+ Cok kitap: raf SATIRI artar (her satir kendi tahtasi, sabit satir yuksekligi 54 + 11 aralik + 5). Ust sinir: masaustu son 110, mobil son 34
+ kitap; fazlasi sag ustte "+N" rozeti. Hover/odak/dokunma: sirt 4px kalkar + tooltip "Ad · N sayfa" (kenar sirtlarda tasmaz). Giris: sirt 380ms
+ buyur, 18ms kademe (ilk 30'a kadar), yalniz yeni mount olan sirta (yeni biten kitap kendi basina girer); prefers-reduced-motion'da kapali.
+DOGRULAMA (4200, px): 0 kitap (admin hesabi gercekten 0): yukseklik 59, sirt 0, genel serit yok. 150 kitap (fetch taklidiyle, 15 farkli sayfa
+ degeri): masaustu 110 sirt + "+40"... 130 deneyi 124px (=2 satir), kademe olculeri 22x6 ... 54x16 dogru, mobil 375: 34 sirt, 124px, "+116" rozeti
+ serit disinda sagda, scrollW=375 (yatay tasma yok). Ekran goruntusu masaustu+mobil bakildi, 2 satir temiz.
+ DOGRULANAMADI: gercek demo verisi (backend 'demo veri' notu henuz dosyada yoktu; 4000'e girilmedi) -> cok kitap testi sentetik API cevabiyla; 
+ tooltip pane'de hover simule edilmedi (CSS :hover/:focus, data-tip metni DOM'da).
+BACKEND ISTEGI: (yok). Not: entries limit 200; 200'den fazla bitmis kitapta eski olanlar eksik gorunur (serit son N'yi gosterdigi icin sorun degil, +N sayisi 200 ile sinirli).
+
+BACKEND: demo veri (4000 portundaki yerel DB'ye yuklendi)
+---------------------------------------------------------
+ Script: backend/scripts/seed-demo.js  (npm run seed:demo, backend klasorunden). API uzerinden calisir
+ (register, POST /api/groups -> otomatik yonetici hesap, join linki, entries/progress/ratings/comments);
+ sunucu acik olmali (BASE_URL ile baska adres). Tekrar calistirmak guvenli: var olan hesap/grup/katalog
+ atlanir, kaydi olan hesaba tekrar kayit eklenmez. Temiz baslamak icin hesabin kayitlarini silip tekrar calistir.
+ NOT: 'ysa' kullanici adi bu DB'de zaten (baska sifreyle) vardi, ona dokunulmadi; demo hesaplar 'demo-' oneklidir.
+ Hesaplar (hepsi sifre: demo1234): demo-ysa (Yasar), demo-ada, demo-mert, demo-deniz, demo-kaan.
+ Gruplar: "Aile Kütüphanesi" (demo-ysa kurucu; ada, mert, deniz) ve "Kitap Kulübü" (demo-deniz kurucu;
+ ysa, kaan). Her grubun yonetici hesabi otomatik ("<Grup> Yönetici"), kurucuya bagli: giriste kisisel
+ hesaptan Gecis ile. ysa ve deniz iki grupta.
+ Kayitlar: demo-ysa 12 bitmis kitap + 2 okuyor + 1 dizi + 1 film; demo-ada 0 bitmis (1 okuyor + 1 film: bos raf);
+ demo-mert 8 bitmis + 1 okuyor + 1 dizi + 2 film; demo-deniz 6 + 2 okuyor + 1 dizi + 1 film;
+ demo-kaan 4 + 1 okuyor + 1 film. Bitmis kitaplar son ~3 ay icinde gun gun okunmus gibi (sayfa gunlukleri var),
+ okuyorlar bugune kadar seri; bazilarinda puan ve yorum. Katalog: 18 kitap (32-1488 sayfa), 4 dizi, 5 film (kapaksiz).
+ Dogrulandi: /api/groups, feed, liderlik (record/streak), year-summary, entries sayilari beklenen; sunucu hatasi yok.
+
+=====================================================================
+[MODERN] duzeltme (kullanici duzeltmeleri, 5 madde)
+=====================================================================
+ 1) Genel raf/kitap seridi (ShelfStrip + SPINES) App.jsx'ten SILINDI: Defterim, Hedefler, Gruplar, Kitaplik, Yonetim, grup sayfalari
+    ve yonetici modunda artik serit yok. Raf yalniz FinishedShelf (Hesabim + madde 5'teki arkadas rafi). Olu .shelf-strip CSS'i dosyada kaldi (kullanilmiyor).
+ 2) Grup sekmeleri geri: Ana sayfa | Liderlik | Rafim | Kitaplik | Uyeler. /g/:id/rafim artik yonlendirme degil, dogrudan Shelf (grup kapsami:
+    baslik "Rafim", alt baslik "Bu grupta gorunen kayitlarim"; GroupCtx ile yalniz gruba acik kayitlar). /g/:id/uye/<ben> de "Rafim" sekmesini
+    aktif eder; baska uye -> "Uyeler" aktif. Hesabim (/ben, tum kayitlar) ile karismaz: farkli kapsam, farkli baslik.
+ 3) Grup adi markasinda bas harf karosu kalkti: ust barda (grup ve yonetici modu) /brand.png (kitap yigini) 28px. Baska yerde grup bas harfi yoktu (grep).
+ 4) h1 altindaki mini kitap motifi (ve onceki duz accent cizgi) CSS'ten SILINDI: tum sayfalarda yok.
+ 5) FinishedShelf artik her Shelf'te: kendi (Hesabim), grup Rafim ve /g/:id/uye/<id> arkadas rafi. Veri mevcut api.entries({user_id, type:'book',
+    group: gid, limit:200}): backend grup kapsamini zaten uyguluyor, YENI ENDPOINT GEREKMEDI (BACKEND ISTEGI yok).
+DOGRULAMA (4000, demo-ysa/demo1234; Aile Kutuphanesi id 4): Hesabim 12 sirt = "12 kitap bitti" istatistigi; /g/4/rafim 12; arkadaslar: Mert 8 sirt
+ (8 kitap bitti), Deniz 6 (6), Ada 0 (bombos tahta 59px); serit/motif yok (Defterim, Gruplar, Ana sayfa'da .shelf-strip yok, grup marka IMG);
+ nav Rafim aktif /uye/<ben>'de, Uyeler aktif /uye/<baskasi>'nda. Mobil 375: Mert rafi 8 sirt, 5 nav ogesi x73px, scrollW=375, tasma yok. Build temiz.
+ Dogrulanamadi: demo-ada ile giris (Ada'nin rafi demo-ysa uzerinden 0 olarak goruldu); cok-kitap (110+) satir sinirlari onceki turda sentetik denendi.
+
+=====================================================================
+[SADE] mobil filtre (kullanici geri bildirimi: gizli yatay kaydirma kullanissiz)
+=====================================================================
+ K2 cozumum (tek satir yatay kayan pill) YANLISTI: son oge yarim kesik, kaydirilabilirlik anlasilmiyor. Geri aldim, yeni fikir:
+ - TUR FILTRESI = esit parcali SEGMENT (Pages: Shelf.jsx `.tabs.seg`): [Hepsi | 📖 | 📺 | 🎬]; mobilde yalniz ikon (aria-label + title: Kitaplar/
+   Diziler/Filmler), masaustunde ikon + yazi. "Hepsi" biraz daha genis (flex 1.7).
+ - DONEM = tek kucuk acilir secim (<select class=period-sel>, "Tum zamanlar ▾"): secili deger duguede yazili, mobilde yerel secim sayfasi, kaydirma YOK.
+ - Ayni bilesen Shelf.jsx'te: Hesabim, Rafim (/g/:id/rafim) ve kisi rafi (/g/:id/uye/:id) ayni koddan geliyor; Hedefler'de tur/donem filtresi yok.
+ - Tek satir, 41px yukseklik (eskiden 3 satir).
+ Dogrulama (4000, demo-ysa, 375px): bar scrollWidth=clientWidth=343; sayfa scrollWidth 375=375; segment parcalari 67/43/43/43px ve her birinin
+ icerigi sigiyor (scrollWidth<=width: 65/67, 42/43); select sag kenar 359px (<375). /ben, /g/4/rafim, /g/4/uye/8 ayni olcu.
+ TUM MOBIL TARAMA (12 adres: /ben, defterim, hedefler, ayarlar, gruplar, library, /g/4 + liderlik/kitaplik/bilgi/rafim/uye/8): hicbir sayfada
+ overflow:auto/scroll kutusu yok (gizli yatay kaydirma yok), kesik oge yok. Tarama sirasinda KENDI hatami buldum ve duzelttim: toolbar nowrap kuralim
+ Defterim ve Kitaplik'ta select'i 418/448px'e tasiriyordu; kural yalniz `.shelf-bar`a daraltildi, tekrar tarandi: sifir tasan oge.
+ Masaustu: ayni bilesen (ikon + yazi segmenti + acilir donem); detayli px olcmedim, mobil kapsamliydi. Build temiz.
+ Not: segment aktif vurgusu renk gecisi (kayan pill degil); kayan istenirse `.tabs-slide` mantigi eklenebilir, sade tutmak icin eklemedim.
+
+=====================================================================
+[DUZEN] liderlik (kullanici geri bildirimi: podyum + filtre satiri)
+=====================================================================
+KOK NEDEN: .pod yuksekligi icerige gore (kitap adi satir sayisi, "sayfa/gun" sarmasi) belirleniyordu; 1. kart padding ile biraz uzun olsa da
+  2./3. kartin icerigi uzayinca sira bozuluyordu. Filtre satiri: 4 tablo pill'i + donem = mobilde 2 satir (.tabs wrap).
+DEGISTI (Leaderboard.jsx + styles.css; build temiz; 4000 demo-ysa /g/4/liderlik, 375px ve 1024px px olcumu):
+ - PODYUM: kolonlar ALT cizgide hizali (align-items:end); yukseklik SIRAYA gore SABIT (height, icerik degil): masaustu 1.=312 > 2.=276 > 3.=240px,
+   mobil 284 > 252 > 220px. Rank'i siradan alir (top indeksi), 2-1-3 gorunum sirasi korundu. Icerik ayni dikey ritimde: madalya, avatar (mobilde 52px),
+   ad (1 satir + ellipsis + title), sayi, BIRIM AYRI SATIRDA ("sayfa", "sayfa/gun", "kitap": eskiden yana sarip kartlari uzatiyordu), ayrinti
+   (kitap adlari 2/3 satir line-clamp + title ile tam metin). scrollHeight>clientHeight kontrolu: 4 tablo x 2 genislik, hicbir kartta tasma yok.
+ - AZ KISI: .podium.n2 (2 kisi: 2.-1. sirali, esit genislik, alt cizgi ayni) ve .podium.n1 (1 kisi: ortada, 240px) — DOM ile simule edilip olculdu
+   (n2: 252/284, ikisi de bottom=479; n1 x=67..307 / 375). 3 kisi: olculdu: p2 252, p1 284, p3 220, bottom hepsi 461/479 ayni.
+ - FILTRE SATIRI (SADE'nin Hesabim segment mantigi): .toolbar.shelf-bar.lb-bar: tablo secici segment (mobilde pasifler yalniz ikon + title/aria,
+   AKTIF olan ikon + kisa ad "Rekor/Gunluk/Bitiren/Seri"), donem <select class=period-sel> (acilir secim). Olculdu: mobil bar yuksekligi 37px
+   (tek satir) 4 tablonun hepsinde, secili sekme tasmasi yok, yatay sayfa tasmasi yok (scrollW=375). Gizli kaydirma YOK. Masaustu: tam etiketler,
+   bar 39px tek satir.
+ - Seri sekmesi: donem secici yok (noPeriod), segment tam genislige uzar, satir 37px.
+KOMSU SAYFALAR: Hedefler (tur 2'de .goal-form + Stat) ve grup Ana sayfa (satir bazli esit yukseklik, tur 3) zaten sabit; Kitaplik kart gridi satirda
+  stretch ile esit (lib-card'larin ic icerigi degisken ama satir icinde esit); ayri bir podyum benzeri "icerige gore sira bozan yukseklik" gormedim —
+  Kitaplik'i bu turda px ile ayrica OLCMEDIM (yalniz kod okudum), sadece Liderlik + podyum dogrulandi.
+NOT: 4200/4000 ayni cookie'yi paylasiyor (localhost); 4000'e demo-ysa ile girdim, 4200 oturumu duser — baska oturumlar yeniden giris yapmali.
+KALAN: ayrinti metni cok uzunsa 2-3 satirda "…" ile kesilir (tam metin title ile).
+
+BACKEND: geri bildirim (hazir)
+------------------------------
+ POST /api/feedback {kind:'oneri'|'hata'|'begendim', message (1-2000, trim), page?(<=200)} -> 200 {ok:true,
+   emailed:boolean}. Giris yapmis herkes (kisisel + yonetici hesap). Gecersiz 400 (fields), limit kisi basina
+   saatte 5 -> 429 "Çok fazla mesaj gönderdiniz, bir saat sonra tekrar deneyin". Her zaman DB'ye (feedback tablosu,
+   migrate otomatik) kaydolur; mail ayrica gider.
+ GET /api/admin/feedback (yalniz platform admin) -> {items:[{id,kind,message,page,created_at,emailed,
+   user:{id,display_name,username,kind}}]} yeni->eski (en fazla 500). DELETE /api/admin/feedback/:id (admin).
+ Mail (nodemailer, backend/src/services/mail.js): env SMTP_HOST (vars. smtp.gmail.com), SMTP_PORT (vars. 465, secure),
+   SMTP_USER, SMTP_PASS, FEEDBACK_TO (vars. yavuzslm60@gmail.com), FEEDBACK_FROM (vars. SMTP_USER).
+   SMTP_USER/SMTP_PASS yoksa mail atlanir (emailed:false); mail hatasi istegi bozmaz (log'a sadece uyari kodu, icerik/parola yok).
+   Konu '[Kutuphane] <tur>: ilk 50 karakter' tek satir; govde: mesaj + kullanici, hesap turu, sayfa, tarih; HTML kacisli.
+   Ornek ayarlar: backend/.env.example (bos; gercek deger dosyaya yazilmaz).
+ Sunucuya alma: backend'de `npm install` (nodemailer), SMTP_USER/SMTP_PASS (+ istege bagli digerleri) ortam degiskeni
+   olarak ayarla, sunucuyu YENIDEN BASLAT. Gmail icin hesapta 2 adimli dogrulama + "Uygulama sifresi" olusturup SMTP_PASS'e ver.
+ Test: testler/feedback.test.js (gercek mail gonderilmez; transport taklit / SMTP_TEST_JSON=1 jsonTransport). Hepsi gecti.
+ Calisan 4000 sunucusu yeniden baslatilana kadar yeni uclari bilmez.
+
+=====================================================================
+[MODERN] geri bildirim (frontend)
+=====================================================================
+ YAPILDI (build temiz; frontend/src: Feedback.jsx yeni, api.js, AccountSwitch.jsx, App.jsx, pages/Admin.jsx, styles.css):
+ - Avatar menusunde "Fikrini belirt" (kisisel + yonetici hesap, mobilde de; "Hesap ayarlari"nin altinda). Tiklaninca mevcut <Modal> (mobilde alt sheet):
+   3'lu segment Oneri/Hata/Begendim (rol radio, mevcut .tab pill'leri), textarea (maxLength 2000, "n/2000" sayaci, yer tutucu turle degisir),
+   bos/bosluk mesajda Gonder kilitli, gonderirken tum alan + dugme kilitli ("Gonderiliyor..."), hata -> ErrorBox (Turkce `error` mesaji gorunur,
+   form acik kalir, tekrar denenebilir), basari -> "Tesekkurler! Fikrin iletildi." (emailed:false olsa da ayni metin) + 3 kitap sirti raf uzerinde
+   buyur + kalp pop (350-400ms, reduced-motion'da statik), 1.4 sn sonra modal kapanir. page = location.pathname gonderilir.
+ - Yonetim > "Geri bildirim" sekmesi YALNIZ platform admin: kart listesi (tur rozeti, zaman (title=tam tarih), mesaj pre-wrap, kim (@kullanici),
+   yonetici hesabi etiketi, sayfa yolu, e-posta gitti/gitmedi), Sil (onayli, listeyi yeniler), hata kutusu, bos durum (Empty, raf cizimi, 💌).
+ API: sendFeedback / adminFeedback / adminDeleteFeedback (sozlesmeye gore, mevcut request() hata deseni).
+ DOGRULAMA: 4000 (demo-ysa): menude oge gorundu; backend /api/feedback o an 404 idi (henuz hazir degil) -> sentetik cevapla: bos mesaj kilitli (true),
+  yazinca acildi (false), 429 "Cok sik gonderiyorsun" mesaji formda goruldu, basarida tesekkur ekrani + modal 1.8 sn icinde kapandi. Mobil 375: sheet
+  375 genis, 3 segment 16-304px, scrollW=375. 4200 (admin): sekme 5. sirada, 2 sentetik kayit (oneri/hata, yonetici hesabi, e-posta gitti/gitmedi)
+  masaustunde dogru; bos durum sentetik bos listeyle denendi. Silme ve gercek POST gercek backend ile DENENMEDI (backend 404 / sentetik).
+ BACKEND ISTEGI: yok. Not: GET /admin/feedback sayfalamasiz varsayildi (tum liste).

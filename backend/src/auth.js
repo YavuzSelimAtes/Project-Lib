@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { err, nowIso } from './util.js';
+import { isGroupOwner } from './groups.js';
 
 const scrypt = promisify(crypto.scrypt);
 export const COOKIE = 'kutuphane_sid';
@@ -31,14 +32,26 @@ export function userFromToken(db, token) {
   if (!token) return null;
   return db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').get(sha(token), nowIso()) || null;
 }
-export const toUser = (u) => u && ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, avatar: u.avatar, color: u.color, must_change_pw: !!u.must_change, active: !!u.active, name_changed: !!u.name_changed, tz: u.tz || null, created_at: u.created_at });
+export const toUser = (u) => u && ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, kind: u.kind || 'user', is_manager: u.kind === 'manager', avatar: u.avatar, color: u.color, must_change_pw: !!u.must_change, active: !!u.active, name_changed: !!u.name_changed, tz: u.tz || null, email: u.email || null, created_at: u.created_at });
 
 export function requireUser(req) {
   if (!req.user) throw err(401, 'Giris yapmaniz gerekiyor');
   return req.user;
 }
+// Grup ayarlari (eski /api/admin/invite, group-name...): platform yoneticisi ya da grup yonetici hesabi
+export function requireGroupAdmin(req) {
+  requireUser(req);
+  if (req.user.role !== 'admin' && req.user.kind !== 'manager') throw err(403, 'Bu islem icin yonetici yetkisi gerekir');
+  return req.user;
+}
 export function requireAdmin(req) {
   requireUser(req);
   if (req.user.role !== 'admin') throw err(403, 'Bu islem icin yonetici yetkisi gerekir');
+  return req.user;
+}
+// Katalog ekleme/duzenleme: platform yoneticisi ya da herhangi bir grubun sahibi (db: req.server.db)
+export function requireCatalogEditor(req) {
+  requireUser(req);
+  if (req.user.role !== 'admin' && !isGroupOwner(req.server.db, req.user.id)) throw err(403, 'Bu islem icin yonetici ya da grup sahibi olmaniz gerekir');
   return req.user;
 }
