@@ -6,7 +6,7 @@ import { useAuth } from '../auth.js';
 import { Avatar, Cover, Empty, ErrorBox, PageHead, SearchMeta, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
 import { AvatarPicker, ColorPicker, COLORS, validateName } from '../Profile.jsx';
 import { flattenEditions } from '../Editions.jsx';
-import { avatarText, langLabel } from '../ui.jsx';
+import { langLabel } from '../ui.jsx';
 const GroupManage = lazy(() => import('./Groups.jsx').then((m) => ({ default: m.Manage })));
 const RSTATUS = { acik: 'Açık', inceleniyor: 'İnceleniyor', tamamlandi: 'Tamamlandı', reddedildi: 'Reddedildi' };
 
@@ -521,7 +521,7 @@ function LinkGroups({ users }) {
       <ErrorBox error={groups.error} onRetry={groups.reload} />
       {groups.data?.groups.map((g) => (
         <div className="lrow" key={g.id}>
-          <div className="fill">{g.users.map((u) => `${avatarText(u.avatar)} ${u.display_name}`).join(' • ')}</div>
+          <div className="fill">{g.users.map((u, i) => <span key={u.id ?? i} className="head-who">{i > 0 && ' • '}<Avatar user={u} size="xs" /> {u.display_name}</span>)}</div>
           <button className="btn small danger" onClick={() => unlink(g)}>
             Bağlantıyı kaldır
           </button>

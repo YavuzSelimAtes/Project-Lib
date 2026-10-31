@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth, useGroup } from '../auth.js';
-import { CountUp, Cover, PageHead, Stat, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
+import { CountUp, Cover, Avatar, PageHead, Stat, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
 import Calendars from '../Calendar.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
@@ -67,7 +67,7 @@ export default function Shelf() {
     <>
       <FinishedShelf uid={uid} gid={gid} version={entries.data} />
       <PageHead
-        title={own ? (gid ? 'Rafım' : 'Hesabım') : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}
+        title={own ? (gid ? 'Rafım' : 'Hesabım') : owner ? <span className="head-who"><Avatar user={owner} size="sm" /> {owner.display_name} – rafı</span> : 'Raf'}
         sub={own ? (gid ? 'Bu grupta görünen kayıtlarım.' : undefined) : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
       >
         {own && !gid && (

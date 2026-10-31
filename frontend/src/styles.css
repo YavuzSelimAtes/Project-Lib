@@ -765,3 +765,5 @@ fieldset.bare { border: 0; padding: 0; margin: 0; }
 .fs-more { align-self: center; margin-left: 4px; font-size: .8rem; font-weight: 800; color: var(--muted); }
 :root[data-theme='dark'] .fs-slot i { filter: brightness(.82) saturate(.9); }
 @media (prefers-reduced-motion: reduce) { .fs-slot i { animation: none; } }
+.head-who { display: inline-flex; align-items: center; gap: 10px; }
+.head-who .avatar { flex: none; }
