@@ -18,19 +18,20 @@ const SC = { senaryo: 4, akicilik: 4, karakterler: 4, dil: 4, duygu: 4 };
   for (const [u, n] of [[a, 'scpa'], [b, 'scpb'], [c, 'scpc'], [d, 'scpd']]) await u('POST', '/api/auth/register', acc(n));
   await adm('POST', '/api/auth/login', { username: 'admin', password: 'test-admin-123' });
   const [ida, idb, idc, idd] = [await id(a), await id(b), await id(c), await id(d)];
-  const g1 = (await a('POST', '/api/groups', { name: 'G1' })).j.group.id;
-  const g2 = (await b('POST', '/api/groups', { name: 'G2' })).j.group.id;
-  await c('POST', `/api/join/${(await a('GET', `/api/groups/${g1}/invite`)).j.token}`, {});
-  await c('POST', `/api/join/${(await b('GET', `/api/groups/${g2}/invite`)).j.token}`, {});
+  const asMgr = async (u, name) => { const gr = await u('POST', '/api/groups', { name }); const m = mk(); await m('POST', '/api/auth/login', { username: 'scp' + (u === a ? 'a' : 'b'), password: 'secret1' }); await m('POST', '/api/auth/switch', { user_id: gr.j.manager_id }); return [gr.j.group.id, m]; };
+  const [g1, ao] = await asMgr(a, 'G1'); // grup sahibi = yonetici hesap (ao / bo); a, b kisisel hesap ve sadece uye
+  const [g2, bo] = await asMgr(b, 'G2');
+  await c('POST', `/api/join/${(await ao('GET', `/api/groups/${g1}/invite`)).j.token}`, {});
+  await c('POST', `/api/join/${(await bo('GET', `/api/groups/${g2}/invite`)).j.token}`, {});
 
   // ---- katalog yetkisi ----
-  let r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Bir', pages: 100 }); t('grup sahibi katalog ekler', r.s === 201, r); const cat1 = r.j.item.id;
-  r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Iki', pages: 100 }); const cat2 = r.j.item.id;
-  r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Uc', pages: 100 }); const cat3 = r.j.item.id;
+  let r = await ao('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Bir', pages: 100 }); t('grup sahibi katalog ekler', r.s === 201, r); const cat1 = r.j.item.id;
+  r = await ao('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Iki', pages: 100 }); const cat2 = r.j.item.id;
+  r = await ao('POST', '/api/admin/catalog', { type: 'book', title: 'Kitap Uc', pages: 100 }); const cat3 = r.j.item.id;
   r = await c('POST', '/api/admin/catalog', { type: 'book', title: 'Uye Kitap', pages: 10 }); t('sade uye katalog ekleyemez 403', r.s === 403, r);
   r = await d('POST', '/api/admin/catalog', { type: 'book', title: 'Grupsuz Kitap', pages: 10 }); t('grupsuz katalog ekleyemez 403', r.s === 403, r);
-  r = await b('PATCH', `/api/admin/catalog/${cat1}`, { pages: 120 }); t('baska grup sahibi duzenler', r.s === 200 && r.j.item.pages === 120, r);
-  r = await b('POST', `/api/admin/catalog/${cat1}/editions`, { language: 'tr', publisher: 'Yayin', pages: 120 }); t('grup sahibi baski ekler', r.s === 201, r);
+  r = await bo('PATCH', `/api/admin/catalog/${cat1}`, { pages: 120 }); t('baska grup sahibi duzenler', r.s === 200 && r.j.item.pages === 120, r);
+  r = await bo('POST', `/api/admin/catalog/${cat1}/editions`, { language: 'tr', publisher: 'Yayin', pages: 120 }); t('grup sahibi baski ekler', r.s === 201, r);
   r = await a('GET', '/api/admin/users'); t('grup sahibi /admin/users 403', r.s === 403, r);
   r = await adm('GET', '/api/admin/users'); t('platform admin /admin/users 200', r.s === 200, r);
   r = await a('POST', `/api/admin/users/${idc}/reset-password`, { password: 'yeni123' }); t('grup sahibi sifre sifirlayamaz', r.s === 403, r);
@@ -38,11 +39,11 @@ const SC = { senaryo: 4, akicilik: 4, karakterler: 4, dil: 4, duygu: 4 };
   const cdb = new DatabaseSync(dbPath);
   const legacy = Number(cdb.prepare("INSERT INTO catalog (type,title,pages,norm,created_at) VALUES ('book','Eski Kitap',50,'eski kitap',?)").run(new Date().toISOString()).lastInsertRowid);
   const legacy2 = Number(cdb.prepare("INSERT INTO catalog (type,title,pages,norm,created_at) VALUES ('book','Eski Iki',50,'eski iki',?)").run(new Date().toISOString()).lastInsertRowid);
-  t('created_by yazildi', cdb.prepare('SELECT created_by FROM catalog WHERE id=?').get(cat1).created_by === ida && cdb.prepare('SELECT created_by FROM catalog WHERE id=?').get(legacy).created_by == null, {});
-  r = await a('DELETE', `/api/admin/catalog/${legacy}`); t('eski kaydi grup sahibi silemez 403', r.s === 403, r);
-  r = await b('DELETE', `/api/admin/catalog/${cat3}`); t('baskasinin ekledigini silemez 403', r.s === 403, r);
+  t('created_by yazildi', cdb.prepare('SELECT created_by FROM catalog WHERE id=?').get(cat1).created_by === (await id(ao)) && cdb.prepare('SELECT created_by FROM catalog WHERE id=?').get(legacy).created_by == null, {});
+  r = await ao('DELETE', `/api/admin/catalog/${legacy}`); t('eski kaydi grup sahibi silemez 403', r.s === 403, r);
+  r = await bo('DELETE', `/api/admin/catalog/${cat3}`); t('baskasinin ekledigini silemez 403', r.s === 403, r);
   r = await adm('DELETE', `/api/admin/catalog/${legacy}`); t('platform admin siler', r.s === 200, r);
-  r = await a('DELETE', `/api/admin/catalog/${cat3}`); t('kendi ekledigini (kayitsiz) siler', r.s === 200, r);
+  r = await ao('DELETE', `/api/admin/catalog/${cat3}`); t('kendi ekledigini (kayitsiz) siler', r.s === 200, r);
 
   // ---- kayitlar ----
   const ent = async (u, cat, status, groups) => { const x = await u('POST', '/api/entries', { catalog_id: cat, status }); if (x.s !== 201) return { bad: x }; if (groups) await u('PUT', `/api/entries/${x.j.entry.id}/groups`, groups); return x.j.entry.id; };
@@ -52,7 +53,7 @@ const SC = { senaryo: 4, akicilik: 4, karakterler: 4, dil: 4, duygu: 4 };
   const eC1 = await ent(c, cat1, 'bitti');                  // G1 + G2
   const eC2 = await ent(c, legacy2, 'bitti', { none: true }); // kapali
   const eC3 = await ent(c, cat2, 'bitti', { group_ids: [g2] }); // yalniz G2
-  r = await a('DELETE', `/api/admin/catalog/${cat1}`); t('kaydi olan katalog silinemez (409)', r.s === 409, r);
+  r = await ao('DELETE', `/api/admin/catalog/${cat1}`); t('kaydi olan katalog silinemez (409)', r.s === 409, r);
   const ids = (j) => (j.cards || []).flatMap((x) => x.items.map((i) => i.entry_id));
 
   // ---- feed ----
@@ -133,13 +134,13 @@ const SC = { senaryo: 4, akicilik: 4, karakterler: 4, dil: 4, duygu: 4 };
   const rq = async (u, title) => (await u('POST', '/api/requests', { type: 'book', title })).j.request.id;
   const rC = await rq(c, 'Istek C'), rB = await rq(b, 'Istek B'), rD = await rq(d, 'Istek D');
   const rl = async (u) => (await u('GET', '/api/admin/requests')).j.requests.map((x) => x.id);
-  let l = await rl(a); t('istek: G1 sahibi A, C ve kendi grubunu gorur; B/D yok', l.includes(rC) && !l.includes(rB) && !l.includes(rD), l);
-  l = await rl(b); t('istek: G2 sahibi B, C ve B gorur; D yok', l.includes(rC) && l.includes(rB) && !l.includes(rD), l);
+  let l = await rl(ao); t('istek: G1 sahibi A, C ve kendi grubunu gorur; B/D yok', l.includes(rC) && !l.includes(rB) && !l.includes(rD), l);
+  l = await rl(bo); t('istek: G2 sahibi B, C ve B gorur; D yok', l.includes(rC) && l.includes(rB) && !l.includes(rD), l);
   l = await rl(adm); t('istek: platform admin hepsini gorur', [rC, rB, rD].every((x) => l.includes(x)), l);
-  r = await a('GET', '/api/admin/requests'); t('istek sayaclari kapsamli', Object.values(r.j.counts).reduce((x, y) => x + y, 0) === r.j.requests.length, r.j);
-  r = await a('PATCH', `/api/admin/requests/${rB}`, { status: 'inceleniyor' }); t('baska grubun istegine erisim 404', r.s === 404, r);
-  r = await a('PATCH', `/api/admin/requests/${rD}`, { status: 'inceleniyor' }); t('grupsuz kullanici istegine grup sahibi 404', r.s === 404, r);
-  r = await a('PATCH', `/api/admin/requests/${rC}`, { status: 'inceleniyor' }); t('kendi grubunun istegini cevaplar', r.s === 200, r);
+  r = await ao('GET', '/api/admin/requests'); t('istek sayaclari kapsamli', Object.values(r.j.counts).reduce((x, y) => x + y, 0) === r.j.requests.length, r.j);
+  r = await ao('PATCH', `/api/admin/requests/${rB}`, { status: 'inceleniyor' }); t('baska grubun istegine erisim 404', r.s === 404, r);
+  r = await ao('PATCH', `/api/admin/requests/${rD}`, { status: 'inceleniyor' }); t('grupsuz kullanici istegine grup sahibi 404', r.s === 404, r);
+  r = await ao('PATCH', `/api/admin/requests/${rC}`, { status: 'inceleniyor' }); t('kendi grubunun istegini cevaplar', r.s === 200, r);
   r = await adm('PATCH', `/api/admin/requests/${rD}`, { status: 'inceleniyor' }); t('platform admin her istegi cevaplar', r.s === 200, r);
   r = await c('GET', '/api/admin/requests'); t('sade uye admin istek listesi 403', r.s === 403, r);
 
@@ -152,17 +153,17 @@ const SC = { senaryo: 4, akicilik: 4, karakterler: 4, dil: 4, duygu: 4 };
   const anon = mk();
   const R2 = Math.random().toString(36).slice(2, 6);
   const ee = mk(); await ee('POST', '/api/auth/register', acc('scpe' + R2)); const ide = await id(ee);
-  await ee('POST', `/api/join/${(await b('GET', `/api/groups/${g2}/invite`)).j.token}`, {}); // E yalniz G2
+  await ee('POST', `/api/join/${(await bo('GET', `/api/groups/${g2}/invite`)).j.token}`, {}); // E yalniz G2
   const eE = (await ee('POST', '/api/entries', { catalog_id: cat2, status: 'devam' })).j.entry.id;
   await ee('POST', `/api/entries/${eE}/comments`, { body: 'GIZLI' + R2 });
   await ee('POST', '/api/notes', { catalog_id: cat2, body: 'NOT' + R2 });
-  r = await ee('POST', `/api/join/${(await a('GET', `/api/groups/${g1}/invite`)).j.token}`, {}); t('E G1e de katilir', r.s < 300, r);
+  r = await ee('POST', `/api/join/${(await ao('GET', `/api/groups/${g1}/invite`)).j.token}`, {}); t('E G1e de katilir', r.s < 300, r);
   for (const p of [`/api/entries/${eE}`, `/api/entries/${eE}/comments`, `/api/users/${ide}/stats`, `/api/users/${ide}/heatmap`, `/api/users/${ide}/calendar?from=2026-01-01&to=2026-12-31`, `/api/entries?user_id=${ide}`]) {
     r = await a('GET', p); t(`G1 sahibi A, E nin G2-yalniz verisine erisemez: ${p.slice(0, 40)}`, r.s === 404 || r.s === 403 || (r.s === 200 && !JSON.stringify(r.j).includes('GIZLI' + R2) && !(r.j.entries || []).length), r.s);
   }
   for (const p of [`/api/feed?group=${g1}`, `/api/library/${cat2}/comments?group=${g1}`, '/api/notes', '/api/me/export', `/api/groups/${g1}`]) { r = await a('GET', p); t('A: E nin yorum/notu sizmaz ' + p.slice(0, 40), !JSON.stringify(r.j).includes('GIZLI' + R2) && !JSON.stringify(r.j).includes('NOT' + R2), JSON.stringify(r.j).slice(0, 120)); }
-  const oldTok = (await a('GET', `/api/groups/${g1}/invite`)).j.token;
-  r = await a('POST', `/api/groups/${g1}/invite/regenerate`); t('davet linki yenilenir', r.s === 200 && r.j.token && r.j.token !== oldTok, r);
+  const oldTok = (await ao('GET', `/api/groups/${g1}/invite`)).j.token;
+  r = await ao('POST', `/api/groups/${g1}/invite/regenerate`); t('davet linki yenilenir', r.s === 200 && r.j.token && r.j.token !== oldTok, r);
   r = await d('POST', `/api/join/${oldTok}`, {}); t('yenileme sonrasi eski link kullanilamaz', r.s >= 400, r);
   r = await anon('GET', `/api/join/${oldTok}`); t('eski link bilgi vermez', r.s >= 400, r);
   for (const p of ['/api/feed', '/api/entries', '/api/notes', '/api/me/export', '/api/groups', '/api/library', '/api/leaderboards/record', `/api/users/${ida}/stats`, `/api/entries/${eE}`, `/api/catalog/${cat1}/ratings`, '/api/admin/users', '/api/admin/backup']) { r = await anon('GET', p); t('oturumsuz 401 ' + p, r.s === 401, r.s); }

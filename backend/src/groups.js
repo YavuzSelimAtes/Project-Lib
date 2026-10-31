@@ -1,4 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { nowIso, err, bad } from './util.js';
+import { pruneLinks } from './links.js';
 
 export const DEFAULT_GROUP = 'Aile Kütüphanesi';
 
@@ -19,6 +21,33 @@ export function ownedGroup(db, userId, token) {
   return g;
 }
 
+// Grup yonetici hesabi: grubun sahibi olur (sifreyle girilemez), kurucu kisisel hesaba baglanir (gecis), kurucu grupta uye kalir.
+// Tek basina transaction acmaz: cagiran tx icinde olmali ya da tek cagri olarak kullanmali
+export function createManager(db, g, creatorId) {
+  const now = nowIso();
+  const creator = db.prepare('SELECT * FROM users WHERE id=?').get(creatorId);
+  const name = g.name || DEFAULT_GROUP;
+  const slug = (name.toLocaleLowerCase('tr').replace(/ı/g, 'i').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 18).replace(/-+$/, '')) || 'grup';
+  let username = `${slug}-yonetici`;
+  for (let i = 2; db.prepare('SELECT 1 FROM users WHERE username=?').get(username); i++) username = `${slug}-yonetici${i}`;
+  const hash = `locked$${randomBytes(16).toString('hex')}`; // verifyPassword hicbir sifreyi kabul etmez
+  const id = Number(db.prepare("INSERT INTO users (username,display_name,password_hash,role,avatar,color,kind,created_at) VALUES (?,?,?,?,?,?,'manager',?)")
+    .run(username, `${name} Yönetici`.slice(0, 60), hash, 'member', '🔑', '#64748b', now).lastInsertRowid);
+  db.prepare("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=?").run(g.id, creatorId);
+  if (!g.invite_name && creator) db.prepare('UPDATE groups SET invite_name=? WHERE id=?').run(creator.display_name, g.id);
+  db.prepare('UPDATE groups SET owner_id=? WHERE id=?').run(id, g.id);
+  addMember(db, g.id, id, 'owner');
+  const link = db.prepare('SELECT group_id FROM account_links WHERE user_id=?').get(creatorId);
+  const lg = link ? link.group_id : db.prepare('SELECT COALESCE(MAX(group_id),0)+1 g FROM account_links').get().g;
+  const up = db.prepare('INSERT INTO account_links (user_id,group_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET group_id=excluded.group_id');
+  up.run(creatorId, lg);
+  up.run(id, lg);
+  return id;
+}
+
+// Grubun yonetici hesabi (yoksa null)
+export const managerOf = (db, groupId) => db.prepare("SELECT u.id,u.display_name,u.avatar,u.color FROM groups g JOIN users u ON u.id=g.owner_id WHERE g.id=? AND u.kind='manager'").get(groupId) || null;
+
 export function addMember(db, groupId, userId, role = 'member', shareExisting = false) {
   db.prepare('INSERT OR IGNORE INTO group_members (user_id,group_id,role,joined_at) VALUES (?,?,?,?)').run(userId, groupId, role, nowIso());
   if (shareExisting) db.prepare('INSERT OR IGNORE INTO entry_groups (entry_id,group_id) SELECT id,? FROM entries WHERE user_id=?').run(groupId, userId);
@@ -30,6 +59,14 @@ export function removeMember(db, groupId, userId) {
   db.prepare('DELETE FROM comment_groups WHERE group_id=? AND comment_id IN (SELECT id FROM comments WHERE user_id=?)').run(groupId, userId);
   db.prepare('DELETE FROM rating_groups WHERE group_id=? AND user_id=?').run(groupId, userId);
   db.prepare('DELETE FROM group_members WHERE group_id=? AND user_id=?').run(groupId, userId);
+  // Gruptan ayrilan kisinin bu grubun yonetici hesabina baglantisi duser (baska grup yoneticilerine baglantisi kalir)
+  const mgr = managerOf(db, groupId);
+  const lg = mgr && db.prepare('SELECT group_id FROM account_links WHERE user_id=?').get(mgr.id);
+  if (lg && db.prepare('SELECT 1 FROM account_links WHERE user_id=? AND group_id=?').get(userId, lg.group_id)) {
+    const stay = db.prepare(`SELECT 1 FROM account_links l JOIN group_members m ON m.user_id=l.user_id AND m.group_id=? JOIN users u ON u.id=l.user_id
+      WHERE l.group_id=? AND u.kind<>'manager' AND u.active=1 LIMIT 1`).get(groupId, lg.group_id);
+    if (!stay) { db.prepare('DELETE FROM account_links WHERE user_id=?').run(mgr.id); pruneLinks(db); }
+  }
 }
 
 // Yeni kayit: varsayilan olarak kisinin tum gruplarinda gorunur

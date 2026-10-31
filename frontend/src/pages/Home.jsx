@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth, useGroup } from '../auth.js';
-import { Avatar, Cover, Empty, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
+import { Avatar, Cover, Empty, PageHead, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
@@ -81,12 +81,12 @@ export default function Home() {
   // yonetici hesabinin kendi okumasi yoksa karti gizle
   const visible = cards.filter((c) => !((c.user.role === 'admin' || (c.user.id === me.id && me.role === 'admin')) && c.items.length === 0));
   const sorted = [...visible].sort((a, b) => (b.user.id === me.id) - (a.user.id === me.id));
-  const allEmpty = visible.length > 0 && visible.every((c) => c.items.length === 0);
 
   return (
     <>
-      {!gid && <h1>Son güncellemeler</h1>}
-      <p className="sub">{gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}</p>
+      <PageHead title={gid ? 'Ana sayfa' : 'Son güncellemeler'} sub={gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}>
+        <button className="btn" onClick={() => setAdding(true)}>+ Yeni ekle</button>
+      </PageHead>
 
       {pending.data?.questions?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
@@ -118,16 +118,6 @@ export default function Home() {
       {feed.data && visible.length === 0 && (
         <Empty icon="👨‍👩‍👧" title="Henüz kimse yok">
           Yönetici aile üyelerini ekleyince burada görünecekler.
-        </Empty>
-      )}
-      {allEmpty && (
-        <Empty icon="📚" title="Raflar henüz boş">
-          İlk kitabı, filmi ya da diziyi sen ekle!
-          <div style={{ marginTop: 12 }}>
-            <button className="btn" onClick={() => setAdding(true)}>
-              + Yeni ekle
-            </button>
-          </div>
         </Empty>
       )}
 
@@ -164,9 +154,6 @@ export default function Home() {
         ))}
       </div>
 
-      <button className="fab" onClick={() => setAdding(true)} aria-label="Yeni ekle">
-        + Yeni ekle
-      </button>
       {adding && <AddFlow onClose={() => setAdding(false)} onAdded={reload} />}
       {openId && <EntryDetail entryId={openId} onClose={() => setOpenId(null)} onChanged={reload} />}
     </>

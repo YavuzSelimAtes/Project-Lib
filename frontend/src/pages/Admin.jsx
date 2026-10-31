@@ -1,43 +1,103 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
+import { RouteTabs } from './Ben.jsx';
 import { useAuth } from '../auth.js';
-import { Avatar, Cover, Empty, ErrorBox, SearchMeta, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
+import { Avatar, Cover, Empty, ErrorBox, PageHead, SearchMeta, Skeleton, TYPE_LABEL, timeAgo, useAsync } from '../ui.jsx';
 import { AvatarPicker, ColorPicker, COLORS, validateName } from '../Profile.jsx';
 import { flattenEditions } from '../Editions.jsx';
 import { avatarText, langLabel } from '../ui.jsx';
+const GroupManage = lazy(() => import('./Groups.jsx').then((m) => ({ default: m.Manage })));
 const RSTATUS = { acik: 'Açık', inceleniyor: 'İnceleniyor', tamamlandi: 'Tamamlandı', reddedildi: 'Reddedildi' };
 
 export default function Admin() {
   const { user } = useAuth();
   const platform = user.role === 'admin'; // platform yöneticisi: kullanıcılar + okuma durumu da
   const ownedAll = (user.groups || []).filter((g) => g.role === 'owner');
-  const [tab, setTab] = useState('inbox');
+  const { tab = 'inbox' } = useParams();
   const inbox = useAsync(() => api.adminRequests(), []);
   const open = inbox.data?.counts?.acik ?? 0;
-  const tabs = [
-    ['inbox', `📥 Gelen kutusu${open > 0 ? ` (${open})` : ''}`],
-    ...(ownedAll.length ? [['link', '🔗 Katılım linki']] : []),
-    ...(platform ? [['users', '👥 Kullanıcılar'], ['reading', '📖 Okuma durumu']] : []),
-    ['catalog', '➕ Katalog ekle'],
-    ['list', '📚 Katalog listesi'],
+  const mgr = !!user.is_manager; // grup yonetici hesabi: sade grup ayarlari
+  const tabs = mgr ? [['inbox', 'İstekler'], ['link', 'Grup'], ['catalog', 'Katalog ekle'], ['list', 'Katalog listesi']] : [
+    ['inbox', `Gelen kutusu${open > 0 ? ` (${open})` : ''}`],
+    ...(ownedAll.length ? [['link', 'Katılım linki']] : []),
+    ...(platform ? [['users', 'Kullanıcılar'], ['reading', 'Okuma durumu'], ['feedback', 'Geri bildirim']] : []),
+    ['catalog', 'Katalog ekle'],
+    ['list', 'Katalog listesi'],
   ];
+  if (!tabs.some(([k]) => k === tab)) return <Navigate to="/yonetim" replace />;
+  const MGR_TITLE = { inbox: 'İstekler', link: 'Grup', catalog: 'Katalog', list: 'Katalog' };
   return (
     <>
-      <h1>Yönetim</h1>
-      <p className="sub">{platform ? 'Kullanıcıları, talepleri ve kataloğu buradan yönet.' : 'Katılım linkini, katalog kayıtlarını ve istekleri buradan yönet.'}</p>
-      <div className="tabs" role="tablist">
-        {tabs.map(([k, l]) => (
-          <button key={k} role="tab" className="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
-            {l}
-          </button>
-        ))}
-      </div>
+      <PageHead
+        title={mgr ? MGR_TITLE[tab] : 'Yönetim'}
+        sub={mgr ? (user.managed_group_name ? `${user.managed_group_name} · yönetici hesabı` : 'Yönetici hesabı') : undefined}
+      />
+      {(!mgr || tab === 'catalog' || tab === 'list') && (
+        <RouteTabs tabs={mgr ? tabs.slice(2) : tabs} current={tab} base="/yonetim" label="Yönetim bölümleri" />
+      )}
       {tab === 'inbox' && <Inbox state={inbox} />}
-      {tab === 'link' && ownedAll.map((g) => <InviteLink key={g.id} gid={g.id} />)}
+      {tab === 'link' && mgr && user.managed_group_id && (
+        <Suspense fallback={<Skeleton h={80} n={2} />}><GroupManage gid={user.managed_group_id} onChanged={() => {}} /></Suspense>
+      )}
+      {tab === 'link' && !mgr && ownedAll.map((g) => (
+        <section key={g.id}>
+          {ownedAll.length > 1 && <h2 className="small muted">{g.name}</h2>}
+          <Suspense fallback={<Skeleton h={80} n={2} />}><GroupManage gid={g.id} onChanged={() => {}} /></Suspense>
+        </section>
+      ))}
       {tab === 'users' && platform && <Users />}
       {tab === 'reading' && platform && <ReadingStatus />}
+      {tab === 'feedback' && platform && <FeedbackList />}
       {tab === 'catalog' && <CatalogForm onDone={inbox.reload} />}
       {tab === 'list' && <CatalogList />}
+    </>
+  );
+}
+
+/* ---------- geri bildirim (yalniz platform admin) ---------- */
+const FB_LABEL = { oneri: ['💡', 'Öneri'], hata: ['🐞', 'Hata'], begendim: ['❤️', 'Beğendim'] };
+function FeedbackList() {
+  const list = useAsync(() => api.adminFeedback(), []);
+  const [err, setErr] = useState(null);
+  const items = list.data?.items || [];
+  const del = async (it) => {
+    if (!window.confirm('Bu geri bildirim silinsin mi?')) return;
+    setErr(null);
+    try {
+      await api.adminDeleteFeedback(it.id);
+      list.reload();
+    } catch (x) {
+      setErr(x);
+    }
+  };
+  return (
+    <>
+      {list.loading && !list.data && <Skeleton h={80} n={3} />}
+      <ErrorBox error={list.error} onRetry={list.reload} />
+      <ErrorBox error={err} />
+      {list.data && items.length === 0 && <Empty icon="💌" title="Henüz geri bildirim yok">Kullanıcılar avatar menüsünden “Fikrini belirt” ile yazınca burada görünür.</Empty>}
+      <div className="shelf-list">
+        {items.map((it) => {
+          const [ic, label] = FB_LABEL[it.kind] || ['💬', it.kind];
+          return (
+            <div className="card fb-item" key={it.id}>
+              <div className="row">
+                <span className={`chip fb-${it.kind}`}>{ic} {label}</span>
+                <span className="small muted grow" title={it.created_at}>{timeAgo(it.created_at)}</span>
+                <button className="btn small ghost" onClick={() => del(it)}>Sil</button>
+              </div>
+              <p className="fb-msg">{it.message}</p>
+              <div className="small muted">
+                {it.user ? `${it.user.display_name} (@${it.user.username})` : 'Bilinmiyor'}
+                {it.user?.kind === 'manager' ? ' · yönetici hesabı' : ''}
+                {it.page ? ` · ${it.page}` : ''}
+                {' · '}{it.emailed ? 'e-posta gitti' : 'e-posta gitmedi'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }
@@ -50,7 +110,7 @@ function Inbox({ state }) {
     <>
       <div className="tabs">
         {[['', 'Hepsi'], ...Object.entries(RSTATUS)].map(([k, l]) => (
-          <button key={k} className="tab" aria-selected={filter === k} onClick={() => setFilter(k)}>
+          <button key={k} className="tab sm" aria-selected={filter === k} onClick={() => setFilter(k)}>
             {l}
             {k && state.data?.counts ? ` (${state.data.counts[k] ?? 0})` : ''}
           </button>
@@ -113,7 +173,7 @@ function RequestCard({ r, reload }) {
         <span className="spacer" />
         <span className="chip">{RSTATUS[r.status]}</span>
       </div>
-      <div style={{ margin: '8px 0' }}>
+      <div className="my-8">
         <b>{r.title}</b> <span className="muted">({TYPE_LABEL[r.type]})</span>
         {r.note && <div className="small muted">Not: {r.note}</div>}
         {r.resolved_catalog && <div className="small ok-note">Bağlandı: {r.resolved_catalog.title}</div>}
@@ -128,7 +188,7 @@ function RequestCard({ r, reload }) {
           </div>
           {found && found.length === 0 && <p className="small muted">Sonuç yok. “Katalog ekle” sekmesinden elle ekleyebilirsin.</p>}
           {found?.slice(0, 6).map((it) => (
-            <div className="item" key={it.id ?? it.key} style={{ cursor: 'default' }}>
+            <div className="item static" key={it.id ?? it.key}>
               <Cover src={it.cover_url} title={it.title} />
               <div className="meta">
                 <div className="t">{it.title}</div>
@@ -154,7 +214,7 @@ function RequestCard({ r, reload }) {
               </div>
             </div>
           ))}
-          <label className="field" style={{ marginTop: 10 }}>
+          <label className="field mt-10">
             <span>Yönetici notu (talep sahibi görür)</span>
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
           </label>
@@ -212,25 +272,28 @@ export function InviteLink({ gid }) {
     }
   };
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <form className="row" onSubmit={saveName} style={{ marginBottom: 12 }}>
-        <label className="field grow" style={{ margin: 0 }}>
-          <span>Kütüphane adı (sol üstte görünür)</span>
+    <div className="card">
+      <h2>Grup bilgisi</h2>
+      <form className="row mb-12" onSubmit={saveName}>
+        <label className="field grow flush">
+          <span>Grup adı (üst barda görünür)</span>
           <input type="text" maxLength={40} value={gname} onChange={(e) => setGname(e.target.value)} />
         </label>
-        <button className="btn small" style={{ alignSelf: 'flex-end' }}>Kaydet</button>
+        <button className="btn small btn-end">Kaydet</button>
       </form>
-      <h2 style={{ marginTop: 0 }}>Katılım linki</h2>
+      {inv.data && <InviteName gid={gid} key={inv.data.invite_name} initial={inv.data.invite_name} fallback={user.display_name} setMsg={setMsg} />}
+      <div className="card-sec">
+      <h2>Katılım linki</h2>
       <p className="muted small">Bu linki paylaştığın kişi hesap açıp senin grubuna katılır.</p>
       <ErrorBox error={inv.error} onRetry={inv.reload} />
       {url && (
         <div className="row">
-          <input type="text" readOnly value={url} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0 }} />
+          <input type="text" className="link-in" readOnly value={url} onFocus={(e) => e.target.select()} />
           <button type="button" className="btn small" onClick={copy}>📋 Kopyala</button>
           <button type="button" className="btn small ghost" onClick={regen}>Yenile</button>
         </div>
       )}
-      {inv.data && <InviteName gid={gid} key={inv.data.invite_name} initial={inv.data.invite_name} fallback={user.display_name} setMsg={setMsg} />}
+      </div>
       {msg && <p className="muted small" role="status">{msg}</p>}
     </div>
   );
@@ -249,12 +312,12 @@ function InviteName({ gid, initial, fallback, setMsg }) {
     }
   };
   return (
-    <form className="row" onSubmit={save} style={{ marginTop: 12 }}>
-      <label className="field grow" style={{ margin: 0 }}>
+    <form className="row mt-12" onSubmit={save}>
+      <label className="field grow flush">
         <span>Davet eden adı (katılım sayfasında "… seni davet etti")</span>
         <input type="text" maxLength={40} value={v} placeholder={fallback} onChange={(e) => setV(e.target.value)} />
       </label>
-      <button className="btn small" style={{ alignSelf: 'flex-end' }}>Kaydet</button>
+      <button className="btn small btn-end">Kaydet</button>
     </form>
   );
 }
@@ -329,18 +392,18 @@ function Users() {
 
   return (
     <>
-      <form className="card" onSubmit={add} style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Kullanıcı ekle</h2>
-        <div className="row" style={{ alignItems: 'stretch' }}>
+      <form className="card" onSubmit={add}>
+        <h2>Kullanıcı ekle</h2>
+        <div className="row row-stretch">
           <label className="field grow">
             <span>Kullanıcı adı</span>
             <input type="text" value={form.username} onChange={set('username')} autoCapitalize="none" placeholder="ayse" required />
-            {err?.fields?.username && <span className="small" style={{ color: 'var(--danger)' }}>{err.fields.username}</span>}
+            {err?.fields?.username && <span className="small err-text">{err.fields.username}</span>}
           </label>
           <label className="field grow">
             <span>Görünen ad</span>
             <input type="text" value={form.display_name} onChange={set('display_name')} placeholder="Ayşe" required maxLength={40} aria-invalid={!!nameCheck.error} />
-            {nameCheck.error && <span className="small" style={{ color: 'var(--danger)' }}>{nameCheck.error}</span>}
+            {nameCheck.error && <span className="small err-text">{nameCheck.error}</span>}
           </label>
           <label className="field grow">
             <span>Şifre (en az 6)</span>
@@ -349,13 +412,13 @@ function Users() {
         </div>
         <div className="field">
           <span>Avatar</span>
-          <div style={{ marginTop: 4 }}>
+          <div className="mt-4">
             <AvatarPicker value={form.avatar} onChange={(a) => setForm((f) => ({ ...f, avatar: a }))} />
           </div>
         </div>
         <div className="field">
           <span>Renk</span>
-          <div style={{ marginTop: 4 }}>
+          <div className="mt-4">
             <ColorPicker value={form.color} onChange={(c) => setForm((f) => ({ ...f, color: c }))} />
           </div>
         </div>
@@ -373,8 +436,8 @@ function Users() {
         </button>
       </form>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Yedek</h2>
+      <div className="card">
+        <h2>Yedek</h2>
         <p className="small muted">Veritabanının bir kopyasını bilgisayarına indirir. Düzenli aralıklarla almanı öneririz.</p>
         <a className="btn small" href="/api/admin/backup" download>
           💾 Yedeği indir
@@ -382,13 +445,13 @@ function Users() {
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Aile üyeleri</h2>
+        <h2>Aile üyeleri</h2>
         {users.loading && !users.data && <Skeleton h={50} n={2} />}
         <ErrorBox error={users.error} onRetry={users.reload} />
         {users.data?.users.map((u) => (
           <div className="lrow" key={u.id}>
             <Avatar user={u} size="sm" />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="fill">
               <b>{u.display_name}</b> <span className="muted small">@{u.username}</span> {u.role === 'admin' && <span className="chip">yönetici</span>}
               <div className="small muted">{u.entry_count} kayıt</div>
             </div>
@@ -451,14 +514,14 @@ function LinkGroups({ users }) {
   };
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <h2 style={{ marginTop: 0 }}>Hesap bağlantıları</h2>
+    <div className="card">
+      <h2>Hesap bağlantıları</h2>
       <p className="small muted">Bağlı hesaplar birbirine şifresiz, tek dokunuşla geçebilir. Yönetici hesap yalnızca kendi kullanıcı hesabıyla (tam 2 hesap) bağlanabilir.</p>
       {groups.loading && !groups.data && <Skeleton h={40} n={1} />}
       <ErrorBox error={groups.error} onRetry={groups.reload} />
       {groups.data?.groups.map((g) => (
         <div className="lrow" key={g.id}>
-          <div style={{ flex: 1, minWidth: 0 }}>{g.users.map((u) => `${avatarText(u.avatar)} ${u.display_name}`).join(' • ')}</div>
+          <div className="fill">{g.users.map((u) => `${avatarText(u.avatar)} ${u.display_name}`).join(' • ')}</div>
           <button className="btn small danger" onClick={() => unlink(g)}>
             Bağlantıyı kaldır
           </button>
@@ -466,16 +529,16 @@ function LinkGroups({ users }) {
       ))}
       {groups.data && !groups.data.groups.length && <p className="small muted">Henüz bağlantı yok.</p>}
       <h3>Yeni bağlantı</h3>
-      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset className="bare">
         <legend className="small muted">Bağlanacak hesapları seç (en az 2). Zaten bağlı olanlar yeni gruba taşınır.</legend>
         {candidates.map((u) => (
-          <label key={u.id} className="row" style={{ minHeight: 44, alignItems: 'center', gap: 8 }}>
+          <label key={u.id} className="row pick-row">
             <input type="checkbox" checked={sel.includes(u.id)} onChange={() => toggle(u.id)} />
             <Avatar user={u} size="sm" /> {u.display_name} <span className="muted small">@{u.username}</span>
           </label>
         ))}
       </fieldset>
-      {adminBad && <p className="small" style={{ color: 'var(--danger)' }}>Yönetici ile yalnızca bir kullanıcı hesabı bağlanabilir (toplam 2 hesap).</p>}
+      {adminBad && <p className="small err-text">Yönetici ile yalnızca bir kullanıcı hesabı bağlanabilir (toplam 2 hesap).</p>}
       <ErrorBox error={err} />
       <button className="btn" disabled={busy || sel.length < 2 || adminBad} onClick={link}>
         Bağla
@@ -548,10 +611,10 @@ function CatalogForm({ onDone }) {
 
   return (
     <>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>İnternetten otomatik ekle</h2>
+      <div className="card">
+        <h2>İnternetten otomatik ekle</h2>
         <div className="row">
-          <select value={f.type} onChange={set('type')} style={{ width: 'auto' }} aria-label="Tür">
+          <select value={f.type} onChange={set('type')} className="w-auto" aria-label="Tür">
             <option value="book">Kitap</option>
             <option value="movie">Film</option>
             <option value="series">Dizi</option>
@@ -560,7 +623,7 @@ function CatalogForm({ onDone }) {
           <button className="btn" disabled={busy || importQ.trim().length < 2} onClick={doImport}>İçe aktar</button>
         </div>
         {imported?.map((it) => (
-          <div key={it.id} className="row" style={{ marginTop: 10, alignItems: 'flex-start', opacity: it.wrong ? 0.6 : 1 }}>
+          <div key={it.id} className={it.wrong ? 'row row-top mt-10 dim' : 'row row-top mt-10'}>
             <Cover src={it.cover_url} title={it.title} />
             <div className="grow small">
               <strong>{it.title}</strong>{it.author_or_creator ? <> — {it.author_or_creator}</> : null}
@@ -575,7 +638,7 @@ function CatalogForm({ onDone }) {
         ))}
       </div>
       <form className="card" onSubmit={submit}>
-        <h2 style={{ marginTop: 0 }}>Elle ekle</h2>
+        <h2>Elle ekle</h2>
         <label className="field">
           <span>Tür</span>
           <select value={f.type} onChange={set('type')}>
@@ -586,7 +649,7 @@ function CatalogForm({ onDone }) {
         </label>
         <label className="field"><span>Başlık *</span><input type="text" value={f.title} onChange={set('title')} required maxLength={300} /></label>
         <label className="field"><span>{f.type === 'book' ? 'Yazar' : 'Yönetmen / yapımcı'}</span><input type="text" value={f.author_or_creator} onChange={set('author_or_creator')} /></label>
-        <div className="row" style={{ alignItems: 'stretch' }}>
+        <div className="row row-stretch">
           <label className="field grow"><span>Yıl</span><input type="number" value={f.year} onChange={set('year')} /></label>
           {f.type === 'book' && <label className="field grow"><span>Sayfa sayısı</span><input type="number" min="1" value={f.pages} onChange={set('pages')} /></label>}
           {f.type === 'series' && <label className="field grow"><span>Sezon sayısı</span><input type="number" min="1" value={f.seasons} onChange={set('seasons')} /></label>}
@@ -629,9 +692,9 @@ function CatalogList() {
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 12 }}>
+      <div className="row mb-12">
         <input type="search" className="grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Katalogda ara…" aria-label="Katalogda ara" />
-        <select value={type} onChange={(e) => setType(e.target.value)} style={{ width: 'auto' }} aria-label="Tür">
+        <select value={type} onChange={(e) => setType(e.target.value)} className="w-auto" aria-label="Tür">
           <option value="">Hepsi</option>
           <option value="book">Kitap</option>
           <option value="movie">Film</option>
@@ -646,7 +709,7 @@ function CatalogList() {
       <div className="shelf-list">
         {list.data?.items.map((it) => (
           <div className="card" key={it.id}>
-            <div className="item" style={{ cursor: 'default' }}>
+            <div className="item static">
               <Cover src={it.cover_url} title={it.title} />
               <div className="meta">
                 <div className="t">{it.title}</div>
@@ -702,10 +765,10 @@ function CatalogEdit({ it, onDone }) {
     }
   };
   return (
-    <form onSubmit={save} style={{ marginTop: 10 }}>
+    <form className="mt-10" onSubmit={save}>
       <label className="field"><span>Başlık</span><input type="text" value={f.title} onChange={set('title')} required /></label>
       <label className="field"><span>Yazar / yapımcı</span><input type="text" value={f.author_or_creator} onChange={set('author_or_creator')} /></label>
-      <div className="row" style={{ alignItems: 'stretch' }}>
+      <div className="row row-stretch">
         <label className="field grow"><span>Yıl</span><input type="number" value={f.year} onChange={set('year')} /></label>
         {it.type === 'book' && <label className="field grow"><span>Sayfa</span><input type="number" min="1" value={f.pages} onChange={set('pages')} /></label>}
       </div>
@@ -757,14 +820,14 @@ function EditionsAdmin({ catalogId }) {
   };
   const list = state.data || [];
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+    <div className="card-sec">
       <b className="small">Baskılar</b>
       {state.loading && !state.data && <p className="small muted">Yükleniyor…</p>}
       <ErrorBox error={state.error} onRetry={state.reload} />
       {state.data && list.length === 0 && <p className="small muted">Henüz baskı yok.</p>}
       {list.map((ed) => (
         <div className="lrow" key={ed.id}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="fill">
             <b>{ed.publisher || 'Yayınevi yok'}</b>{' '}
             <span className="small muted">
               {[ed.language ? langLabel(ed.language) : null, ed.pages ? `${ed.pages} sayfa` : 'sayfa yok', ed.year, ed.isbn].filter(Boolean).join(' · ')}
@@ -774,9 +837,9 @@ function EditionsAdmin({ catalogId }) {
           <button className="btn small danger" onClick={() => del(ed)} aria-label="Baskıyı sil">Sil</button>
         </div>
       ))}
-      <form onSubmit={add} style={{ marginTop: 10 }}>
+      <form className="mt-10" onSubmit={add}>
         <b className="small">Baskı ekle</b>
-        <div className="row" style={{ alignItems: 'stretch', marginTop: 6 }}>
+        <div className="row row-stretch mt-6">
           <label className="field grow"><span>Dil</span>
             <select value={f.language} onChange={set('language')}>
               {LANG_OPTS.map((l) => <option key={l} value={l}>{langLabel(l)}</option>)}
@@ -785,7 +848,7 @@ function EditionsAdmin({ catalogId }) {
           </label>
           <label className="field grow"><span>Yayınevi</span><input type="text" value={f.publisher} onChange={set('publisher')} maxLength={120} /></label>
         </div>
-        <div className="row" style={{ alignItems: 'stretch' }}>
+        <div className="row row-stretch">
           <label className="field grow"><span>Sayfa</span><input type="number" min="1" value={f.pages} onChange={set('pages')} /></label>
           <label className="field grow"><span>Yıl</span><input type="number" value={f.year} onChange={set('year')} /></label>
           <label className="field grow"><span>ISBN</span><input type="text" value={f.isbn} onChange={set('isbn')} maxLength={20} /></label>
@@ -822,8 +885,8 @@ function ReadingStatus() {
   return (
     <div className="card">
       <div className="row">
-        <h2 className="grow" style={{ margin: 0 }}>Okuma durumu</h2>
-        <label className="small row" style={{ gap: 6 }}>
+        <h2 className="grow flush">Okuma durumu</h2>
+        <label className="small row gap-6">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Hepsini göster
         </label>
       </div>
@@ -838,9 +901,9 @@ function ReadingStatus() {
         return (
           <div className="lrow" key={u.id}>
             <Avatar user={u} size="sm" />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="fill">
               <b>{u.display_name}</b>
-              <div className="row" style={{ gap: 6, marginTop: 2 }}>
+              <div className="row gap-6 mt-2">
                 {r.bugun_okumadi && <span className="chip">Bugün okumadı</span>}
                 {r.aktif_kitap_yok && <span className="chip">{r.kitap_eklemedi ? 'Hiç kitap eklemedi' : 'Aktif kitap yok'}</span>}
                 <span className="small muted">Son okuma: {r.last_read_date ? timeAgo(r.last_read_date) : 'hiç'}</span>

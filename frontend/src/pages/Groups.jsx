@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { Avatar, Empty, ErrorBox, Skeleton, useAsync } from '../ui.jsx';
+import { Avatar, Empty, PageHead, ErrorBox, Skeleton, useAsync } from '../ui.jsx';
 import { InviteLink } from './Admin.jsx';
+import { flushQueue, queueCount } from '../offlineQueue.js';
+import { moveSubscriptionToCurrentUser } from '../pushClient.js';
 
 const ROLE = { owner: 'Yönetici', member: 'Üye' };
 
@@ -11,7 +13,7 @@ const ROLE = { owner: 'Yönetici', member: 'Üye' };
 export default function Groups() {
   const { refresh } = useAuth();
   const list = useAsync(() => api.groups(), []);
-  const [manage, setManage] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const groups = list.data?.groups || [];
 
@@ -27,39 +29,55 @@ export default function Groups() {
     }
   };
 
+  // Grubu yonetmek = o grubun yonetici hesabina gecmek (tek yol; ayri bir yonetim formu yok)
+  const manageGroup = async (g) => {
+    setErr(null);
+    setBusy(true);
+    try {
+      await flushQueue();
+      if ((await queueCount()) > 0) throw new Error('Bekleyen güncellemelerin var, internet gelince tekrar dene.');
+      await api.switchAccount(g.manager.id);
+      await moveSubscriptionToCurrentUser();
+      window.location.assign('/yonetim');
+    } catch (x) {
+      setErr(x);
+      setBusy(false);
+    }
+  };
+
   return (
     <>
-      <div className="row" style={{ marginBottom: 8 }}>
-        <p className="sub grow" style={{ margin: 0 }}>Katıldığın gruplar. Kayıtların hangi gruplarda görüneceğini Hesabım’dan seçersin.</p>
-        <Link className="btn small" to="/grup-olustur" style={{ textDecoration: 'none' }}>+ Grup oluştur</Link>
-      </div>
+      <PageHead title="Gruplar" sub="Katıldığın gruplar. Kayıtların hangi gruplarda görüneceğini Hesabım’dan seçersin.">
+        <Link className="btn" to="/grup-olustur" style={{ textDecoration: 'none' }}>+ Grup oluştur</Link>
+      </PageHead>
       {list.loading && !list.data && <Skeleton h={80} n={2} />}
       <ErrorBox error={list.error} onRetry={list.reload} />
       <ErrorBox error={err} />
       {list.data && groups.length === 0 && (
         <Empty icon="👥" title="Henüz bir grubun yok">
-          Bir davet linkiyle gruba katılabilir ya da kendi grubunu kurabilirsin.
-          <div style={{ marginTop: 12 }}>
-            <Link className="btn" to="/grup-olustur" style={{ textDecoration: 'none' }}>Grup oluştur</Link>
-          </div>
+          Bir davet linkiyle gruba katılabilir ya da yukarıdan kendi grubunu kurabilirsin.
         </Empty>
       )}
       {groups.map((g) => (
-        <div className="card" key={g.id} style={{ marginBottom: 12 }}>
-          <div className="row">
-            <Link to={`/g/${g.id}`} className="grow" style={{ textDecoration: 'none', color: 'inherit' }}>
-              <b style={{ fontSize: '1.1em' }}>{g.name}</b>
-              <div className="small muted">{g.member_count} üye</div>
+        <div className="card" key={g.id}>
+          <div className="row grp-row">
+            <Link to={`/g/${g.id}`} className="grp-main" title="Grubu aç">
+              <b>{g.name}</b>
+              <div className="small muted">{g.member_count} üye · {ROLE[g.role] || g.role}</div>
             </Link>
-            <span className="chip">{ROLE[g.role] || g.role}</span>
-            <Link className="btn small" to={`/g/${g.id}`} style={{ textDecoration: 'none' }}>Aç</Link>
-            {g.role === 'owner' ? (
-              <button className="btn small ghost" onClick={() => setManage(manage === g.id ? null : g.id)}>{manage === g.id ? 'Kapat' : 'Yönet'}</button>
-            ) : (
-              <button className="btn small ghost" onClick={() => leave(g)}>Gruptan ayrıl</button>
-            )}
+            <div className="grp-actions">
+              {g.role === 'owner' ? (
+                <Link className="btn small ghost" to="/yonetim/link">Yönet</Link>
+              ) : (
+                <>
+                  {g.manager?.linked && (
+                    <button className="btn small ghost" disabled={busy} onClick={() => manageGroup(g)}>Yönet</button>
+                  )}
+                  <button className="btn small ghost" onClick={() => leave(g)}>Gruptan ayrıl</button>
+                </>
+              )}
+            </div>
           </div>
-          {manage === g.id && <Manage gid={g.id} onChanged={() => { list.reload(); refresh(); }} />}
         </div>
       ))}
     </>
@@ -67,7 +85,7 @@ export default function Groups() {
 }
 
 // Grup sahibi: davet linki + ad ayarlari (InviteLink) ve uye cikarma
-function Manage({ gid, onChanged }) {
+export function Manage({ gid, onChanged }) {
   const { user } = useAuth();
   const info = useAsync(() => api.group(gid), [gid]);
   const [err, setErr] = useState(null);
@@ -84,9 +102,10 @@ function Manage({ gid, onChanged }) {
     }
   };
   return (
-    <div style={{ marginTop: 12 }}>
+    <>
       <InviteLink gid={gid} />
-      <b className="small">Üyeler</b>
+      <div className="card">
+      <h2>Üyeler</h2>
       <ErrorBox error={info.error} onRetry={info.reload} />
       <ErrorBox error={err} />
       {members.map((m) => (
@@ -99,6 +118,7 @@ function Manage({ gid, onChanged }) {
           )}
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }

@@ -20,7 +20,7 @@ export default async function routes(app) {
     const doneFrom = addDays(today, -2); // biten kitap/dizi: son 3 gun
     // Yonetici hesabi kendi okumasi yoksa kartlardan gizlenir
     const users = (groupId
-      ? db.prepare("SELECT u.id,u.display_name,u.avatar,u.color FROM users u JOIN group_members gm ON gm.user_id=u.id AND gm.group_id=? WHERE u.active=1 AND (u.role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all(groupId)
+      ? db.prepare("SELECT u.id,u.display_name,u.avatar,u.color FROM users u JOIN group_members gm ON gm.user_id=u.id AND gm.group_id=? WHERE u.active=1 AND u.kind<>'manager' AND (u.role<>'admin' OR EXISTS (SELECT 1 FROM entries e WHERE e.user_id=u.id AND e.status<>'planlandi'))").all(groupId)
       : db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').all(me.id));
     const vis = groupId ? ' AND EXISTS (SELECT 1 FROM entry_groups eg WHERE eg.entry_id=e.id AND eg.group_id=?)' : ' AND e.user_id=?';
     const entries = db.prepare(`SELECT e.*, c.title, c.author_or_creator, c.year, c.cover_url, c.id AS cid, c.type AS ctype, ed.cover_url AS ed_cover

@@ -1,84 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { autoEnablePush } from '../pushClient.js';
 import { Avatar } from '../ui.jsx';
+import { BookArt } from './AuthArt.jsx';
+import { Shelves } from './AuthArtShelves.jsx';
 import { AccountInputs, accountBody, accountError, useAccountForm } from '../AccountFields.jsx';
-
-// Kutuphane raflari: seed'li, sabit kitap sirtlari (dis gorsel dosyasi gerekmez)
-const SPINES = ['#7a2e2e', '#2f4b6e', '#3d5a3a', '#8a6a2f', '#5a3a63', '#a14f2c', '#2c5a5e', '#6b4a32', '#8f3b4f', '#3b3f66'];
-
-function Shelves() {
-  const rows = useMemo(() => {
-    let s = 7;
-    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-    return Array.from({ length: 6 }, (_, r) => {
-      const books = [];
-      let x = -10;
-      while (x < 1210) {
-        const w = 14 + rnd() * 22;
-        const h = 90 + rnd() * 70;
-        books.push({ x, w, h, c: SPINES[Math.floor(rnd() * SPINES.length)], t: rnd() > 0.6, lean: rnd() > 0.96 });
-        x += w + 1;
-      }
-      return { y: 70 + r * 150, books };
-    });
-  }, []);
-  return (
-    <svg className="reg-shelves" viewBox="0 0 1200 960" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <defs>
-        <linearGradient id="spineShade" x1="0" x2="1">
-          <stop offset="0" stopColor="#000" stopOpacity=".35" />
-          <stop offset=".35" stopColor="#fff" stopOpacity=".08" />
-          <stop offset="1" stopColor="#000" stopOpacity=".3" />
-        </linearGradient>
-      </defs>
-      <rect width="1200" height="960" fill="#1d130c" />
-      {rows.map((row, i) => {
-        const base = row.y + 128;
-        return (
-          <g key={i}>
-            {row.books.map((b, k) => (
-              <g key={k} transform={b.lean ? `rotate(8 ${b.x} ${base})` : undefined}>
-                <rect x={b.x} y={base - b.h} width={b.w} height={b.h} fill={b.c} />
-                <rect x={b.x} y={base - b.h} width={b.w} height={b.h} fill="url(#spineShade)" />
-                {b.t && <rect x={b.x} y={base - b.h + 14} width={b.w} height="4" fill="#e9d6a8" opacity=".7" />}
-                {b.t && <rect x={b.x} y={base - 22} width={b.w} height="3" fill="#e9d6a8" opacity=".5" />}
-              </g>
-            ))}
-            <rect x="0" y={base} width="1200" height="14" fill="#2b1d14" />
-            <rect x="0" y={base} width="1200" height="3" fill="#4a3322" />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// Gercek 3B kitap (CSS 3D): doner, kapagi acilir, sayfalari cevrilir
-function BookArt() {
-  const lines = [0, 1, 2, 3, 4].map((n) => <i key={n} />);
-  return (
-    <div className="reg-art" aria-hidden="true">
-      <div className="b3-scene">
-        <div className="b3">
-          <div className="b3-face b3-back" />
-          <div className="b3-face b3-spine" />
-          <div className="b3-face b3-pages" />
-          <div className="b3-face b3-top" />
-          <div className="b3-face b3-bottom" />
-          <div className="b3-face b3-sheet">{lines}</div>
-          <div className="b3-leaf"><div className="b3-leaf-f">{lines}</div></div>
-          <div className="b3-cover">
-            <div className="b3-cover-f"><span className="b3-emb" /><span className="b3-t" /><span className="b3-t s" /></div>
-            <div className="b3-cover-b">{lines}</div>
-          </div>
-        </div>
-      </div>
-      <div className="b3-shadow" />
-    </div>
-  );
-}
 
 // Kitap hakkinda sohbet eden iki kisi (2B, inline SVG)
 function ReadersArt() {
@@ -145,14 +72,14 @@ export default function Register({ user, onLogin, initialMode = null }) {
     e.preventDefault();
     const name = gname.trim();
     if (!name) return setError('Grup adını yaz.');
-    if (!user && (!adm.username.trim() || !adm.password)) return setError('Yönetici hesabının kullanıcı adı ve şifresini yaz.');
+    if (!user && (!adm.username.trim() || !adm.password)) return setError('Hesabının kullanıcı adı ve şifresini yaz.');
     setBusy(true);
     setError('');
     try {
       if (!user) await api.login(adm.username.trim().toLowerCase(), adm.password);
       await api.createGroup(name, shareOld);
       const me = (await api.me()).user;
-      navigate('/', { replace: true });
+      navigate(user ? '/gruplar' : '/', { replace: true });
       onLogin(me);
       if (!user) autoEnablePush(me.id, { prompt: true });
     } catch (x) {
@@ -175,7 +102,7 @@ export default function Register({ user, onLogin, initialMode = null }) {
   };
 
   return (
-    <div className="reg-wrap">
+    <div className="reg-wrap reg-fit">
       <Shelves />
       <div className="reg-veil" />
       <div className="reg-inner">
@@ -213,13 +140,13 @@ export default function Register({ user, onLogin, initialMode = null }) {
               <label className="small" style={{ display: 'block', margin: '0 0 10px' }}>
                 <input type="checkbox" checked={shareOld} onChange={(e) => setShareOld(e.target.checked)} /> Eski kayıtlarımı da bu grupta paylaş
               </label>
-              <div className="field" role="group" aria-label="Yönetici hesabı">
-                <span>Yönetici hesabı</span>
+              <div className="field" role="group" aria-label="Grup yönetimi">
+                <span>Grup yönetimi</span>
                 {user ? (
-                  <div className="reg-me"><Avatar user={user} size="sm" /> <b>{user.display_name}</b> <span className="muted small">(@{user.username}) grubun yöneticisi olacak</span></div>
+                  <div className="reg-me"><Avatar user={user} size="sm" /> <span className="muted small">Grup için ayrı bir yönetici hesabı açılır. Sen üye kalırsın, menüden o hesaba geçip grubu yönetirsin.</span></div>
                 ) : (
                   <>
-                    <p className="muted small" style={{ margin: '2px 0 8px' }}>Grubu yönetecek mevcut hesabınla doğrula.</p>
+                    <p className="muted small" style={{ margin: '2px 0 8px' }}>Hesabınla doğrula; grup için ayrı bir yönetici hesabı açılır, sen üye kalırsın.</p>
                     <label className="field">
                       <span>Kullanıcı adı</span>
                       <input type="text" autoComplete="username" autoCapitalize="none" value={adm.username} onChange={(e) => setAdm({ ...adm, username: e.target.value })} />

@@ -100,6 +100,7 @@ export default function Calendars({ uid, filter, rev = 0, group = null }) {
   return (
     <div className="cal-section">
       <div className="cal-bar">
+        <b className="cal-cap">Takvim</b>
         <div className="tabs cal-modes" role="tablist" aria-label="Takvim görünümü">
           {MODES.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={view.mode === k} className="tab" onClick={() => setView((v) => ({ ...v, mode: k }))}>

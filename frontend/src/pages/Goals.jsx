@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { Avatar, Cover, ErrorBox, Progress, Skeleton, fmtDate, today, useAsync } from '../ui.jsx';
+import { Avatar, CountUp, Cover, ErrorBox, Hint, PageHead, Stat, Progress, Skeleton, fmtDate, today, useAsync } from '../ui.jsx';
 import ChangePassword from '../ChangePassword.jsx';
 import PushSettings from '../PushSettings.jsx';
 import { DeleteAccount } from '../Profile.jsx';
@@ -13,11 +13,21 @@ const fmt = (n) => (n ?? 0).toLocaleString('tr-TR');
 export default function Goals() {
   return (
     <>
+      <PageHead title="Hedefler" sub="Aylık ve yıllık hedeflerin, yıl özetin ve okumak istediklerin." />
       <GoalsCard />
       <YearSummary />
       <WantToRead />
-      <Export />
+    </>
+  );
+}
+
+// Avatar menusu > Hesap ayarlari
+export function Settings() {
+  return (
+    <>
+      <PageHead title="Hesap ayarları" sub="Profil, şifre, bildirimler ve verilerin." />
       <Account />
+      <Export />
     </>
   );
 }
@@ -52,9 +62,9 @@ function GoalsCard() {
   };
   return (
     <section className="card" style={{ marginBottom: 16 }}>
-      <h2 style={{ marginTop: 0 }}>🎯 Hedeflerim</h2>
+      <h2 style={{ marginTop: 0 }}>🎯 İlerleme</h2>
       {g.loading && !d && <Skeleton h={70} />}
-      {g.error?.status === 404 ? <p className="muted small">Hedefler henüz hazır değil.</p> : <ErrorBox error={g.error} onRetry={g.reload} />}
+      {g.error?.status === 404 ? <Hint>Hedefler henüz hazır değil.</Hint> : <ErrorBox error={g.error} onRetry={g.reload} />}
       {d && (
         <>
           <div className="goal">
@@ -65,14 +75,14 @@ function GoalsCard() {
             <div className="row"><b className="grow">Bu yıl</b><span className="small">{fmt(d.year_books)}{d.yearly_books > 0 ? ` / ${fmt(d.yearly_books)} kitap` : ' kitap'}</span></div>
             {d.yearly_books > 0 ? <Progress value={pct(d.year_books, d.yearly_books)} /> : <p className="small muted" style={{ margin: '2px 0 0' }}>Yıllık kitap hedefi koymadın.</p>}
           </div>
-          <form onSubmit={save} className="row" style={{ marginTop: 14, alignItems: 'flex-end' }}>
-            <label className="field" style={{ margin: 0 }}>
+          <form onSubmit={save} className="goal-form">
+            <label className="field">
               <span>Aylık sayfa</span>
-              <input type="number" min="0" max="20000" inputMode="numeric" value={monthly} onChange={(e) => setMp(e.target.value)} style={{ width: 120 }} />
+              <input type="number" min="0" max="20000" inputMode="numeric" value={monthly} onChange={(e) => setMp(e.target.value)} />
             </label>
-            <label className="field" style={{ margin: 0 }}>
+            <label className="field">
               <span>Yıllık kitap</span>
-              <input type="number" min="0" max="500" inputMode="numeric" value={yearly} onChange={(e) => setYb(e.target.value)} style={{ width: 120 }} />
+              <input type="number" min="0" max="500" inputMode="numeric" value={yearly} onChange={(e) => setYb(e.target.value)} />
             </label>
             <button className="btn small" disabled={busy || (mp === null && yb === null)}>Kaydet</button>
             {ok && <span className="ok-note small" role="status">✅ Kaydedildi</span>}
@@ -109,17 +119,17 @@ function YearSummary() {
         <button className="btn small ghost" aria-label="Sonraki yıl" disabled={year >= thisYear} onClick={() => setYear(year + 1)}>›</button>
       </div>
       {s.loading && !d && <Skeleton h={80} />}
-      {s.error?.status === 404 ? <p className="muted small">Yıl özeti henüz hazır değil.</p> : <ErrorBox error={s.error} onRetry={s.reload} />}
-      {d && none && <p className="muted">Bu yıl için kayıt yok.</p>}
+      {s.error?.status === 404 ? <Hint>Yıl özeti henüz hazır değil.</Hint> : <ErrorBox error={s.error} onRetry={s.reload} />}
+      {d && none && <Hint>Bu yıl için kayıt yok.</Hint>}
       {d && !none && (
         <>
-          <div className="stats" style={{ marginTop: 12 }}>
-            <div className="card stat"><b>{fmt(d.finished.books)}</b>kitap bitti</div>
-            <div className="card stat"><b>{fmt(d.total_pages)}</b>sayfa okundu</div>
-            <div className="card stat"><b>{fmt(d.finished.series)}</b>dizi bitti</div>
-            <div className="card stat"><b>{fmt(d.finished.movies)}</b>film izlendi</div>
-            <div className="card stat"><b>🔥 {fmt(d.longest_streak)}</b>gün en uzun seri</div>
-            {d.avg_rating != null && <div className="card stat"><b>⭐ {d.avg_rating.toLocaleString('tr-TR')}</b>ortalama puan</div>}
+          <div className="stats">
+            <Stat value={<CountUp value={d.finished.books} />} label="kitap bitti" />
+            <Stat value={<CountUp value={d.total_pages} />} label="sayfa okundu" />
+            <Stat value={<CountUp value={d.finished.series} />} label="dizi bitti" />
+            <Stat value={<CountUp value={d.finished.movies} />} label="film izlendi" />
+            <Stat value={`🔥 ${fmt(d.longest_streak)}`} label="gün en uzun seri" />
+            {d.avg_rating != null && <Stat value={`⭐ ${d.avg_rating.toLocaleString('tr-TR')}`} label="ortalama puan" />}
           </div>
           {d.best_month && (
             <p className="small">En çok okuduğun ay: <b>{MONTHS[Number(d.best_month.month.slice(5, 7)) - 1]}</b> ({fmt(d.best_month.pages)} sayfa)</p>

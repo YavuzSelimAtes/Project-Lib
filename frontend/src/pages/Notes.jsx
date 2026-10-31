@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
-import { Cover, Empty, ErrorBox, Skeleton, fmtDate, today, useAsync, yesterday } from '../ui.jsx';
+import { Cover, Empty, Hint, PageHead, ErrorBox, Skeleton, fmtDate, today, useAsync, yesterday } from '../ui.jsx';
 import { GroupPicker, visPut } from '../Visibility.jsx';
 
 const dayOf = (iso) => (iso || '').slice(0, 10);
@@ -41,12 +41,11 @@ export default function Notes() {
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 8 }}>
-        <p className="sub grow" style={{ margin: 0 }}>Okurken ya da izlerken aklına gelenleri hızlıca not al; istersen yorum olarak paylaş.</p>
-        <button className="btn small" onClick={() => setComposing((v) => !v)}>{composing ? 'Kapat' : '+ Yeni not'}</button>
-      </div>
+      <PageHead title="Defterim" sub="Okurken ya da izlerken aklına gelenleri hızlıca not al; istersen yorum olarak paylaş.">
+        <button className="btn" onClick={() => setComposing((v) => !v)}>{composing ? 'Kapat' : '+ Yeni not'}</button>
+      </PageHead>
       {composing && <Composer onSaved={() => { setComposing(false); list.reload(); }} onCancel={() => setComposing(false)} />}
-      <div className="row" style={{ marginBottom: 12 }}>
+      <div className="row toolbar" style={{ justifyContent: 'stretch' }}>
         <input type="search" className="grow" placeholder="Notlarda ara…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Notlarda ara" />
         <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} aria-label="Esere göre filtrele">
           <option value="">Tüm eserler</option>
@@ -57,7 +56,7 @@ export default function Notes() {
       </div>
       {list.loading && !list.data && <Skeleton h={90} n={3} />}
       {list.error?.status === 404 ? (
-        <p className="muted small">Defter henüz hazır değil (sunucu bu özelliği henüz açmadı).</p>
+        <Hint>Defter henüz hazır değil (sunucu bu özelliği henüz açmadı).</Hint>
       ) : (
         <ErrorBox error={list.error} onRetry={list.reload} />
       )}

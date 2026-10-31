@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin } from '../auth.js';
+import { COOKIE, hashPassword, verifyPassword, createSession, destroySession, toUser, requireUser, requireAdmin, requireGroupAdmin } from '../auth.js';
 import { err, bad, str, oneOf, nowIso, normalizeDisplayName, validTz } from '../util.js';
 import { AVATAR_GROUPS, canonAvatar, diceAvatar } from '../avatars.js';
 import { DEFAULT_GROUP, userGroups, ownedGroup, addMember } from '../groups.js';
@@ -66,7 +66,12 @@ export default async function routes(app) {
   const db = app.db;
 
   // group_name: birincil (ilk katildigi) grubun adi (eski istemciler icin); groups: tum uyelikler
-  const withGroup = (u) => { const groups = userGroups(db, u.id); return { ...toUser(u), group_name: groups[0]?.name || DEFAULT_GROUP, groups }; };
+  // Yonetici hesapta managed_group_id / managed_group_name: yonettigi grup
+  const withGroup = (u) => {
+    const groups = userGroups(db, u.id);
+    const mg = u.kind === 'manager' ? db.prepare('SELECT id,name FROM groups WHERE owner_id=?').get(u.id) : null;
+    return { ...toUser(u), group_name: groups[0]?.name || DEFAULT_GROUP, groups, managed_group_id: mg ? mg.id : null, managed_group_name: mg ? (mg.name || DEFAULT_GROUP) : null };
+  };
 
   app.post('/api/auth/login', async (req, reply) => {
     const b = req.body || {};
@@ -103,17 +108,17 @@ export default async function routes(app) {
   // ---- katilim linki (grup) ----
   const groupOf = (u) => ownedGroup(db, u.id, randomBytes(18).toString('base64url'));
   app.get('/api/admin/invite', async (req) => {
-    const g = groupOf(requireAdmin(req));
+    const g = groupOf(requireGroupAdmin(req));
     return { token: g.invite_token, invite_name: g.invite_name || '' };
   });
   app.put('/api/admin/invite-name', async (req) => {
-    const g = groupOf(requireAdmin(req));
+    const g = groupOf(requireGroupAdmin(req));
     const name = str((req.body || {}).name, { field: 'name', max: 40 });
     db.prepare('UPDATE groups SET invite_name=? WHERE id=?').run(name || null, g.id);
     return { invite_name: name || '' };
   });
   app.post('/api/admin/invite/regenerate', async (req) => {
-    const g = groupOf(requireAdmin(req));
+    const g = groupOf(requireGroupAdmin(req));
     const token = randomBytes(18).toString('base64url');
     db.prepare('UPDATE groups SET invite_token=? WHERE id=?').run(token, g.id);
     return { token };
@@ -173,14 +178,17 @@ export default async function routes(app) {
   });
 
   app.put('/api/admin/group-name', async (req) => {
-    const g = groupOf(requireAdmin(req));
+    const g = groupOf(requireGroupAdmin(req));
     const name = str((req.body || {}).name, { field: 'name', max: 40 });
     db.prepare('UPDATE groups SET name=? WHERE id=?').run(name || null, g.id);
     return { group_name: name || DEFAULT_GROUP };
   });
 
   // ---- bagli hesaplar ----
-  const linkedOut = (u) => ({ id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color });
+  const linkedOut = (u) => {
+    const mg = u.kind === 'manager' ? db.prepare('SELECT id,name FROM groups WHERE owner_id=?').get(u.id) : null;
+    return { id: u.id, display_name: u.display_name, avatar: u.avatar, color: u.color, kind: u.kind || 'user', is_manager: u.kind === 'manager', managed_group_id: mg ? mg.id : null, managed_group_name: mg ? (mg.name || DEFAULT_GROUP) : null };
+  };
   app.get('/api/auth/linked', async (req) => {
     const me = requireUser(req);
     return { accounts: linkedUsers(db, me.id).map(linkedOut) };
@@ -262,6 +270,8 @@ export default async function routes(app) {
         } else db.prepare('DELETE FROM groups WHERE id=?').run(g.group_id);
       }
       db.prepare('DELETE FROM users WHERE id=?').run(me.id);
+      // Okuyucu uyesi kalmayan grubun yonetici hesabi (ve grubu) da silinir
+      db.exec("DELETE FROM users WHERE kind='manager' AND NOT EXISTS (SELECT 1 FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=(SELECT id FROM groups WHERE owner_id=users.id) AND u.kind<>'manager' AND u.active=1)");
       pruneLinks(db);
     });
     reply.clearCookie(COOKIE, { path: '/' });
@@ -394,7 +404,10 @@ export default async function routes(app) {
     try {
       const gid = (db.prepare('SELECT COALESCE(MAX(group_id),0)+1 g FROM account_links').get().g);
       const up = db.prepare('INSERT INTO account_links (user_id,group_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET group_id=excluded.group_id');
-      for (const n of uniq) up.run(n, gid);
+      // Secilen kisilerin eski baglantisindaki grup yonetici hesaplari yeni gruba tasinir (baglanti kopmaz)
+      const mgrs = db.prepare("SELECT l2.user_id FROM account_links l JOIN account_links l2 ON l2.group_id=l.group_id JOIN users m ON m.id=l2.user_id WHERE l.user_id=? AND m.kind='manager'");
+      const carry = new Set(uniq.flatMap((n) => mgrs.all(n).map((r) => r.user_id)));
+      for (const n of [...uniq, ...carry]) up.run(n, gid);
       pruneLinks(db); // eski gruplarda tek kisi kalirsa temizlenir
       db.exec('COMMIT');
     } catch (e) {

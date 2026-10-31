@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth, useGroup } from '../auth.js';
-import { CountUp, Cover, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
+import { CountUp, Cover, PageHead, Stat, avatarText, Empty, ErrorBox, Progress, Skeleton, TYPE_LABEL, fmtDate, fmtMinutes, useAsync, useCountUp } from '../ui.jsx';
 import Calendars from '../Calendar.jsx';
 import EntryDetail, { QA } from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
+import FinishedShelf from '../FinishedShelf.jsx';
 
 const FILTERS = [
   ['all', 'Hepsi'],
@@ -22,7 +23,7 @@ const PERIODS = [
 const fmt = (n, d = 0) => (n ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: d });
 
 export default function Shelf() {
-  const { user: me, editProfile } = useAuth();
+  const { user: me } = useAuth();
   const params = useParams();
   const gid = useGroup();
   const uid = params.userId ? Number(params.userId) : me.id;
@@ -64,45 +65,41 @@ export default function Shelf() {
 
   return (
     <>
-      <div className="shelf-head">
-        <div className="grow">
-          <h1>{own ? (gid ? 'Rafım' : 'Hesabım') : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}</h1>
-          <p className="sub" style={{ marginBottom: 8 }}>
-            {own ? (gid ? 'Bu grupta görünen kayıtlarım.' : 'Okuduklarım, izlediklerim ve rakamlarım; kimlerin göreceğini buradan ayarlarsın.') : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
-          </p>
-        </div>
+      <FinishedShelf uid={uid} gid={gid} version={entries.data} />
+      <PageHead
+        title={own ? (gid ? 'Rafım' : 'Hesabım') : owner ? `${avatarText(owner.avatar)} ${owner.display_name} – rafı` : 'Raf'}
+        sub={own ? (gid ? 'Bu grupta görünen kayıtlarım.' : undefined) : 'Okuduğu, izlediği her şey; bir kayda dokunup soru sorabilirsin.'}
+      >
         {own && !gid && (
-          <div className="shelf-actions">
-            <button className="btn ghost" onClick={editProfile}>
-              ✏️ Profili düzenle
-            </button>
-            <button className="btn" onClick={() => setAdding(true)}>
-              + Yeni ekle
-            </button>
-          </div>
+          <button className="btn" onClick={() => setAdding(true)}>
+            + Yeni ekle
+          </button>
         )}
-      </div>
+      </PageHead>
 
-      <div className="tabs" role="tablist" aria-label="Tür">
-        {FILTERS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={filter === k} className="tab" onClick={() => setFilter(k)}>
-            {l}
-          </button>
-        ))}
+      <div className="toolbar shelf-bar">
+      <div className="tabs seg" role="tablist" aria-label="Tür">
+        {FILTERS.map(([k, l]) => {
+          const [ic, ...t] = k === 'all' ? [null, l] : l.split(' ');
+          return (
+            <button key={k} role="tab" aria-selected={filter === k} aria-label={k === 'all' ? undefined : t.join(' ')} title={k === 'all' ? undefined : t.join(' ')} className="tab" onClick={() => setFilter(k)}>
+              {k === 'all' ? l : <><span aria-hidden="true">{ic}</span><span className="seg-t"> {t.join(' ')}</span></>}
+            </button>
+          );
+        })}
       </div>
-      <div className="tabs" role="tablist" aria-label="Dönem">
+      <select className="period-sel" aria-label="Dönem" value={period} onChange={(e) => setPeriod(e.target.value)}>
         {PERIODS.map(([k, l]) => (
-          <button key={k} role="tab" aria-selected={period === k} className="tab" onClick={() => setPeriod(k)}>
-            {l}
-          </button>
+          <option key={k} value={k}>{l}</option>
         ))}
+      </select>
       </div>
       <ErrorBox error={stats.error} onRetry={stats.reload} />
       {stats.loading && !s ? (
         <Skeleton h={80} />
       ) : (
         s && (
-          <div style={{ opacity: stats.loading ? 0.55 : 1, transition: 'opacity .2s' }}>
+          <div style={{ opacity: stats.loading ? 0.85 : 1, transition: 'opacity .2s' }}>
             <StatCards key={filter} s={s} type={filter} animate={!animated.current} />
           </div>
         )
@@ -192,11 +189,7 @@ function StatCards({ s, type, animate }) {
   const num = (v, dec = 0) => <CountUp value={v} decimals={dec} animate={animate} />;
   const has = (k) => s[k] != null;
   const card = (key, big, label, extra) => (
-    <div className="card stat" key={key}>
-      <b>{big}</b>
-      {label}
-      {extra}
-    </div>
+    <Stat key={key} value={big} label={label} extra={extra} />
   );
   const movieUnk = s.movie_runtime_unknown || 0;
   const epUnk = !!s.episodes_unknown;

@@ -141,7 +141,7 @@ export default async function routes(app) {
     requireAdmin(req);
     const today = todayStr();
     const all = req.query.all === '1' || req.query.all === 'true';
-    const users = db.prepare("SELECT id,display_name,avatar,color FROM users WHERE active=1 AND role<>'admin' ORDER BY display_name COLLATE NOCASE").all();
+    const users = db.prepare("SELECT id,display_name,avatar,color FROM users WHERE active=1 AND role<>'admin' AND kind<>'manager' ORDER BY display_name COLLATE NOCASE").all();
     const out = users.map((u) => {
       const readToday = !!db.prepare('SELECT 1 FROM reading_logs WHERE user_id=? AND date=? AND pages_read>0').get(u.id, userToday(db, u.id));
       const activeBooks = db.prepare("SELECT COUNT(*) c FROM entries WHERE user_id=? AND type='book' AND status='devam'").get(u.id).c;

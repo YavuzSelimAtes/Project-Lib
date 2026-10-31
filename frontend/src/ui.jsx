@@ -15,6 +15,8 @@ export function Avatar({ user, size = '' }) {
 }
 
 const PH_COLORS = ['#d9693b', '#4a8f7c', '#7a6bb0', '#c2557a', '#4f7cac', '#a5883a'];
+export const coverColor = (title = '?') => PH_COLORS[[...title].reduce((a, c) => a + c.charCodeAt(0), 0) % PH_COLORS.length];
+
 export function Cover({ src, fallback, title = '?', large }) {
   const [fails, setFails] = useState(0); // 0: src, 1: fallback, 2: yer tutucu
   useEffect(() => setFails(0), [src, fallback]);
@@ -22,7 +24,16 @@ export function Cover({ src, fallback, title = '?', large }) {
   if (shown) {
     return (
       <div className={`cover${large ? ' lg' : ''}`}>
-        <img src={shown} alt="" loading="lazy" onError={() => setFails((n) => n + 1)} />
+        <img
+          src={shown}
+          alt=""
+          loading="lazy"
+          onError={() => setFails((n) => n + 1)}
+          ref={(el) => {
+            // hata olayi React baglanmadan once atildiysa yer tutucuya dus
+            if (el && el.complete && el.naturalWidth === 0) setFails((n) => n + 1);
+          }}
+        />
       </div>
     );
   }
@@ -47,10 +58,54 @@ export function Skeleton({ h = 120, n = 1 }) {
   return Array.from({ length: n }, (_, i) => <div key={i} className="skel" style={{ height: h, marginBottom: 14 }} />);
 }
 
+// Her sayfanin ust baslik blogu: baslik + aciklama solda, eylemler sagda (hep ayni yer, ayni bosluk)
+export function PageHead({ title, sub, children }) {
+  return (
+    <header className="page-head">
+      <div className="grow">
+        <h1>{title}</h1>
+        {sub && <p className="sub">{sub}</p>}
+      </div>
+      {children && <div className="page-actions">{children}</div>}
+    </header>
+  );
+}
+
+// Istatistik karti: tum sayfalarda ayni (sayi + etiket + istege bagli ek satir)
+const STAT_ICON = [['kitap', '📖'], ['sayfa', '📄'], ['dizi', '📺'], ['bölüm', '🎞️'], ['film', '🎬'], ['seri', '🔥'], ['hedef', '🎯']];
+export function Stat({ value, label, extra }) {
+  const l = typeof label === 'string' ? label.toLocaleLowerCase('tr') : '';
+  const icon = (STAT_ICON.find(([k]) => l.includes(k)) || [0, '✦'])[1];
+  return (
+    <div className="card stat">
+      <span className="stat-ic" aria-hidden="true">{icon}</span>
+      <b>{value}</b>
+      <span className="stat-l">{label}</span>
+      {extra}
+    </div>
+  );
+}
+
+// Kart ici / liste ici kucuk bos durum ("henuz yok") — tum sayfalarda ayni
+export function Hint({ children }) {
+  return <p className="hint">{children}</p>;
+}
+
+// Bos durum: kucuk raf cizimi (kitap sirtlari) + anlami tasiyan rozet
 export function Empty({ icon = '📚', title, children }) {
   return (
     <div className="empty">
-      <span className="big">{icon}</span>
+      <div className="empty-art" aria-hidden="true">
+        <svg viewBox="0 0 120 84" width="120" height="84">
+          <rect className="bk" style={{ '--i': 0 }} x="22" y="28" width="16" height="44" rx="2" fill="#d9693b" />
+          <rect className="bk" style={{ '--i': 1 }} x="40" y="38" width="12" height="34" rx="2" fill="#5f8f6b" />
+          <rect className="bk" style={{ '--i': 2 }} x="54" y="22" width="18" height="50" rx="2" fill="#c9a15a" />
+          <rect className="bk lean" x="76" y="32" width="14" height="40" rx="2" fill="#6b7f95" />
+          <path d="M26 36h8M26 40h8M58 30h10M58 34h10" stroke="rgba(255,255,255,.4)" strokeWidth="2" strokeLinecap="round" />
+          <rect x="12" y="72" width="96" height="5" rx="2.5" fill="#a8703f" />
+        </svg>
+        <span className="empty-badge">{icon}</span>
+      </div>
       <b>{title}</b>
       <div>{children}</div>
     </div>

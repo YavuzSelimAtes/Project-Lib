@@ -197,7 +197,7 @@ function bestStreakBoard(db, users) {
 // groupId: grubun uyeleri, sadece gruba acik kayitlardan (seri ise kisinin tum kayitlarindan); groupId yoksa yalniz meId (Hesabim)
 export function leaderboard(db, kind, period = 'all', { groupId = null, meId = null } = {}) {
   const users = groupId
-    ? db.prepare('SELECT u.* FROM users u JOIN group_members m ON m.user_id=u.id AND m.group_id=? WHERE u.active=1').all(groupId)
+    ? db.prepare('SELECT u.* FROM users u JOIN group_members m ON m.user_id=u.id AND m.group_id=? WHERE u.active=1 AND u.kind<>\'manager\'').all(groupId)
     : db.prepare('SELECT * FROM users WHERE active=1 AND id=?').all(meId);
   const scope = groupId ? groupScope([groupId]) : null;
   if (kind === 'streak') return streakBoard(db, users);

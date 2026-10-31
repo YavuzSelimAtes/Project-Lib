@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { norm } from './services/sources.js';
+import { createManager } from './groups.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -267,6 +268,16 @@ CREATE TABLE IF NOT EXISTS user_goals (
   yearly_books INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  page TEXT,
+  emailed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id, created_at);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -305,6 +316,7 @@ const COLUMNS = [
   ['catalog', 'created_by', 'INTEGER'], // kataloga ekleyen grup sahibi (bos = eski/sistem kaydi; sadece platform yoneticisi siler)
   ['users', 'group_id', 'INTEGER'], // kullanicinin kutuphane grubu (groups.id)
   ['users', 'email', 'TEXT'], // opsiyonel, benzersiz, kucuk harf (sifre sifirlama henuz yok)
+  ['users', 'kind', "TEXT NOT NULL DEFAULT 'user'"], // 'manager' = grup yonetici hesabi (sifreyle girilmez, okumaz; yalniz gecisle)
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
 ];
 function migrate(db) {
@@ -359,6 +371,15 @@ function migrate(db) {
       db.exec('INSERT OR IGNORE INTO comment_groups (comment_id,group_id) SELECT c.id,eg.group_id FROM comments c JOIN entry_groups eg ON eg.entry_id=c.entry_id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=c.user_id');
       db.exec('INSERT OR IGNORE INTO rating_groups (user_id,catalog_id,group_id) SELECT DISTINCT r.user_id,r.catalog_id,eg.group_id FROM book_ratings r JOIN entries e ON e.user_id=r.user_id AND e.catalog_id=r.catalog_id JOIN entry_groups eg ON eg.entry_id=e.id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=r.user_id');
       db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('review_groups_v1', ?)").run(new Date().toISOString());
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  // Her mevcut gruba (platform yoneticisinin gruplari haric) bir kez yonetici hesabi: sahiplik ona gecer, eski sahip uye kalir, ikisi baglanir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='group_managers_v1'").get()) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const g of db.prepare("SELECT g.* FROM groups g JOIN users u ON u.id=g.owner_id WHERE u.kind<>'manager' AND u.role<>'admin' AND u.active=1 ORDER BY g.id").all()) createManager(db, g, g.owner_id);
+      db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('group_managers_v1', ?)").run(new Date().toISOString());
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
