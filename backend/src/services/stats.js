@@ -23,6 +23,7 @@ export function userModel(db, userId, period = 'all', today = userToday(db, user
   const days = new Map(); // date -> {real, est, books:Set(title)}
   const spanDays = new Set();
   let finished = [];
+  let adjTotal = 0; // toplam okunana eklenenler: ortalamaya girmeyen kitaplarin sayfalari ve net duzeltme (negatif satirlar); Hedefler'deki toplamla ayni olsun diye
   let pre = 0; // eklemedeki baslangic sayfalari (donemde baslayan kitaplar): sadece toplama, gun/ortalama/rekora girmez
   const titles = new Map();
   for (const e of entries) {
@@ -41,13 +42,16 @@ export function userModel(db, userId, period = 'all', today = userToday(db, user
       if (v.real > 0 && title) cur.books.add(title);
       days.set(d, cur);
     }
+    // ortalamaya girmeyen (tarihi belirsiz / tek gunde biten) kitaplarin sayfalari da toplam okunana sayilir (Hedefler ile ayni)
+    if (!usable) for (const [d, v] of m.days) if (inRange(d, range)) adjTotal += v.real + v.est;
+    for (const [d, v] of m.adj) if (inRange(d, range)) adjTotal += v;
     if (e.pre_pages > 0 && (period === 'all' || inRange(prePagesDate(e), range))) pre += e.pre_pages;
     if (e.status === 'bitti' && e.end_date && inRange(e.end_date, range)) finished.push({ title, end_date: e.end_date });
   }
   for (const d of days.keys()) spanDays.add(d);
   let total = 0;
   for (const v of days.values()) total += v.real + v.est;
-  return { days, spanDays, total, pre, totalPages: total + pre, finished, range }; // total: gunluk ortalama tabani; totalPages: gorunen toplam
+  return { days, spanDays, total, pre, totalPages: Math.max(0, total + adjTotal + pre), finished, range }; // total: gunluk ortalama tabani; totalPages: gorunen toplam
 }
 
 export function averageOf(model) {

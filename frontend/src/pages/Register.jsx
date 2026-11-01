@@ -106,7 +106,7 @@ export default function Register({ user, onLogin, initialMode = null }) {
       <Shelves />
       <div className="reg-veil" />
       <div className="reg-inner">
-        <Link to="/" className="reg-back">← {user ? 'Ana sayfa' : 'Girişe dön'}</Link>
+        <Link to="/" className="reg-back">← {user ? 'Ana Sayfa' : 'Girişe dön'}</Link>
         <h1 className="reg-title">Kütüphane’ye hoş geldin</h1>
         <div className="reg-tabs" role="group" aria-label="Seçenekler">
           {!user && (

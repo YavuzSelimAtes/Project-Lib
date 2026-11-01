@@ -278,6 +278,40 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id, created_at);
+-- Hikayeler: yazar bolum bolum yayinlar; secili gruplar okur, okuma yeri kisiye ozel
+CREATE TABLE IF NOT EXISTS stories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  summary TEXT,
+  color TEXT NOT NULL DEFAULT '#8a3a1f',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS story_chapters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  n INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  published_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_story_chapters ON story_chapters(story_id, n);
+CREATE TABLE IF NOT EXISTS story_groups (
+  story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (story_id, group_id)
+);
+CREATE TABLE IF NOT EXISTS story_progress (
+  story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chapter_id INTEGER NOT NULL,
+  pos INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (story_id, user_id)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -319,6 +353,7 @@ const COLUMNS = [
   ['users', 'email', 'TEXT'], // opsiyonel, benzersiz, kucuk harf (sifre sifirlama henuz yok)
   ['users', 'kind', "TEXT NOT NULL DEFAULT 'user'"], // 'manager' = grup yonetici hesabi (sifreyle girilmez, okumaz; yalniz gecisle)
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
+  ['users', 'story_author', 'INTEGER NOT NULL DEFAULT 0'], // 1 = hikaye yazip yayinlayabilir (simdilik sadece ysates)
 ];
 function migrate(db) {
   for (const [table, col, def] of COLUMNS) {
@@ -326,6 +361,10 @@ function migrate(db) {
     if (!have) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
   }
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='story_author_v1'").get()) {
+    db.exec("UPDATE users SET story_author=1 WHERE username='ysates'");
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('story_author_v1', ?)").run(new Date().toISOString());
+  }
   // Film sureleri bir kez sifirlanir ve Wikidata'dan yeniden hesaplanir (hatali/supheli degerler duzelsin; arka planda lazy-fill)
   if (!db.prepare("SELECT 1 FROM meta WHERE key='runtime_v2'").get()) {
     db.exec("UPDATE catalog SET runtime=NULL, runtime_checked=NULL WHERE type='movie' AND source='wikipedia'");

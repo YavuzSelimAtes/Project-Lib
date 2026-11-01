@@ -5,6 +5,7 @@ import { leaderboard, streaksOf } from '../services/stats.js';
 import { editionBrief, getEdition } from '../services/editions.js';
 import { seriesExtras } from '../services/seasons.js';
 import { scopeGroup } from '../groups.js';
+import { storiesFor } from './stories.js';
 
 const CARD_MAX = 8; // kart basina en fazla 8 oge, kalani more_count
 const TITLES = { record: 'Rekor', average: 'Gunluk ortalama', finished: 'En cok kitap bitiren', streak: 'Gunluk seri', best_streak: 'En uzun seri' };
@@ -54,9 +55,10 @@ export default async function routes(app) {
       };
       byUser.get(e.user_id)?.push(item);
     }
+    const stories = storiesFor(db, me, users.map((u) => u.id), groupId);
     const cards = users.map((u) => {
       const items = byUser.get(u.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-      return { user: publicUser(u), current_streak: streaksOf(db, u.id).current, last_activity: items[0]?.updated_at || null, items: items.slice(0, CARD_MAX), more_count: Math.max(0, items.length - CARD_MAX) };
+      return { user: publicUser(u), current_streak: streaksOf(db, u.id).current, last_activity: items[0]?.updated_at || null, items: items.slice(0, CARD_MAX), stories: stories.get(u.id) || [], more_count: Math.max(0, items.length - CARD_MAX) };
     });
     cards.sort((a, b) => (b.last_activity || '').localeCompare(a.last_activity || '') || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
     const activity = cards.flatMap((c) => c.items.map((i) => ({ user: c.user, ...i }))).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 30);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth, useGroup } from '../auth.js';
@@ -7,6 +7,9 @@ import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
 import AddFlow from '../AddFlow.jsx';
 import { QA } from '../EntryDetail.jsx';
+import { StoryRow, NewStory } from '../StoryCard.jsx';
+
+const StoryReader = lazy(() => import('../StoryReader.jsx'));
 
 function describe(it) {
   const n = it.catalog.title;
@@ -63,6 +66,8 @@ export default function Home() {
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [showQ, setShowQ] = useState(false);
+  const [story, setStory] = useState(null); // { id, edit }
+  const [newStory, setNewStory] = useState(false);
   // profil degisince (avatar/renk/ad) feed'i tazele; o ana kadar kendi kartini guncel profille ciz
   const first = useRef(true);
   useEffect(() => {
@@ -84,7 +89,7 @@ export default function Home() {
 
   return (
     <>
-      <PageHead title={gid ? 'Ana sayfa' : 'Son güncellemeler'} sub={gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}>
+      <PageHead title={gid ? 'Ana Sayfa' : 'Son güncellemeler'} sub={gid ? 'Grupta kim ne okuyor, ne izliyor.' : 'Hesabındaki son güncellemeler.'}>
         <button className="btn" onClick={() => setAdding(true)}>+ Yeni ekle</button>
       </PageHead>
 
@@ -145,6 +150,12 @@ export default function Home() {
             {c.items.map((it) => (
               <FeedItem key={it.entry_id} it={it} mine={c.user.id === me.id} color={c.user.color} onOpen={setOpenId} />
             ))}
+            {(c.stories || []).map((s) => (
+              <StoryRow key={'s' + s.id} story={s} mine={c.user.id === me.id} authorName={c.user.display_name} onOpen={(id) => setStory({ id })} />
+            ))}
+            {c.user.id === me.id && me.story_author && !(c.stories || []).length && (
+              <button className="btn small ghost" onClick={() => setNewStory(true)}>✍️ Hikaye başlat</button>
+            )}
             {c.more_count > 0 && (
               <Link className="btn small ghost" style={{ textAlign: 'center', textDecoration: 'none' }} to={shelfTo(c)}>
                 {c.more_count} tane daha
@@ -155,6 +166,12 @@ export default function Home() {
       </div>
 
       {adding && <AddFlow onClose={() => setAdding(false)} onAdded={reload} />}
+      {newStory && <NewStory onClose={() => setNewStory(false)} onCreated={(id) => { setNewStory(false); setStory({ id, edit: true }); reload(); }} />}
+      {story && (
+        <Suspense fallback={null}>
+          <StoryReader id={story.id} startEditing={story.edit} onClose={() => setStory(null)} onChanged={reload} />
+        </Suspense>
+      )}
       {openId && <EntryDetail entryId={openId} onClose={() => setOpenId(null)} onChanged={reload} />}
     </>
   );

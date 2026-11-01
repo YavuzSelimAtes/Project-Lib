@@ -23,6 +23,7 @@ import extrasRoutes from './routes/extras.js';
 import feedRoutes from './routes/feed.js';
 import pushRoutes from './routes/push.js';
 import feedbackRoutes from './routes/feedback.js';
+import storyRoutes from './routes/stories.js';
 import { initPush, startReminders } from './services/push.js';
 import { cleanupUnlisted } from './services/catalog.js';
 import { seedExtraDb, seedExtraCovers } from './services/seedExtra.js';
@@ -129,7 +130,7 @@ export async function buildApp({ logger = true } = {}) {
   });
 
   app.get('/api/health', async () => ({ ok: true, time: nowIso() }));
-  for (const r of [adminRoutes, authRoutes, groupRoutes, meRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes, feedbackRoutes]) await app.register(r);
+  for (const r of [adminRoutes, authRoutes, groupRoutes, meRoutes, catalogRoutes, requestRoutes, entryRoutes, socialRoutes, feedRoutes, pushRoutes, extrasRoutes, feedbackRoutes, storyRoutes]) await app.register(r);
 
   await seedAdmin(db, app.log);
   // Kurator listesi (aranan ama bulunamayan kitaplar): veritabani kismi aninda, kapaklar arka planda. SEED_EXTRA=0 ile kapatilir.

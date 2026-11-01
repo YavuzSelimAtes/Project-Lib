@@ -59,7 +59,7 @@ export default function Join({ user, onLogin }) {
         <div className="card login">
           <h1>Davet geçersiz</h1>
           <p className="sub" style={{ textAlign: 'center' }}>{invalid}</p>
-          <Link className="btn" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }} to="/">Ana sayfaya git</Link>
+          <Link className="btn" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }} to="/">Ana Sayfa’ya git</Link>
         </div>
       </div>
     );

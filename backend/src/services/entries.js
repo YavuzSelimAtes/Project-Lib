@@ -22,10 +22,12 @@ export const prePagesBetween = (db, userId, from = null, to = null) => db.prepar
 export function entryDayModel(db, e, today = userToday(db, e.user_id)) {
   const logs = db.prepare('SELECT date,pages_read,estimated,no_streak FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id);
   const days = new Map();
+  const adj = new Map(); // duzeltme (negatif) satirlari: gun -> eksi sayfa; gun/ortalama/rekoru etkilemez, sadece toplam okunandan duser
   let sumLogs = 0;
   let hasEst = false;
   for (const l of logs) {
     sumLogs += l.pages_read; // duzeltme (geri alma) satirlari negatif olabilir
+    if (l.pages_read < 0) adj.set(l.date, (adj.get(l.date) || 0) + l.pages_read);
     if (l.pages_read <= 0) continue;
     days.set(l.date, l.estimated || l.no_streak ? { real: 0, est: l.pages_read } : { real: l.pages_read, est: 0 }); // gecmise dolgu (no_streak) satirlari ortalamaya girer, rekora girmez
     if (l.estimated) hasEst = true;
@@ -58,7 +60,7 @@ export function entryDayModel(db, e, today = userToday(db, e.user_id)) {
   const hasRealLog = logs.some((l) => l.pages_read > 0 && !l.estimated);
   // Tarihi bilinmeyen (baslangic yok) ya da tek gunluk 'bitti' + gercek log yok -> ortalamaya GIRMEZ ('tarih yok')
   const excluded = (!e.start_date && logs.length === 0) || (e.status === 'bitti' && spanDays <= 1 && !hasRealLog);
-  return { days, from, to, spanDays, pagesRead, remainder: Math.max(0, remainder), hasEst, hasLogs: logs.length > 0, excluded };
+  return { days, adj, from, to, spanDays, pagesRead, remainder: Math.max(0, remainder), hasEst, hasLogs: logs.length > 0, excluded };
 }
 
 export function entryAvg(db, e, today = userToday(db, e.user_id)) {

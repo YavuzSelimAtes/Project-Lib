@@ -37,7 +37,7 @@ function PendingBadge() {
 }
 
 const ACCOUNT_NAV = [
-  ['/ana', 'Ana sayfa', (p) => p.startsWith('/ana')],
+  ['/ana', 'Ana Sayfa', (p) => p.startsWith('/ana')],
   ['/ben', 'Hesabım', (p) => p === '/ben' || p === '/ben/' || p.startsWith('/ben/hesabim')],
   ['/ben/defterim', 'Defterim', (p) => p.startsWith('/ben/defterim')],
   ['/ben/hedefler', 'Hedefler', (p) => p.startsWith('/ben/hedefler')],
@@ -47,7 +47,7 @@ const ACCOUNT_NAV = [
 
 // Grup icindeyken ayni tek bar grubun sekmelerini tasir
 const groupNav = (gid, uid) => [
-  [`/g/${gid}`, 'Ana sayfa', (p) => p === `/g/${gid}` || p === `/g/${gid}/`],
+  [`/g/${gid}`, 'Ana Sayfa', (p) => p === `/g/${gid}` || p === `/g/${gid}/`],
   [`/g/${gid}/liderlik`, 'Liderlik', (p) => p.startsWith(`/g/${gid}/liderlik`)],
   [`/g/${gid}/rafim`, 'Rafım', (p) => p.startsWith(`/g/${gid}/rafim`) || p.startsWith(`/g/${gid}/uye/${uid}`)],
   [`/g/${gid}/kitaplik`, 'Kitaplık', (p) => p.startsWith(`/g/${gid}/kitaplik`)],
@@ -144,6 +144,22 @@ export default function App() {
     return () => clearTimeout(t);
   }, [pathname]);
 
+  // iOS: klavye kapaninca gorunum kayik kalip sabit alt menuyu ekran disina itebilir; alan birakilinca gorunumu yeniden hizala
+  useEffect(() => {
+    let t;
+    const fix = (e) => {
+      if (!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+        window.scrollTo(window.scrollX, window.scrollY + 1);
+        window.scrollTo(window.scrollX, Math.max(0, window.scrollY - 1));
+      }, 120);
+    };
+    document.addEventListener('focusout', fix);
+    return () => { document.removeEventListener('focusout', fix); clearTimeout(t); };
+  }, []);
+
   // Cevrimdisi kuyruk: giris yapildiginda/acilista ve internet gelince gonder
   const loggedIn = !!user;
   useEffect(() => {
@@ -239,9 +255,17 @@ export default function App() {
               </Link>
             </span>
           ) : (
-            <Link key="a" to="/ben" className="brand">
-              <img src="/brand.png" alt="" width="28" height="28" /> <span>Kütüphane</span>
-            </Link>
+            <span key="a" className="brand-wrap">
+              {/* Defterim'de alt menü her cihazda görünmeyebilir (ör. iOS ana ekran uygulaması): çıkış yolu hep açık kalsın */}
+              {pathname.startsWith('/ben/defterim') && (
+                <Link to="/ana" className="back-pill" aria-label="Ana Sayfa'ya dön" title="Ana Sayfa'ya dön">
+                  <span aria-hidden="true">‹</span> <span className="back-txt">Ana Sayfa</span>
+                </Link>
+              )}
+              <Link to="/ana" className="brand">
+                <img src="/brand.png" alt="" width="28" height="28" /> <span>Kütüphane</span>
+              </Link>
+            </span>
           )}
           <Nav key={mode} items={items} pathname={pathname} label={isManager ? 'Grup ayarları' : gid ? 'Grup menüsü' : 'Ana menü'} />
           <span className="spacer" />
@@ -261,7 +285,7 @@ export default function App() {
           </Routes>
         ) : (
         <Routes>
-          <Route path="/" element={<Navigate to="/ben" replace />} />
+          <Route path="/" element={<Navigate to="/ana" replace />} />
           <Route path="/ben/:tab?" element={<Ben />} />
           <Route path="/ana/:gid?" element={<Suspense fallback={<Skeleton h={80} n={3} />}><AllHome /></Suspense>} />
           <Route path="/gruplar" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Groups /></Suspense>} />
@@ -275,7 +299,7 @@ export default function App() {
           <Route path="/katil/:token" element={<Suspense fallback={<Skeleton h={80} n={3} />}><Join user={user} onLogin={setUser} /></Suspense>} />
           <Route path="/kutuphane" element={<Navigate to="/library" replace />} />
           <Route path="/yonetim/:tab?" element={canManage ? <Suspense fallback={<Skeleton h={80} n={3} />}><Admin /></Suspense> : <Navigate to="/ben" replace />} />
-          <Route path="*" element={<Navigate to="/ben" replace />} />
+          <Route path="*" element={<Navigate to="/ana" replace />} />
         </Routes>
         )}
       </main>
