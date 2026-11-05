@@ -6,6 +6,7 @@ import { GroupPicker, VisEditor, visBody } from './Visibility.jsx';
 import { Avatar, Cover, ErrorBox, Modal, Progress, Skeleton, TYPE_LABEL, fmtDate, langLabel, timeAgo, useAsync } from './ui.jsx';
 import EditionPicker from './Editions.jsx';
 import QuickUpdate, { OpenDays, DayEditor } from './QuickUpdate.jsx';
+import SeriesDays from './SeriesDays.jsx';
 import { CongratsButton, RatingPanel, Reactions } from './Rating.jsx';
 
 const STATUS = { devam: 'Devam ediyor', bitti: 'Bitti', birakildi: 'Bırakıldı', planlandi: 'Planlandı' };
@@ -82,6 +83,7 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
               )}
               {mine && e.type === 'book' && e.status === 'devam' && <PageFix e={e} onChanged={changed} />}
               {mine && e.type === 'book' && e.status !== 'planlandi' && <DayEditor entryId={e.id} onChanged={changed} />}
+              {mine && e.type === 'series' && e.status !== 'bitti' && <SeriesDays entryId={e.id} version={version} onChanged={changed} />}
               {!mine && e.type !== 'movie' && <WishButton catalogId={cat.id} />}
               {mine && vis.data && (
                 <VisEditor
@@ -103,6 +105,11 @@ export default function EntryDetail({ entryId, onClose, onChanged }) {
           )}
 
           {!mine && e.status === 'bitti' && <CongratsButton key={e.id} entryId={e.id} count={e.congrats_count || 0} sent={!!e.i_congratulated} />}
+          {mine && e.status === 'bitti' && (e.congrats_from || []).length > 0 && (
+            <div className="small" style={{ marginTop: 8 }}>
+              🎉 {e.congrats_from.length} tebrik aldın: {e.congrats_from.map((u) => u.display_name).join(', ')}
+            </div>
+          )}
           {e.type === 'book' && <RatingPanel catalogId={cat.id} genre={cat.genre} />}
 
           <Others catalogId={cat.id} selfEntryId={e.id} onOpen={onClose} />

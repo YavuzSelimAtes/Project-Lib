@@ -154,7 +154,7 @@ export default async function routes(app) {
     const entries = db.prepare(`SELECT e.* FROM entries e WHERE e.catalog_id=? AND ${entryVisibleSql(me.id, viewerGroups(db, me.id, groupId), { own: !groupId })} ORDER BY e.updated_at DESC`).all(row.id);
     const editions = row.type === 'book' ? listEditions(db, row.id).editions : [];
     const rs = row.type === 'book' ? ratingSummary(db, row.id, req.user.id, groupId ? [groupId] : null) : null;
-    return { item: { ...catalogOut(row), editions, ...(rs ? { rating_average: rs.average, rating_count: rs.count } : {}) }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false })), editions };
+    return { item: { ...catalogOut(row), editions, ...(rs ? { rating_average: rs.average, rating_count: rs.count } : {}) }, entries: entries.map((e) => entryOut(db, e, { withCatalog: false, viewer: me.id })), editions };
   });
 
   // Baskilar: yerelde yoksa/eskiyse Open Library + Google Books'tan doldurulur (7 gun onbellek)

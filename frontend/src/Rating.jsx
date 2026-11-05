@@ -72,11 +72,7 @@ export function CongratsButton({ entryId, count = 0, sent = false }) {
   };
   return (
     <div className="row" style={{ marginTop: 6, gap: 8 }}>
-      {st.sent ? (
-        <button className="btn small ghost" disabled>
-          Tebrik gönderildi
-        </button>
-      ) : (
+      {!st.sent && (
         <button className="btn small" disabled={busy} onClick={go}>
           🎉 Tebrikler
         </button>
@@ -95,6 +91,7 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
   const metrics = useAsync(() => api.bookMetrics(), []);
   const [genre, setGenre] = useState(null);
   const [scores, setScores] = useState(null);
+  const [cmts, setCmts] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -110,6 +107,7 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
   const genres = metrics.data?.genres || {};
   const list = (g && genres[g]?.metrics) || (g === d.genre ? d.metrics : null) || [];
   const cur = scores || d.mine?.scores || {};
+  const curC = cmts || d.mine?.comments || {};
   const visGroups = (user.groups || []).filter((x) => (d.allowed_group_ids || []).includes(x.id)).map((x) => ({ id: x.id, name: x.name }));
   const selVis = pick ?? (d.mine ? (d.mine_group_ids || []) : visGroups.map((x) => x.id));
   const complete = list.length > 0 && list.every((m) => cur[m.key] >= 1);
@@ -119,9 +117,9 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
     setErr(null);
     setDone(false);
     try {
-      await api.saveRatings(catalogId, g, Object.fromEntries(list.map((m) => [m.key, cur[m.key]])), visBody(visGroups, selVis));
+      await api.saveRatings(catalogId, g, Object.fromEntries(list.map((m) => [m.key, cur[m.key]])), visBody(visGroups, selVis), Object.fromEntries(list.map((m) => [m.key, curC[m.key] || ''])));
       setPick(null);
-      setScores(null);
+      setScores(null); setCmts(null);
       setOpen(false);
       setDone(true);
       rt.reload();
@@ -139,7 +137,7 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
     setErr(null);
     try {
       await api.deleteRatings(catalogId);
-      setScores(null);
+      setScores(null); setCmts(null);
       rt.reload();
       onChanged?.();
     } catch (x) {
@@ -160,6 +158,45 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
         <div className="small" style={{ marginTop: 6 }}>
           Senin puanın: <b>{fmt(d.mine.average)}</b>
         </div>
+      )}
+      {d.count > 0 && !open && (d.by_user || []).length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary className="small" style={{ cursor: 'pointer' }}>Kim ne puan verdi?</summary>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="small" style={{ borderCollapse: 'collapse', width: '100%', marginTop: 6 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '2px 6px' }}>Kişi</th>
+                  {(d.metrics || []).map((m) => <th key={m.key} style={{ padding: '2px 6px' }} title={m.name}>{m.name}</th>)}
+                  <th style={{ padding: '2px 6px' }}>Ort.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.by_user.map((u) => (
+                  <tr key={u.user.id}>
+                    <td style={{ padding: '2px 6px' }}>{u.user.display_name}</td>
+                    {(d.metrics || []).map((m) => <td key={m.key} style={{ textAlign: 'center', padding: '2px 6px' }}>{u.scores[m.key] ?? '–'}</td>)}
+                    <td style={{ textAlign: 'center', padding: '2px 6px' }}><b>{fmt(u.average)}</b></td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: '1px solid var(--line, #ddd)' }}>
+                  <td style={{ padding: '2px 6px' }}><b>Ortalama</b></td>
+                  {(d.metrics || []).map((m) => <td key={m.key} style={{ textAlign: 'center', padding: '2px 6px' }}><b>{d.by_metric?.[m.key] != null ? fmt(d.by_metric[m.key]) : '–'}</b></td>)}
+                  <td style={{ textAlign: 'center', padding: '2px 6px' }}><b>{fmt(d.average)}</b></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {d.by_user.some((u) => Object.keys(u.comments || {}).length > 0) && (
+            <div style={{ marginTop: 8 }}>
+              {d.by_user.flatMap((u) => Object.entries(u.comments || {}).map(([k, text]) => (
+                <div key={u.user.id + k} className="small" style={{ marginBottom: 4 }}>
+                  <b>{u.user.display_name}</b> · <span className="muted">{(d.metrics || []).find((m) => m.key === k)?.name || k}:</span> {text}
+                </div>
+              )))}
+            </div>
+          )}
+        </details>
       )}
       {d.mine && !open && visGroups.length > 0 && (
         <VisEditor label="Puanımı görenler" groups={visGroups} ids={d.mine_group_ids || []} save={(b) => api.setRatingGroups(catalogId, b)} onSaved={rt.reload} />
@@ -217,6 +254,7 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
                       </button>
                     ))}
                   </div>
+                  <input type="text" maxLength={500} value={curC[m.key] || ''} onChange={(ev) => setCmts({ ...curC, [m.key]: ev.target.value })} placeholder={`${m.name} için yorum (isteğe bağlı)`} aria-label={`${m.name} yorumu`} style={{ width: '100%', marginTop: 6 }} />
                 </div>
               ))}
               {!d.mine && visGroups.length > 1 && (
@@ -234,7 +272,7 @@ export function RatingPanel({ catalogId, genre: initialGenre, onChanged }) {
                   disabled={busy}
                   onClick={() => {
                     setOpen(false);
-                    setScores(null);
+                    setScores(null); setCmts(null);
                     setErr(null);
                   }}
                 >

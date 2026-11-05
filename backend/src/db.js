@@ -312,6 +312,20 @@ CREATE TABLE IF NOT EXISTS story_progress (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (story_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS story_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id INTEGER REFERENCES story_comments(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_story_comments ON story_comments(story_id, id);
+CREATE TABLE IF NOT EXISTS group_mutes (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, group_id)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -352,6 +366,10 @@ const COLUMNS = [
   ['users', 'group_id', 'INTEGER'], // kullanicinin kutuphane grubu (groups.id)
   ['users', 'email', 'TEXT'], // opsiyonel, benzersiz, kucuk harf (sifre sifirlama henuz yok)
   ['users', 'kind', "TEXT NOT NULL DEFAULT 'user'"], // 'manager' = grup yonetici hesabi (sifreyle girilmez, okumaz; yalniz gecisle)
+  ['book_ratings', 'comment', 'TEXT'], // her puanlama basligi icin istege bagli yorum
+  ['notifications', 'group_id', 'INTEGER'], // bildirimin ait oldugu grup (susturma/filtre)
+  ['notifications', 'archived', 'INTEGER NOT NULL DEFAULT 0'], // 5 gunden eskiler arsive
+  ['users', 'shelf', 'TEXT'], // raf duzeni JSON: {frame, order:[entryId], books:{entryId:{color,style}}}
   ['users', 'tz', 'TEXT'], // kisinin IANA saat dilimi (bos = sunucu saat dilimi)
   ['users', 'story_author', 'INTEGER NOT NULL DEFAULT 0'], // 1 = hikaye yazip yayinlayabilir (simdilik sadece ysates)
 ];

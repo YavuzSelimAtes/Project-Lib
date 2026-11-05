@@ -44,7 +44,7 @@ export default async function routes(app) {
   // Yazar bir bolumu ilk kez yayinlayinca hikayenin gruplarindaki uyeler bilgilendirilir
   const announce = (me, s, c) => {
     const members = db.prepare('SELECT DISTINCT gm.user_id FROM story_groups sg JOIN group_members gm ON gm.group_id=sg.group_id WHERE sg.story_id=? AND gm.user_id<>?').all(s.id, me.id);
-    for (const m of members) notify(db, m.user_id, { kind: 'story', title: `${me.display_name}, “${s.title}” hikayesine yeni bölüm ekledi`, body: c.title.slice(0, 140), link: { type: 'story', id: s.id } });
+    for (const m of members) notify(db, m.user_id, { from: me.id, kind: 'story', title: `${me.display_name}, “${s.title}” hikayesine yeni bölüm ekledi`, body: c.title.slice(0, 140), link: { type: 'story', id: s.id } });
   };
 
   app.get('/api/stories/:id', async (req) => {
@@ -138,6 +138,49 @@ export default async function routes(app) {
   });
 
   // Okuma yeri: bolum + o bolumdeki karakter konumu
+  // ---- yorumlar: hikayeyi okuyabilen herkes yazar; yanit tek seviye (yanita yanit ust yorumun altina duser) ----
+  const commentOut = (me, s, c) => ({
+    id: c.id, parent_id: c.parent_id, body: c.body, created_at: c.created_at,
+    user: publicUser(db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').get(c.user_id)),
+    can_delete: c.user_id === me.id || s.user_id === me.id,
+  });
+  app.get('/api/stories/:id/comments', async (req) => {
+    const me = requireUser(req);
+    const s = readable(me, req.params.id);
+    return { comments: db.prepare('SELECT * FROM story_comments WHERE story_id=? ORDER BY id').all(s.id).map((c) => commentOut(me, s, c)) };
+  });
+  app.post('/api/stories/:id/comments', async (req, reply) => {
+    const me = requireUser(req);
+    const s = readable(me, req.params.id);
+    const b = req.body || {};
+    const body = str(b.body, { field: 'body', required: true, max: 2000 });
+    let parent = null;
+    if (b.parent_id != null) {
+      parent = db.prepare('SELECT * FROM story_comments WHERE id=? AND story_id=?').get(Number(b.parent_id), s.id);
+      if (!parent) throw bad('Yanitlanan yorum bulunamadi', { parent_id: 'gecersiz' });
+      if (parent.parent_id) parent = db.prepare('SELECT * FROM story_comments WHERE id=?').get(parent.parent_id);
+    }
+    const info = db.prepare('INSERT INTO story_comments (story_id,user_id,parent_id,body,created_at) VALUES (?,?,?,?,?)').run(s.id, me.id, parent?.id ?? null, body, nowIso());
+    const targets = new Set();
+    if (s.user_id !== me.id) targets.add(s.user_id);
+    if (parent && parent.user_id !== me.id) targets.add(parent.user_id);
+    for (const uid of targets) {
+      const title = parent && uid === parent.user_id ? `${me.display_name}, “${s.title}” hikayesindeki yorumuna yanıt verdi` : `${me.display_name}, “${s.title}” hikayesine yorum yazdı`;
+      notify(db, uid, { from: me.id, kind: 'story_comment', title, body: body.slice(0, 140), link: { type: 'story', id: s.id } });
+    }
+    reply.code(201);
+    return { comment: commentOut(me, s, db.prepare('SELECT * FROM story_comments WHERE id=?').get(info.lastInsertRowid)) };
+  });
+  app.delete('/api/stories/:id/comments/:cid', async (req) => {
+    const me = requireUser(req);
+    const s = readable(me, req.params.id);
+    const c = db.prepare('SELECT * FROM story_comments WHERE id=? AND story_id=?').get(Number(req.params.cid), s.id);
+    if (!c) throw err(404, 'Yorum bulunamadi');
+    if (c.user_id !== me.id && s.user_id !== me.id) throw err(403, 'Bu yorumu silemezsin');
+    db.prepare('DELETE FROM story_comments WHERE id=?').run(c.id);
+    return { ok: true };
+  });
+
   app.put('/api/stories/:id/progress', async (req) => {
     const me = requireUser(req);
     const s = readable(me, req.params.id);

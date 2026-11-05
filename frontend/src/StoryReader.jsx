@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api.js';
+import StoryComments from './StoryComments.jsx';
 import { ErrorBox, Skeleton, useAsync } from './ui.jsx';
 import { STORY_COLORS } from './StoryCard.jsx';
 
@@ -116,6 +117,7 @@ export default function StoryReader({ id, startEditing, onClose, onChanged }) {
   const [idx, setIdx] = useState(0);
   const [turn, setTurn] = useState(null); // { dir: 'next'|'prev', to }
   const [toc, setToc] = useState(false);
+  const [cmt, setCmt] = useState(false);
   const [fs, setFs] = useState(getFs);
   const measure = useRef(null);
   const resumed = useRef(false);
@@ -236,10 +238,13 @@ export default function StoryReader({ id, startEditing, onClose, onChanged }) {
             <button className="sr-btn" onClick={() => setToc((v) => !v)} aria-label="Bölümler" aria-expanded={toc}>☰</button>
           </>
         )}
+        {story && !editing && <button className="sr-btn" onClick={() => setCmt((v) => !v)} aria-label="Yorumlar" aria-expanded={cmt}>💬</button>}
         {story?.mine && (
           <button className="sr-btn" onClick={() => { setEditing((v) => !v); setToc(false); }} aria-label={editing ? 'Okumaya dön' : 'Düzenle'}>{editing ? '📖' : '✎'}</button>
         )}
       </div>
+
+      {cmt && story && <StoryComments storyId={story.id} onClose={() => setCmt(false)} />}
 
       {d.loading && !d.data && <div style={{ padding: 20 }}><Skeleton h={120} n={2} /></div>}
       {d.error && <div style={{ padding: 20 }}><ErrorBox error={d.error} onRetry={d.reload} /></div>}

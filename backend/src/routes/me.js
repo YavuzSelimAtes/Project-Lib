@@ -21,6 +21,36 @@ export default async function routes(app) {
     if (!n) throw err(404, 'Not bulunamadi');
     return n;
   };
+  // ---- Raf duzeni (kisisellestirme): sahibi yazar, rafa bakan herkes okur ----
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const STYLES = ['plain', 'band', 'dots', 'stripe', 'double', 'foil', 'label', 'shade', 'leather'];
+  const shelfOf = (uid) => { try { return JSON.parse(db.prepare('SELECT shelf FROM users WHERE id=?').get(uid)?.shelf || 'null') || {}; } catch { return {}; } };
+  app.get('/api/users/:id/shelf', async (req) => { requireUser(req); return { shelf: shelfOf(Number(req.params.id)) }; });
+  app.put('/api/me/shelf', async (req) => {
+    const me = requireUser(req);
+    const b = req.body || {};
+    const out = {};
+    if (b.frame != null && b.frame !== '') { if (!HEX.test(b.frame)) throw bad('frame #rrggbb olmali', { frame: 'gecersiz' }); out.frame = b.frame; }
+    if (b.order != null) {
+      if (!Array.isArray(b.order) || b.order.length > 500) throw bad('order dizi olmali', { order: 'gecersiz' });
+      const own = new Set(db.prepare('SELECT id FROM entries WHERE user_id=?').all(me.id).map((r) => r.id));
+      out.order = [...new Set(b.order.map(Number))].filter((id) => own.has(id));
+    }
+    if (b.books != null) {
+      if (typeof b.books !== 'object' || Array.isArray(b.books)) throw bad('books nesne olmali', { books: 'gecersiz' });
+      out.books = {};
+      for (const [id, v] of Object.entries(b.books).slice(0, 500)) {
+        if (!Number.isInteger(Number(id)) || !v || typeof v !== 'object') continue;
+        const o = {};
+        if (v.color != null && v.color !== '') { if (!HEX.test(v.color)) throw bad('color #rrggbb olmali', { books: 'gecersiz renk' }); o.color = v.color; }
+        if (v.style != null && v.style !== '') { if (!STYLES.includes(v.style)) throw bad('style gecersiz', { books: 'gecersiz stil' }); o.style = v.style; }
+        if (Object.keys(o).length) out.books[id] = o;
+      }
+    }
+    db.prepare('UPDATE users SET shelf=? WHERE id=?').run(JSON.stringify(out), me.id);
+    return { shelf: out };
+  });
+
   const likeEsc = (s) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
   // ---- Defterim ----
@@ -85,7 +115,7 @@ export default async function routes(app) {
     if (e.user_id !== me.id && audience.has(e.user_id)) targets.add(e.user_id);
     for (const uid of targets) {
       const title = uid === e.user_id ? `${me.display_name}, "${n.title}" kaydına yorum yazdı` : `${me.display_name}, yorum yazdığın "${n.title}" kaydına yeni yorum yazdı`;
-      notify(db, uid, { kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
+      notify(db, uid, { from: me.id, kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
     }
     reply.code(201);
     const c = db.prepare('SELECT * FROM comments WHERE id=?').get(cid);

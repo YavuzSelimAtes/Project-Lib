@@ -120,6 +120,9 @@ export const api = {
   changePassword: (old_password, new_password) => request('POST', '/auth/change-password', { old_password, new_password }),
 
   feed: (group) => request('GET', '/feed' + qs({ group })),
+  today: (group) => request('GET', `/today${qs({ group })}`),
+  seriesDays: (id) => request('GET', `/entries/${id}/series-days`),
+  addSeriesDay: (id, date, episodes) => request('POST', `/entries/${id}/series-days`, { date, episodes }),
   leaderboard: (kind, period, group) => request('GET', `/leaderboards/${kind}${qs({ period, group })}`),
 
   search: (q, type, lang) => request('GET', '/catalog/search' + qs({ q, type, lang })),
@@ -162,9 +165,13 @@ export const api = {
   pending: () => request('GET', '/me/pending-questions'),
 
   stats: (userId, period, type, group) => request('GET', `/users/${userId}/stats${qs({ period, type, group })}`),
+  userShelf: (userId) => request('GET', `/users/${userId}/shelf`),
+  saveShelf: (shelf) => request('PUT', '/me/shelf', shelf),
   heatmap: (userId, days, group) => request('GET', `/users/${userId}/heatmap${qs({ days, group })}`),
   calendar: (userId, from, to, group) => request('GET', `/users/${userId}/calendar${qs({ from, to, group })}`),
-  notifications: () => request('GET', '/notifications'),
+  notifications: (params) => request('GET', `/notifications${qs(params || {})}`),
+  notifSettings: () => request('GET', '/notifications/settings'),
+  muteGroup: (gid, muted) => request('PUT', `/notifications/groups/${gid}`, { muted }),
   readNotifications: (data) => request('POST', '/notifications/read', data),
 
   adminUsers: () => request('GET', '/admin/users'),
@@ -197,7 +204,7 @@ export const api = {
   congrats: (id) => request('POST', `/entries/${id}/congrats`),
   bookMetrics: () => request('GET', '/book-metrics'),
   ratings: (cid) => request('GET', `/catalog/${cid}/ratings`),
-  saveRatings: (cid, genre, scores, vis) => request('PUT', `/catalog/${cid}/ratings`, { ...(genre ? { genre } : {}), scores, ...(vis || {}) }),
+  saveRatings: (cid, genre, scores, vis, comments) => request('PUT', `/catalog/${cid}/ratings`, { ...(genre ? { genre } : {}), scores, ...(comments ? { comments } : {}), ...(vis || {}) }),
   deleteRatings: (cid) => request('DELETE', `/catalog/${cid}/ratings`),
   react: (cid, emoji) => request('PUT', `/comments/${cid}/reaction`, { emoji }),
   library: (params) => request('GET', '/library' + qs(params)),
@@ -208,6 +215,9 @@ export const api = {
   addChapter: (id, data) => request('POST', `/stories/${id}/chapters`, data),
   updateChapter: (id, cid, data) => request('PATCH', `/stories/${id}/chapters/${cid}`, data),
   deleteChapter: (id, cid) => request('DELETE', `/stories/${id}/chapters/${cid}`),
+  storyComments: (id) => request('GET', `/stories/${id}/comments`),
+  addStoryComment: (id, body, parent_id) => request('POST', `/stories/${id}/comments`, { body, ...(parent_id ? { parent_id } : {}) }),
+  deleteStoryComment: (id, cid) => request('DELETE', `/stories/${id}/comments/${cid}`),
   storyProgress: (id, data) => request('PUT', `/stories/${id}/progress`, data),
   libraryItem: (id, group) => request('GET', `/library/${id}${qs({ group })}`),
   libraryComments: (id, params) => request('GET', `/library/${id}/comments` + qs(params)),

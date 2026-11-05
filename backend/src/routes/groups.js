@@ -31,6 +31,8 @@ export default async function routes(app) {
   app.post('/api/groups', async (req, reply) => {
     const me = requireUser(req);
     if (me.kind === 'manager') throw err(403, 'Yonetici hesap grup olusturamaz; kisisel hesabinizdan olusturun');
+    // Her hesap en fazla 1 grup acabilir (yonetici hesabi bagli kisisel hesaplar sayilir)
+    if (db.prepare('SELECT 1 FROM groups g JOIN account_links a1 ON a1.user_id=g.owner_id JOIN account_links a2 ON a2.group_id=a1.group_id AND a2.user_id=? LIMIT 1').get(me.id)) throw err(409, 'Her hesap en fazla 1 grup olusturabilir');
     const b = req.body || {};
     const name = str(b.name, { field: 'name', required: true, max: 40 });
     const share = b.share_existing === true;

@@ -17,8 +17,10 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   const id = async (u) => (await u('GET', '/api/auth/me')).j.user.id;
   for (const [u, n] of [[a, 'nota'], [b, 'notb']]) await u('POST', '/api/auth/register', acc(n));
   await adm('POST', '/api/auth/login', { username: 'admin', password: 'test-admin-123' });
-  const mgr = async (name) => { const gr = await a('POST', '/api/groups', { name }); const m = mk(); await m('POST', '/api/auth/login', { username: 'nota', password: 'secret1' }); await m('POST', '/api/auth/switch', { user_id: gr.j.manager_id }); return [gr.j.group.id, m]; };
-  const [g1, m1] = await mgr('N1'), [g2, m2] = await mgr('N2'); // sahip = yonetici hesap
+  const cu = mk(); await cu('POST', '/api/auth/register', acc('notc')); // hesap basina 1 grup: 2. grubu baska hesap acar, nota uye olur
+  const mgr = async (name, who = a, uname = 'nota') => { const gr = await who('POST', '/api/groups', { name }); const m = mk(); await m('POST', '/api/auth/login', { username: uname, password: 'secret1' }); await m('POST', '/api/auth/switch', { user_id: gr.j.manager_id }); return [gr.j.group.id, m]; };
+  const [g1, m1] = await mgr('N1'), [g2, m2] = await mgr('N2', cu, 'notc'); // sahip = yonetici hesap
+  await a('POST', `/api/join/${(await m2('GET', `/api/groups/${g2}/invite`)).j.token}`, {});
   const tok = async (g) => (await (g === g1 ? m1 : m2)('GET', `/api/groups/${g}/invite`)).j.token;
   await b('POST', `/api/join/${await tok(g1)}`, {});
   const cat = async (title, type = 'book', pages = 200) => (await adm('POST', '/api/admin/catalog', { type, title, pages })).j.item.id;

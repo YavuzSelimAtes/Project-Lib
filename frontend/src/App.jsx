@@ -12,6 +12,7 @@ const AllHome = lazy(() => import('./pages/AllHome.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const Library = lazy(() => import('./pages/Library.jsx'));
 import Bell from './Bell.jsx';
+import WhatsNew from './WhatsNew.jsx';
 import AccountMenu from './AccountSwitch.jsx';
 import FeedbackModal from './Feedback.jsx';
 import ChangePassword from './ChangePassword.jsx';
@@ -56,10 +57,8 @@ const groupNav = (gid, uid) => [
 
 // Grup yonetici hesabi: sade grup ayarlari (okuyucu sayfalari yok)
 const MANAGER_NAV = [
-  ['/yonetim', 'İstekler', (p) => p === '/yonetim' || p === '/yonetim/' || p.startsWith('/yonetim/inbox')],
-  ['/yonetim/link', 'Grup', (p) => p.startsWith('/yonetim/link')],
+  ['/yonetim', 'Grup', (p) => p === '/yonetim' || p === '/yonetim/' || p.startsWith('/yonetim/link')],
   ['/yonetim/reading', 'Okuma', (p) => p.startsWith('/yonetim/reading')],
-  ['/yonetim/list', 'Katalog', (p) => p.startsWith('/yonetim/list') || p.startsWith('/yonetim/catalog')],
 ];
 
 // Nav + kayan aktif pill: mod degisince (key) ogeler yeniden belirir, pill ayni modda kayar
@@ -270,6 +269,7 @@ export default function App() {
           <Nav key={mode} items={items} pathname={pathname} label={isManager ? 'Grup ayarları' : gid ? 'Grup menüsü' : 'Ana menü'} />
           <span className="spacer" />
           <PendingBadge />
+          <WhatsNew />
           <Bell />
           <AccountMenu user={user} dark={dark} toggleTheme={toggleTheme} onProfile={() => setProfileOpen(true)} onFeedback={() => setFbOpen(true)} onLogout={logout} />
         </div>

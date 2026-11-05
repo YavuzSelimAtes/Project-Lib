@@ -47,24 +47,26 @@ export function setGenre(db, catalogId, genre) {
 export function ratingSummary(db, catalogId, meId = null, groupIds = null) {
   const cat = db.prepare('SELECT id,genre FROM catalog WHERE id=?').get(catalogId);
   const gids = groupIds || (meId != null ? userGroups(db, meId).map((g) => g.id) : []);
-  const rows = db.prepare(`SELECT r.user_id,r.metric,r.score FROM book_ratings r WHERE r.catalog_id=? AND ${ratingVisibleSql(meId ?? 0, gids, 'r')} ORDER BY r.user_id`).all(catalogId);
+  const rows = db.prepare(`SELECT r.user_id,r.metric,r.score,r.comment FROM book_ratings r WHERE r.catalog_id=? AND ${ratingVisibleSql(meId ?? 0, gids, 'r')} ORDER BY r.user_id`).all(catalogId);
   const users = new Map();
+  const comments = new Map(); // user -> {metric: yorum}
   const metricSum = {};
   let total = 0;
   for (const r of rows) {
     if (!users.has(r.user_id)) users.set(r.user_id, {});
     users.get(r.user_id)[r.metric] = r.score;
+    if (r.comment) { if (!comments.has(r.user_id)) comments.set(r.user_id, {}); comments.get(r.user_id)[r.metric] = r.comment; }
     (metricSum[r.metric] ||= []).push(r.score);
     total += r.score;
   }
   const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
   const byUser = [...users].map(([uid, scores]) => ({
     user: publicUser(db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').get(uid)),
-    scores, average: round1(mean(Object.values(scores))),
+    scores, comments: comments.get(uid) || {}, average: round1(mean(Object.values(scores))),
   }));
   const byMetric = {};
   for (const [k, a] of Object.entries(metricSum)) byMetric[k] = round1(mean(a));
-  const mine = meId != null && users.has(meId) ? { scores: users.get(meId), average: round1(mean(Object.values(users.get(meId)))) } : null;
+  const mine = meId != null && users.has(meId) ? { scores: users.get(meId), comments: comments.get(meId) || {}, average: round1(mean(Object.values(users.get(meId)))) } : null;
   return {
     catalog_id: catalogId, genre: cat?.genre ?? null,
     metrics: cat?.genre ? GENRES[cat.genre].metrics : [],
@@ -77,7 +79,7 @@ export function ratingSummary(db, catalogId, meId = null, groupIds = null) {
 // Puan verme kurali: kitap, kullanicinin kayitlarinda 'bitti' / 'birakildi' durumunda olmali (planlandi ve devam yetmez)
 export const canRate = (db, userId, catalogId) => !!db.prepare("SELECT 1 FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.catalog_id=? AND c.type='book' AND e.status IN ('bitti','birakildi')").get(userId, catalogId);
 
-export function saveRatings(db, userId, catalogId, genre, scores) {
+export function saveRatings(db, userId, catalogId, genre, scores, comments = null) {
   const g = setGenre(db, catalogId, genre);
   if (!g) throw bad('Once kitabin turunu secin (genre: kurgu | felsefe)', { genre: 'gerekli' });
   if (!scores || typeof scores !== 'object' || Array.isArray(scores)) throw bad('scores nesne olmali', { scores: 'gecersiz' });
@@ -87,8 +89,12 @@ export function saveRatings(db, userId, catalogId, genre, scores) {
     const v = scores[k];
     if (!Number.isInteger(v) || v < 1 || v > 5) throw bad(`${k} icin 1-5 arasi tam sayi puan gerekli`, { scores: `${k}: 1-5` });
   }
+  if (comments != null && (typeof comments !== 'object' || Array.isArray(comments))) throw bad('comments nesne olmali', { comments: 'gecersiz' });
   const now = nowIso();
-  const up = db.prepare(`INSERT INTO book_ratings (user_id,catalog_id,metric,score,created_at,updated_at) VALUES (?,?,?,?,?,?)
-    ON CONFLICT(user_id,catalog_id,metric) DO UPDATE SET score=excluded.score, updated_at=excluded.updated_at`);
-  for (const k of keys) up.run(userId, catalogId, k, scores[k], now, now);
+  const up = db.prepare(`INSERT INTO book_ratings (user_id,catalog_id,metric,score,created_at,updated_at,comment) VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(user_id,catalog_id,metric) DO UPDATE SET score=excluded.score, updated_at=excluded.updated_at, comment=CASE WHEN ? THEN excluded.comment ELSE book_ratings.comment END`);
+  for (const k of keys) {
+    const c = comments && Object.prototype.hasOwnProperty.call(comments, k) ? String(comments[k] ?? '').trim().slice(0, 500) || null : null;
+    up.run(userId, catalogId, k, scores[k], now, now, c, comments ? 1 : 0);
+  }
 }

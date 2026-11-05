@@ -1,4 +1,5 @@
 import { requireUser } from '../auth.js';
+import { userToday } from '../util.js';
 import { oneOf, todayStr, addDays, nowIso, publicUser, round1 } from '../util.js';
 import { entryAvg } from '../services/entries.js';
 import { leaderboard, streaksOf } from '../services/stats.js';
@@ -63,6 +64,41 @@ export default async function routes(app) {
     cards.sort((a, b) => (b.last_activity || '').localeCompare(a.last_activity || '') || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
     const activity = cards.flatMap((c) => c.items.map((i) => ({ user: c.user, ...i }))).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 30);
     return { generated_at: nowIso(), cards, activity };
+  });
+
+  // Bugun: grup uyeleri bugun (kendi saat dilimlerine gore) ne yapti. Sira: sayfa (cok->az), esitlikte dizi bolumu, sonra film. Gece 00'da kendiliginden sifirlanir (tarihe bagli).
+  app.get('/api/today', async (req) => {
+    const me = requireUser(req);
+    const groupId = scopeGroup(db, me, req.query.group);
+    const users = groupId
+      ? db.prepare("SELECT u.id,u.display_name,u.avatar,u.color FROM users u JOIN group_members gm ON gm.user_id=u.id AND gm.group_id=? WHERE u.active=1 AND u.kind<>'manager'").all(groupId)
+      : db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').all(me.id);
+    const vis = groupId ? ' AND EXISTS (SELECT 1 FROM entry_groups eg WHERE eg.entry_id=e.id AND eg.group_id=?)' : ' AND e.user_id<>0';
+    const va = (uid) => (groupId ? [uid, groupId] : [uid]);
+    const rows = [];
+    let day = todayStr();
+    for (const u of users) {
+      day = userToday(db, u.id);
+      const logs = db.prepare(`SELECT e.id, c.title, SUM(l.pages_read) p FROM reading_logs l JOIN entries e ON e.id=l.entry_id JOIN catalog c ON c.id=e.catalog_id WHERE l.user_id=? AND l.date=?${vis.replace('e.user_id<>0', '1=1')} GROUP BY e.id HAVING p>0`).all(u.id, day, ...(groupId ? [groupId] : []));
+      const eps = db.prepare(`SELECT e.id, c.title, SUM(s.episodes) n FROM series_progress s JOIN entries e ON e.id=s.entry_id JOIN catalog c ON c.id=e.catalog_id WHERE s.user_id=? AND s.date=?${vis.replace('e.user_id<>0', '1=1')} GROUP BY e.id HAVING n>0`).all(u.id, day, ...(groupId ? [groupId] : []));
+      const done = db.prepare(`SELECT e.type, c.title FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.status='bitti' AND e.end_date=?${vis.replace('e.user_id<>0', '1=1')}`).all(u.id, day, ...(groupId ? [groupId] : []));
+      const movies = done.filter((d) => d.type === 'movie').map((d) => d.title);
+      const finishedBooks = done.filter((d) => d.type === 'book').map((d) => d.title);
+      const finishedSeries = done.filter((d) => d.type === 'series').map((d) => d.title);
+      const pages = logs.reduce((s, x) => s + x.p, 0);
+      const episodes = eps.reduce((s, x) => s + x.n, 0);
+      if (!pages && !episodes && !movies.length && !finishedBooks.length && !finishedSeries.length) continue;
+      rows.push({
+        user: publicUser(u), pages, episodes, movies: movies.length, series_done: finishedSeries.length,
+        did: [
+          ...logs.map((x) => x.title), ...eps.map((x) => x.title), ...movies.map((t) => t + ' (film)'),
+        ].filter((v, i, a) => a.indexOf(v) === i),
+        finished: [...finishedBooks, ...finishedSeries.map((t) => t + ' (dizi)')],
+      });
+    }
+    const sw = (r) => (r.episodes > 0 || r.series_done > 0 ? 1 : 0);
+    rows.sort((a, b) => b.pages - a.pages || sw(b) - sw(a) || b.episodes - a.episodes || b.movies - a.movies || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
+    return { date: day, rows: rows.map((r, i) => ({ rank: i + 1, ...r })) };
   });
 
   for (const kind of ['record', 'average', 'finished', 'streak', 'best_streak']) {

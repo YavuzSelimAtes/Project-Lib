@@ -433,18 +433,39 @@ export default async function routes(app) {
   });
 
   // ---- bildirimler ----
+  // Bildirimler: 5 gunden eskiler arsive alinir (liste cagrisinda); arsivde arama: ?archived=1&q=
+  const out = (r) => ({
+    id: r.id, kind: r.kind, title: r.title, body: r.body,
+    link: r.link_type ? { type: r.link_type, id: r.link_id } : null,
+    group_id: r.group_id ?? null, is_read: !!r.is_read, created_at: r.created_at,
+  });
   app.get('/api/notifications', async (req) => {
     const me = requireUser(req);
-    const rows = db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100').all(me.id);
-    const unread = db.prepare('SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0').get(me.id).c;
-    return {
-      notifications: rows.map((r) => ({
-        id: r.id, kind: r.kind, title: r.title, body: r.body,
-        link: r.link_type ? { type: r.link_type, id: r.link_id } : null,
-        is_read: !!r.is_read, created_at: r.created_at,
-      })),
-      unread,
-    };
+    const q = req.query || {};
+    db.prepare('UPDATE notifications SET archived=1 WHERE user_id=? AND archived=0 AND created_at < ?').run(me.id, new Date(Date.now() - 5 * 86400000).toISOString());
+    const arch = q.archived === '1' ? 1 : 0;
+    const args = [me.id, arch];
+    let where = 'user_id=? AND archived=?';
+    const term = String(q.q || '').trim().slice(0, 80);
+    if (term) { where += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; const l = '%' + term.replace(/[\\%_]/g, (m) => '\\' + m) + '%'; args.push(l, l); }
+    const offset = Math.max(0, parseInt(q.offset, 10) || 0);
+    const rows = db.prepare(`SELECT * FROM notifications WHERE ${where} ORDER BY id DESC LIMIT 100 OFFSET ?`).all(...args, offset);
+    const unread = db.prepare('SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0 AND archived=0').get(me.id).c;
+    return { notifications: rows.map(out), unread, archived: !!arch };
+  });
+  // Grup bazli bildirim ayari
+  app.get('/api/notifications/settings', async (req) => {
+    const me = requireUser(req);
+    const muted = new Set(db.prepare('SELECT group_id FROM group_mutes WHERE user_id=?').all(me.id).map((r) => r.group_id));
+    return { groups: db.prepare('SELECT g.id, g.name FROM groups g JOIN group_members m ON m.group_id=g.id AND m.user_id=? ORDER BY m.joined_at, g.id').all(me.id).map((g) => ({ id: g.id, name: g.name || 'Kütüphane', muted: muted.has(g.id) })) };
+  });
+  app.put('/api/notifications/groups/:gid', async (req) => {
+    const me = requireUser(req);
+    const gid = Number(req.params.gid);
+    if (!db.prepare('SELECT 1 FROM group_members WHERE user_id=? AND group_id=?').get(me.id, gid)) throw err(404, 'Grup bulunamadi');
+    if ((req.body || {}).muted === true) db.prepare('INSERT OR IGNORE INTO group_mutes (user_id,group_id) VALUES (?,?)').run(me.id, gid);
+    else db.prepare('DELETE FROM group_mutes WHERE user_id=? AND group_id=?').run(me.id, gid);
+    return { ok: true, muted: (req.body || {}).muted === true };
   });
   app.post('/api/notifications/read', async (req) => {
     const me = requireUser(req);
