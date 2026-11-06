@@ -94,6 +94,8 @@ export default function Calendars({ uid, filter, rev = 0, group = null }) {
       const n = v.year * 12 + v.month + dir;
       return { ...v, year: Math.floor(n / 12), month: ((n % 12) + 12) % 12 };
     });
+  const curMonth = view.year === ty && view.month === tm - 1;
+  const periodLabel = view.mode === '3m' ? 'Son 3 ayda' : view.mode === 'year' ? (view.year === ty ? 'Bu yıl' : view.year + ' yılında') : curMonth ? 'Bu ay' : MONTHS[view.month] + ' ' + view.year + ' ayında';
   const types = filter === 'all' ? ['book', 'series', 'movie'] : [filter];
   const MODES = [['month', 'Aylık'], ['3m', '3 Ay'], ['year', 'Tüm yıl']];
 
@@ -121,7 +123,7 @@ export default function Calendars({ uid, filter, rev = 0, group = null }) {
         )}
       </div>
       {types.map((t) => (
-        <Calendar key={t} type={t} mode={view.mode} keys={keys} todayKey={todayKey} data={cal.data} loading={cal.loading} error={cal.error} onRetry={cal.reload} />
+        <Calendar key={t} type={t} mode={view.mode} keys={keys} todayKey={todayKey} data={cal.data} loading={cal.loading} error={cal.error} onRetry={cal.reload} periodLabel={periodLabel} />
       ))}
     </div>
   );
@@ -146,7 +148,7 @@ const BURST = Array.from({ length: 14 }, (_, i) => {
 });
 
 // Uzerine gel / odaklan / dokun -> "12 Mart Sal - 37 sayfa" balonu. Klavye: tek tab duragi; oklar gezer; Esc kapatir.
-function Calendar({ type, mode, keys, todayKey, data, loading, error, onRetry }) {
+function Calendar({ type, mode, keys, todayKey, data, loading, error, onRetry, periodLabel }) {
   const cfg = TYPES[type];
   const wrapRef = useRef(null);
   const scrollRef = useRef(null);
@@ -365,6 +367,11 @@ function Calendar({ type, mode, keys, todayKey, data, loading, error, onRetry })
           </span>
         ))}
       </div>
+      {data && !loading && (() => {
+        const sum = cells.reduce((s, x) => s + (x && !x.future ? x.n : 0), 0);
+        const verb = type === 'book' ? 'okundu' : 'izlendi';
+        return <p className="cal-total"><b>{periodLabel}</b> toplam <b>{sum.toLocaleString('tr-TR')} {cfg.unit}</b> {verb}</p>;
+      })()}
       {type === 'book' && <p className="small muted hm-hint">Bir güne dokun ya da üzerine gel. “~” tahmini gündür.</p>}
     </div>
   );
