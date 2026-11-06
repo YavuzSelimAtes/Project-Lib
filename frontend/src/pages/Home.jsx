@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth, useGroup } from '../auth.js';
+import Gundem from '../Gundem.jsx';
 import { Avatar, Cover, Empty, PageHead, ErrorBox, Progress, Skeleton, timeAgo, useAsync } from '../ui.jsx';
 import { CongratsButton } from '../Rating.jsx';
 import EntryDetail from '../EntryDetail.jsx';
@@ -68,6 +69,9 @@ export default function Home() {
   const [showQ, setShowQ] = useState(false);
   const [story, setStory] = useState(null); // { id, edit }
   const [newStory, setNewStory] = useState(false);
+  const [tab, setTabState] = useState(() => { try { return localStorage.getItem('home-tab') || 'gundem'; } catch { return 'gundem'; } });
+  const setTab = (k) => { setTabState(k); try { localStorage.setItem('home-tab', k); } catch { /* onemsiz */ } };
+  const showGundem = !!gid && tab === 'gundem';
   // profil degisince (avatar/renk/ad) feed'i tazele; o ana kadar kendi kartini guncel profille ciz
   const first = useRef(true);
   useEffect(() => {
@@ -113,20 +117,28 @@ export default function Home() {
         </div>
       )}
 
-      {feed.loading && !feed.data && (
+      {gid && (
+        <div className="tabs seg home-tabs" role="tablist" aria-label="Ana sayfa bölümleri">
+          <button role="tab" aria-selected={tab === 'gundem'} className="tab" onClick={() => setTab('gundem')}>📰 Gündem</button>
+          <button role="tab" aria-selected={tab === 'profiller'} className="tab" onClick={() => setTab('profiller')}>👥 Profiller</button>
+        </div>
+      )}
+      {showGundem && <Gundem gid={gid} me={me} onOpen={setOpenId} />}
+
+      {!showGundem && feed.loading && !feed.data && (
         <div className="grid">
           <Skeleton h={190} n={3} />
         </div>
       )}
-      <ErrorBox error={feed.error} onRetry={feed.reload} />
+      {!showGundem && <ErrorBox error={feed.error} onRetry={feed.reload} />}
 
-      {feed.data && visible.length === 0 && (
+      {!showGundem && feed.data && visible.length === 0 && (
         <Empty icon="👨‍👩‍👧" title="Henüz kimse yok">
           Yönetici aile üyelerini ekleyince burada görünecekler.
         </Empty>
       )}
 
-      <div className="grid">
+      {!showGundem && <div className="grid">
         {sorted.map((c) => (
           <section key={c.user.id} className="card ucard" style={{ '--c': c.user.color }} aria-label={c.user.display_name}>
             <Link to={shelfTo(c)} className="ucard-head" style={{ textDecoration: 'none' }} title="Rafına bak">
@@ -163,7 +175,7 @@ export default function Home() {
             )}
           </section>
         ))}
-      </div>
+      </div>}
 
       {adding && <AddFlow onClose={() => setAdding(false)} onAdded={reload} />}
       {newStory && <NewStory onClose={() => setNewStory(false)} onCreated={(id) => { setNewStory(false); setStory({ id, edit: true }); reload(); }} />}

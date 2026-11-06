@@ -56,7 +56,14 @@ export default async function routes(app) {
     const prog = db.prepare('SELECT chapter_id, pos FROM story_progress WHERE story_id=? AND user_id=?').get(s.id, me.id);
     return {
       story: { id: s.id, title: s.title, summary: s.summary, color: s.color, updated_at: s.updated_at, author: publicUser(author), mine: own },
-      chapters: chapters.map((c) => chapterOut(c, true)),
+      chapters: chapters.map((c) => {
+        const r = db.prepare('SELECT COUNT(*) n FROM story_chapter_reads WHERE chapter_id=? AND user_id<>?').get(c.id, s.user_id).n;
+        const rt = db.prepare('SELECT COUNT(*) n, AVG(score) a FROM story_chapter_ratings WHERE chapter_id=? AND user_id<>?').get(c.id, s.user_id);
+        return {
+          ...chapterOut(c, true), read_count: r, my_read: !!db.prepare('SELECT 1 FROM story_chapter_reads WHERE chapter_id=? AND user_id=?').get(c.id, me.id),
+          rating_count: rt.n, rating_avg: rt.n ? Math.round(rt.a * 10) / 10 : null, my_rating: db.prepare('SELECT score FROM story_chapter_ratings WHERE chapter_id=? AND user_id=?').get(c.id, me.id)?.score ?? null,
+        };
+      }),
       progress: prog ? { chapter_id: prog.chapter_id, pos: prog.pos } : null,
     };
   });
@@ -138,6 +145,39 @@ export default async function routes(app) {
   });
 
   // Okuma yeri: bolum + o bolumdeki karakter konumu
+  // ---- bolum: okudum isareti + puan (yazar kendi hikayesinde isaretleyemez/puanlayamaz) ----
+  const readerChapter = (me, req) => {
+    const s = readable(me, req.params.id);
+    if (s.user_id === me.id) throw bad('Kendi hikayende okudum/puan kullanilmaz');
+    const c = chapterRow(s.id, req.params.cid);
+    if (!c.published_at) throw err(404, 'Bolum bulunamadi');
+    return { s, c };
+  };
+  const chapterStats = (me, c) => ({
+    read_count: db.prepare('SELECT COUNT(*) n FROM story_chapter_reads WHERE chapter_id=?').get(c.id).n,
+    my_read: !!db.prepare('SELECT 1 FROM story_chapter_reads WHERE chapter_id=? AND user_id=?').get(c.id, me.id),
+    ...(() => { const rt = db.prepare('SELECT COUNT(*) n, AVG(score) a FROM story_chapter_ratings WHERE chapter_id=?').get(c.id); return { rating_count: rt.n, rating_avg: rt.n ? Math.round(rt.a * 10) / 10 : null }; })(),
+    my_rating: db.prepare('SELECT score FROM story_chapter_ratings WHERE chapter_id=? AND user_id=?').get(c.id, me.id)?.score ?? null,
+  });
+  app.put('/api/stories/:id/chapters/:cid/read', async (req) => {
+    const me = requireUser(req);
+    const { c } = readerChapter(me, req);
+    if ((req.body || {}).read === false) db.prepare('DELETE FROM story_chapter_reads WHERE chapter_id=? AND user_id=?').run(c.id, me.id);
+    else db.prepare('INSERT OR IGNORE INTO story_chapter_reads (chapter_id,user_id,created_at) VALUES (?,?,?)').run(c.id, me.id, nowIso());
+    return chapterStats(me, c);
+  });
+  app.put('/api/stories/:id/chapters/:cid/rating', async (req) => {
+    const me = requireUser(req);
+    const { c } = readerChapter(me, req);
+    const sc = (req.body || {}).score;
+    if (sc === null || sc === 0) db.prepare('DELETE FROM story_chapter_ratings WHERE chapter_id=? AND user_id=?').run(c.id, me.id);
+    else {
+      const v = int(sc, { min: 1, max: 5, field: 'score', required: true });
+      db.prepare('INSERT INTO story_chapter_ratings (chapter_id,user_id,score,updated_at) VALUES (?,?,?,?) ON CONFLICT(chapter_id,user_id) DO UPDATE SET score=excluded.score, updated_at=excluded.updated_at').run(c.id, me.id, v, nowIso());
+    }
+    return chapterStats(me, c);
+  });
+
   // ---- yorumlar: hikayeyi okuyabilen herkes yazar; yanit tek seviye (yanita yanit ust yorumun altina duser) ----
   const commentOut = (me, s, c) => ({
     id: c.id, parent_id: c.parent_id, body: c.body, created_at: c.created_at,

@@ -1,5 +1,6 @@
 import { addDays, diffDays, nowIso, round1, todayStr, userToday, publicUser, bad, err } from '../util.js';
 import { catalogOut } from './catalog.js';
+import { viewerGroups, commentVisibleSql, ratingVisibleSql } from '../groups.js';
 import { editionBrief, getEdition } from './editions.js';
 import { seriesExtras } from './seasons.js';
 
@@ -92,6 +93,11 @@ export function entryOut(db, e, { withCatalog = true, withUser = true, viewer = 
     out.congrats_count = rows.length;
     out.i_congratulated = rows.some((r) => r.sender_id === viewer);
     if (viewer === e.user_id) out.congrats_from = rows.map((r) => ({ ...publicUser({ id: r.id, display_name: r.display_name, avatar: r.avatar, color: r.color }), at: r.created_at }));
+  }
+  if (viewer != null && e.type === 'book') { // kartlarda: bu kayda yazilan yorum ve kitaba verilen puan adedi (bakanin gorebildigi kadar)
+    const gs = viewerGroups(db, viewer, null);
+    out.comment_total = db.prepare(`SELECT COUNT(*) c FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(viewer, gs)}`).get(e.id).c;
+    out.rating_total = db.prepare(`SELECT COUNT(DISTINCT r.user_id) c FROM book_ratings r WHERE r.catalog_id=? AND ${ratingVisibleSql(viewer, gs, 'r')}`).get(e.catalog_id).c;
   }
   if (withCatalog) {
     out.catalog = catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id));

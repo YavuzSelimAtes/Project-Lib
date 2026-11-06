@@ -2,6 +2,7 @@ import { requireUser, requireGroupAdmin } from '../auth.js';
 import { err, bad, int, oneOf, todayStr, userToday, publicUser } from '../util.js';
 import { norm } from '../services/sources.js';
 import { notify } from '../services/notify.js';
+import { postRating, dropRatingPost } from '../services/posts.js';
 import { catalogOut } from '../services/catalog.js';
 import { getEntry } from '../services/entries.js';
 import { GENRES, SCALE, ratingSummary, canRate, saveRatings } from '../services/ratings.js';
@@ -42,6 +43,7 @@ export default async function routes(app) {
     const allowed = ratingAllowedGroups(db, me.id, cat.id);
     const groups = spec ? parseVisibility(b, allowed) : (had ? null : allowed);
     tx(db, () => { saveRatings(db, me.id, cat.id, b.genre, b.scores, b.comments); if (groups) setRatingGroups(db, me.id, cat.id, groups); });
+    postRating(db, me.id, cat.id);
     return ratingOut(me.id, cat);
   });
   // Puanin gorunurlugunu sonradan degistir: { group_ids: [..] } | { all: true } | { none: true }
@@ -59,6 +61,7 @@ export default async function routes(app) {
     const cat = needBook(Number(req.params.id));
     db.prepare('DELETE FROM book_ratings WHERE user_id=? AND catalog_id=?').run(me.id, cat.id);
     setRatingGroups(db, me.id, cat.id, []);
+    dropRatingPost(db, me.id, cat.id);
     return ratingOut(me.id, cat);
   });
 

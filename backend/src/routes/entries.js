@@ -8,6 +8,7 @@ import { getEdition } from '../services/editions.js';
 import { setGenre } from '../services/ratings.js';
 import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
 import { familyFinishedNotify } from '../services/notify.js';
+import { postRead, postEvent } from '../services/posts.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress, seasonRows, watchedOf } from '../services/seasons.js';
 import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql } from '../groups.js';
 
@@ -152,8 +153,9 @@ export default async function routes(app) {
     markListed(db, catId); // kullanildi -> kalici (listed=1)
     reply.code(201);
     const created = getEntry(db, info.lastInsertRowid);
-    if (created.status === 'bitti' && created.end_date === today) { familyFinishedPush(db, created); familyFinishedNotify(db, created); }
-    else if (created.type === 'book' && created.status === 'devam') familyStartedPush(db, created); // onceden okunmus (bitti) ve planlanan kitaplar bildirilmez
+    if (created.status === 'bitti' && created.end_date === today) { familyFinishedPush(db, created); familyFinishedNotify(db, created); postEvent(db, created, 'finished'); }
+    else if (created.type === 'book' && created.status === 'devam') { familyStartedPush(db, created); postEvent(db, created, 'started'); }
+    else if (created.type === 'series' && created.status === 'devam') postEvent(db, created, 'started'); // onceden okunmus (bitti) ve planlanan kitaplar bildirilmez
     return { entry: entryOut(db, created) };
   });
 
@@ -250,7 +252,7 @@ export default async function routes(app) {
       }
       return getEntry(db, id);
     });
-    if (e.status !== 'bitti' && out.status === 'bitti' && out.end_date === today) { familyFinishedPush(db, out); familyFinishedNotify(db, out); }
+    if (e.status !== 'bitti' && out.status === 'bitti' && out.end_date === today) { familyFinishedPush(db, out); familyFinishedNotify(db, out); postEvent(db, out, 'finished'); }
     return { entry: entryOut(db, out) };
   });
 
@@ -277,8 +279,9 @@ export default async function routes(app) {
     if (!e.total_pages) throw bad('Bu kitabin toplam sayfa sayisi yok. Once toplam sayfayi girin (PATCH total_pages)', { total_pages: 'gerekli' });
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
+    if (d === today && r.delta > 0) postRead(db, entry, { pages: r.delta });
     if (d === today) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
-      if (r.finished) { familyFinishedPush(db, entry); familyFinishedNotify(db, entry); }
+      if (r.finished) { familyFinishedPush(db, entry); familyFinishedNotify(db, entry); postEvent(db, entry, 'finished'); }
       else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
     }
     return { entry: entryOut(db, entry), delta: r.delta, pages_read_on_date: r.pagesOnDate, date: d, finished: r.finished, spread_days: r.spread, estimated: r.estimated };
@@ -388,6 +391,7 @@ export default async function routes(app) {
     db.prepare("UPDATE entries SET season=?, episode=?, status='devam', start_date=?, end_date=NULL, updated_at=? WHERE id=?").run(season, episode, startDate, nowIso(), e.id);
     db.prepare('INSERT INTO series_progress (entry_id,user_id,date,episodes,minutes) VALUES (?,?,?,?,?)').run(e.id, me.id, date, n, minutes);
     pinSeriesFinish(db, e.id);
+    if (date === today) postRead(db, getEntry(db, e.id), { episodes: n });
     return { entry: entryOut(db, getEntry(db, e.id), { viewer: me.id }), added: n, date };
   });
 

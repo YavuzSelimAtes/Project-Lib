@@ -1,6 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, str, int, nowIso, publicUser } from '../util.js';
 import { notify } from '../services/notify.js';
+import { postComment } from '../services/posts.js';
 import { getEntry } from '../services/entries.js';
 import { tx } from '../db.js';
 import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, commentAllowedGroups, parseVisibility, setCommentGroups, commentGroupIds, idList } from '../groups.js';
@@ -55,6 +56,7 @@ export default async function routes(app) {
       setCommentGroups(db, Number(i.lastInsertRowid), groups);
       return i;
     });
+    postComment(db, Number(info.lastInsertRowid), e, me.id);
     // yorumu gorebilen kisilere: kayit sahibi + ayni kayitta daha once yorum yapmis diger kisiler (yazar haric, herkese en fazla 1 bildirim)
     const audience = new Set(groups.length ? db.prepare(`SELECT DISTINCT user_id FROM group_members WHERE group_id IN (${idList(groups)})`).all().map((r) => r.user_id) : []);
     const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id).filter((u) => audience.has(u)));

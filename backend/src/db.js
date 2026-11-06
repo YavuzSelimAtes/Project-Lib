@@ -321,6 +321,47 @@ CREATE TABLE IF NOT EXISTS story_comments (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_story_comments ON story_comments(story_id, id);
+CREATE TABLE IF NOT EXISTS posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- read | watch | started | finished | comment | rating
+  entry_id INTEGER REFERENCES entries(id) ON DELETE CASCADE,
+  catalog_id INTEGER REFERENCES catalog(id) ON DELETE CASCADE,
+  ref_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+  day TEXT,
+  data TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_posts_updated ON posts(updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_lookup ON posts(user_id, entry_id, kind, day);
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS post_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_post_comments ON post_comments(post_id, id);
+CREATE TABLE IF NOT EXISTS story_chapter_reads (
+  chapter_id INTEGER NOT NULL REFERENCES story_chapters(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (chapter_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS story_chapter_ratings (
+  chapter_id INTEGER NOT NULL REFERENCES story_chapters(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (chapter_id, user_id)
+);
 CREATE TABLE IF NOT EXISTS group_mutes (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,

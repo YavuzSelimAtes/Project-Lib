@@ -1,9 +1,12 @@
 // Yenilikler penceresi: buton SURUM_TARIHI'nden 3 gun sonra kendiliginden kaybolur. Yeni surumde tarihi ve maddeleri guncelle.
 export const WHATS_NEW = {
-  date: '2026-11-05',
+  date: '2026-11-06',
   days: 3,
   title: 'Neler yeni?',
   items: [
+    '📰 Gündem: Ana Sayfa’da yeni Gündem sekmesi var; grubundakilerin son hareketleri (okuma, izleme, yorum, puan) en yeni üstte akar. Beğenebilir ve yorum yazabilirsin. Kart görünümü Profiller sekmesinde.',
+    '📚 Hikaye bölümleri: Her bölümü “Okudum” diye işaretleyebilir ve puanlayabilirsin; kaç kişinin okuduğu küçük olarak görünür.',
+    '🔢 Kitap kartlarında artık kaç yorum ve kaç puan olduğu yazıyor.',
     '📅 Bugün: Liderlik artık “Bugün” sekmesiyle açılır; bugün kim kaç sayfa okudu, ne izledi görürsün. Gece 00:00’da sıfırlanır.',
     '📺 Dizi gün gün: Dizi kartında hangi gün kaç bölüm izlediğini ekleyebilirsin.',
     '💬 Hikaye yorumları: Hikayeyi okurken yorum yazabilir, yorumlara yanıt verebilirsin.',

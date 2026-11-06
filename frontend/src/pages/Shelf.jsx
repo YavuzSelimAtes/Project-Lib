@@ -145,6 +145,7 @@ export default function Shelf() {
                 {e.end_date ? ` · ${fmtDate(e.end_date)}` : ''}
               </div>
               {e.type === 'book' && e.total_pages ? <Progress value={e.percent} color={owner?.color ?? me.color} /> : null}
+              {e.type === 'book' && <div className="line" style={{ marginTop: 4 }}>💬 {e.comment_total ?? 0} yorum · ⭐ {e.rating_total ?? 0} puan</div>}
             </div>
           </button>
         ))}
