@@ -7,7 +7,9 @@ import { userStats, backfillMediaInfo, groupScope } from '../services/stats.js';
 import { getEdition } from '../services/editions.js';
 import { setGenre } from '../services/ratings.js';
 import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
-import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress } from '../services/seasons.js';
+import { familyFinishedNotify } from '../services/notify.js';
+import { postRead, postEvent } from '../services/posts.js';
+import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress, seasonRows, watchedOf } from '../services/seasons.js';
 import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql } from '../groups.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
@@ -66,7 +68,7 @@ export default async function routes(app) {
     const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const total = db.prepare(`SELECT COUNT(*) c FROM entries ${w}`).get(...args).c;
     const rows = db.prepare(`SELECT * FROM entries ${w} ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
-    return { entries: rows.map((e) => entryOut(db, e)), total };
+    return { entries: rows.map((e) => entryOut(db, e, { viewer: me.id })), total };
   });
 
   app.get('/api/entries/:id', async (req) => {
@@ -75,7 +77,7 @@ export default async function routes(app) {
     if (!e || !canSeeEntry(db, me.id, e, scopeGroup(db, me, req.query.group))) throw err(404, 'Kayit bulunamadi'); // ortak grupta gorunmuyorsa varligi sizdirilmaz
     const logs = db.prepare('SELECT date,pages_read,page_from,page_to,estimated FROM reading_logs WHERE entry_id=? ORDER BY date').all(e.id).map((l) => ({ ...l, estimated: !!l.estimated }));
     return {
-      entry: entryOut(db, e),
+      entry: entryOut(db, e, { viewer: me.id }),
       logs,
       comment_count: db.prepare(`SELECT COUNT(*) c FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(me.id, viewerGroups(db, me.id, null))}`).get(e.id).c,
       question_count: db.prepare('SELECT COUNT(*) c FROM questions WHERE entry_id=?').get(e.id).c,
@@ -151,8 +153,9 @@ export default async function routes(app) {
     markListed(db, catId); // kullanildi -> kalici (listed=1)
     reply.code(201);
     const created = getEntry(db, info.lastInsertRowid);
-    if (created.status === 'bitti' && created.end_date === today) familyFinishedPush(db, created);
-    else if (created.type === 'book' && created.status === 'devam') familyStartedPush(db, created); // onceden okunmus (bitti) ve planlanan kitaplar bildirilmez
+    if (created.status === 'bitti' && created.end_date === today) { familyFinishedPush(db, created); familyFinishedNotify(db, created); postEvent(db, created, 'finished'); }
+    else if (created.type === 'book' && created.status === 'devam') { familyStartedPush(db, created); postEvent(db, created, 'started'); }
+    else if (created.type === 'series' && created.status === 'devam') postEvent(db, created, 'started'); // onceden okunmus (bitti) ve planlanan kitaplar bildirilmez
     return { entry: entryOut(db, created) };
   });
 
@@ -249,7 +252,7 @@ export default async function routes(app) {
       }
       return getEntry(db, id);
     });
-    if (e.status !== 'bitti' && out.status === 'bitti' && out.end_date === today) familyFinishedPush(db, out);
+    if (e.status !== 'bitti' && out.status === 'bitti' && out.end_date === today) { familyFinishedPush(db, out); familyFinishedNotify(db, out); postEvent(db, out, 'finished'); }
     return { entry: entryOut(db, out) };
   });
 
@@ -276,8 +279,9 @@ export default async function routes(app) {
     if (!e.total_pages) throw bad('Bu kitabin toplam sayfa sayisi yok. Once toplam sayfayi girin (PATCH total_pages)', { total_pages: 'gerekli' });
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
+    if (d === today && r.delta > 0) postRead(db, entry, { pages: r.delta });
     if (d === today) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
-      if (r.finished) familyFinishedPush(db, entry);
+      if (r.finished) { familyFinishedPush(db, entry); familyFinishedNotify(db, entry); postEvent(db, entry, 'finished'); }
       else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
     }
     return { entry: entryOut(db, entry), delta: r.delta, pages_read_on_date: r.pagesOnDate, date: d, finished: r.finished, spread_days: r.spread, estimated: r.estimated };
@@ -346,6 +350,49 @@ export default async function routes(app) {
     pinSeriesFinish(db, e.id);
     logSeriesProgress(db, e, after, today);
     return { entry: entryOut(db, getEntry(db, e.id)) };
+  });
+
+  // Dizi gun gun kaydi (kitap sayfasi gibi): belirli bir gunde N bolum izlendi -> konum N bolum ilerler, gun kaydi o tarihe yazilir
+  const ownSeries = (req) => {
+    const me = requireUser(req);
+    const e = getEntry(db, Number(req.params.id));
+    if (!e) throw err(404, 'Kayit bulunamadi');
+    if (e.user_id !== me.id) throw err(403, 'Sadece kendi kaydinizi guncelleyebilirsiniz');
+    if (e.type !== 'series') throw bad('Bu islem sadece diziler icindir');
+    return { me, e };
+  };
+  app.get('/api/entries/:id/series-days', async (req) => {
+    const { e } = ownSeries(req);
+    return { days: db.prepare('SELECT date, SUM(episodes) episodes FROM series_progress WHERE entry_id=? GROUP BY date HAVING SUM(episodes)<>0 ORDER BY date DESC LIMIT 60').all(e.id) };
+  });
+  app.post('/api/entries/:id/series-days', async (req) => {
+    const { me, e } = ownSeries(req);
+    const b = req.body || {};
+    const n = int(b.episodes, { min: 1, max: 200, field: 'episodes', required: true });
+    const today = userToday(db, me.id);
+    const date = b.date ? String(b.date) : today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw bad('Tarih YYYY-AA-GG olmali', { date: 'gecersiz' });
+    if (date > today) throw bad('Gelecek bir tarih icin kayit girilemez', { date: 'gelecek tarih' });
+    const cat = db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id);
+    await ensureForPosition(db, cat, null, null);
+    const rows = seasonRows(db, e.catalog_id);
+    if (!rows.length) throw bad('Bu dizinin sezon bilgisi yok; sezon ve bolum secerek guncelle', { episodes: 'sezon bilgisi yok' });
+    const crt = cat?.runtime ?? null;
+    const cur = e.status === 'planlandi' || e.season == null ? 0 : watchedOf(rows, e.status === 'bitti' ? { ...e, status: 'devam' } : e, crt).episodes;
+    const total = rows.reduce((s, r) => s + r.episodes, 0);
+    const target = cur + n;
+    if (target > total) throw bad(`Dizide ${total - cur} bolum kaldi`, { episodes: 'fazla' });
+    let left = target, season = rows[0].season, episode = 0, minutes = 0;
+    for (const r of rows) { const take = Math.min(left, r.episodes); if (take <= 0) break; season = r.season; episode = take; left -= take; }
+    const before = cur; let m = 0, k = 0;
+    for (const r of rows) { for (let i = 0; i < r.episodes; i++) { k++; if (k > before && k <= target) m += r.runtime ?? crt ?? 0; } }
+    minutes = Math.round(m);
+    const startDate = e.start_date && e.start_date < date ? e.start_date : date;
+    db.prepare("UPDATE entries SET season=?, episode=?, status='devam', start_date=?, end_date=NULL, updated_at=? WHERE id=?").run(season, episode, startDate, nowIso(), e.id);
+    db.prepare('INSERT INTO series_progress (entry_id,user_id,date,episodes,minutes) VALUES (?,?,?,?,?)').run(e.id, me.id, date, n, minutes);
+    pinSeriesFinish(db, e.id);
+    if (date === today) postRead(db, getEntry(db, e.id), { episodes: n });
+    return { entry: entryOut(db, getEntry(db, e.id), { viewer: me.id }), added: n, date };
   });
 
   app.get('/api/users/:id/stats', async (req) => {

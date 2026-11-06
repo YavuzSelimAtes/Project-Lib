@@ -1,6 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, str, int, nowIso, publicUser } from '../util.js';
 import { notify } from '../services/notify.js';
+import { postComment } from '../services/posts.js';
 import { getEntry } from '../services/entries.js';
 import { tx } from '../db.js';
 import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, commentAllowedGroups, parseVisibility, setCommentGroups, commentGroupIds, idList } from '../groups.js';
@@ -55,13 +56,14 @@ export default async function routes(app) {
       setCommentGroups(db, Number(i.lastInsertRowid), groups);
       return i;
     });
+    postComment(db, Number(info.lastInsertRowid), e, me.id);
     // yorumu gorebilen kisilere: kayit sahibi + ayni kayitta daha once yorum yapmis diger kisiler (yazar haric, herkese en fazla 1 bildirim)
     const audience = new Set(groups.length ? db.prepare(`SELECT DISTINCT user_id FROM group_members WHERE group_id IN (${idList(groups)})`).all().map((r) => r.user_id) : []);
     const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id).filter((u) => audience.has(u)));
     if (e.user_id !== me.id && audience.has(e.user_id)) targets.add(e.user_id);
     for (const uid of targets) {
       const title = uid === e.user_id ? `${me.display_name}, "${entryTitle(e)}" kaydına yorum yazdı` : `${me.display_name}, yorum yazdığın "${entryTitle(e)}" kaydına yeni yorum yazdı`;
-      notify(db, uid, { kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
+      notify(db, uid, { from: me.id, kind: 'comment', title, body: body.slice(0, 140), link: { type: 'entry', id: e.id } });
     }
     reply.code(201);
     return { comment: commentOut(db.prepare('SELECT * FROM comments WHERE id=?').get(info.lastInsertRowid), me.id) };
@@ -80,7 +82,7 @@ export default async function routes(app) {
       db.prepare('INSERT INTO comment_reactions (comment_id,user_id,emoji,created_at) VALUES (?,?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET emoji=excluded.emoji, created_at=excluded.created_at').run(c.id, me.id, emoji, nowIso());
       // bildirim: kendi yorumuna yok; ayni kisi+yorum icin yalnizca ilk tepkide (emoji degistirince / kaldirip tekrar basinca yeniden bildirilmez)
       if (c.user_id !== me.id && db.prepare('INSERT OR IGNORE INTO comment_reaction_notified (comment_id,user_id) VALUES (?,?)').run(c.id, me.id).changes) {
-        notify(db, c.user_id, { kind: 'comment_reaction', title: `${me.display_name}, yorumuna ${emoji} tepkisi verdi`, body: c.body.slice(0, 140), link: { type: 'entry', id: c.entry_id } });
+        notify(db, c.user_id, { from: me.id, kind: 'comment_reaction', title: `${me.display_name}, yorumuna ${emoji} tepkisi verdi`, body: c.body.slice(0, 140), link: { type: 'entry', id: c.entry_id } });
       }
     }
     return { comment_id: c.id, ...reactionsOf(c.id, me.id) };
@@ -142,7 +144,7 @@ export default async function routes(app) {
     if (e.user_id === me.id) throw bad('Kendi kaydiniza soru soramazsiniz');
     const question = str((req.body || {}).question, { field: 'question', required: true, max: 1000 });
     const info = db.prepare('INSERT INTO questions (entry_id,asker_id,question,created_at) VALUES (?,?,?,?)').run(e.id, me.id, question, nowIso());
-    notify(db, e.user_id, { kind: 'question_asked', title: `${me.display_name}, "${entryTitle(e)}" hakkinda soru sordu`, body: question.slice(0, 140), link: { type: 'entry', id: e.id } });
+    notify(db, e.user_id, { from: me.id, kind: 'question_asked', title: `${me.display_name}, "${entryTitle(e)}" hakkinda soru sordu`, body: question.slice(0, 140), link: { type: 'entry', id: e.id } });
     reply.code(201);
     return { question: questionOut(db.prepare('SELECT * FROM questions WHERE id=?').get(info.lastInsertRowid)) };
   });
@@ -156,7 +158,7 @@ export default async function routes(app) {
     const first = !q.answer;
     db.prepare('UPDATE questions SET answer=?, answered_at=? WHERE id=?').run(answer, nowIso(), q.id);
     if (first && q.asker_id !== me.id) {
-      notify(db, q.asker_id, { kind: 'question_answered', title: `${me.display_name}, "${entryTitle(e)}" hakkindaki sorunuzu cevapladi`, body: answer.slice(0, 140), link: { type: 'entry', id: e.id } });
+      notify(db, q.asker_id, { from: me.id, kind: 'question_answered', title: `${me.display_name}, "${entryTitle(e)}" hakkindaki sorunuzu cevapladi`, body: answer.slice(0, 140), link: { type: 'entry', id: e.id } });
     }
     return { question: questionOut(db.prepare('SELECT * FROM questions WHERE id=?').get(q.id)) };
   });

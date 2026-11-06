@@ -1,5 +1,6 @@
 import { addDays, diffDays, nowIso, round1, todayStr, userToday, publicUser, bad, err } from '../util.js';
 import { catalogOut } from './catalog.js';
+import { viewerGroups, commentVisibleSql, ratingVisibleSql } from '../groups.js';
 import { editionBrief, getEdition } from './editions.js';
 import { seriesExtras } from './seasons.js';
 
@@ -71,7 +72,7 @@ export function entryAvg(db, e, today = userToday(db, e.user_id)) {
   return { avg: round1(m.pagesRead / m.spanDays), source: m.remainder > 0.5 || m.hasEst ? 'estimated' : 'logs' };
 }
 
-export function entryOut(db, e, { withCatalog = true, withUser = true } = {}) {
+export function entryOut(db, e, { withCatalog = true, withUser = true, viewer = null } = {}) {
   const out = {
     id: e.id, user_id: e.user_id, catalog_id: e.catalog_id, type: e.type, status: e.status,
     start_date: e.start_date, end_date: e.end_date, total_pages: e.total_pages, current_page: e.current_page,
@@ -85,6 +86,18 @@ export function entryOut(db, e, { withCatalog = true, withUser = true } = {}) {
     const a = entryAvg(db, e);
     out.avg_pages_per_day = a.avg;
     out.avg_source = a.source;
+  }
+  // Tebrikler: bakan kisi icin sayi + 'tebrik ettim mi'; kayit sahibi bakiyorsa kimlerden aldigi da
+  if (viewer != null && e.status === 'bitti') {
+    const rows = db.prepare('SELECT u.id,u.display_name,u.avatar,u.color,c.sender_id,c.created_at FROM congrats c JOIN users u ON u.id=c.sender_id WHERE c.entry_id=? ORDER BY c.created_at').all(e.id);
+    out.congrats_count = rows.length;
+    out.i_congratulated = rows.some((r) => r.sender_id === viewer);
+    if (viewer === e.user_id) out.congrats_from = rows.map((r) => ({ ...publicUser({ id: r.id, display_name: r.display_name, avatar: r.avatar, color: r.color }), at: r.created_at }));
+  }
+  if (viewer != null && e.type === 'book') { // kartlarda: bu kayda yazilan yorum ve kitaba verilen puan adedi (bakanin gorebildigi kadar)
+    const gs = viewerGroups(db, viewer, null);
+    out.comment_total = db.prepare(`SELECT COUNT(*) c FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(viewer, gs)}`).get(e.id).c;
+    out.rating_total = db.prepare(`SELECT COUNT(DISTINCT r.user_id) c FROM book_ratings r WHERE r.catalog_id=? AND ${ratingVisibleSql(viewer, gs, 'r')}`).get(e.catalog_id).c;
   }
   if (withCatalog) {
     out.catalog = catalogOut(db.prepare('SELECT * FROM catalog WHERE id=?').get(e.catalog_id));

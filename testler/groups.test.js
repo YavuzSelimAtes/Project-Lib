@@ -1,4 +1,4 @@
-// Cok gruplu yapi: kayit, grup, katilim, gorunurluk, ayrilma. Calisan test backend'i gerekir (node testler/start-backend.js --fresh)
+﻿// Cok gruplu yapi: kayit, grup, katilim, gorunurluk, ayrilma. Calisan test backend'i gerekir (node testler/start-backend.js --fresh)
 const B = 'http://localhost:4100';
 const mk = () => { let ck = ''; return async (m, p, body) => {
   const r = await fetch(B + p, { method: m, headers: { 'content-type': 'application/json', cookie: ck }, body: body ? JSON.stringify(body) : undefined });
@@ -34,8 +34,13 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await b('DELETE', `/api/groups/${gid}/members/1`); t('uye cikaramaz', r.s === 404 || r.s === 403, r);
   const mid = (await c('GET', '/api/auth/me')).j.user.id;
   r = await ao('DELETE', `/api/groups/${gid}/members/${mid}`); t('owner cikarir', r.s === 200, r);
-  r = await a('POST', '/api/groups', { name: 'Is' }); t('ikinci grup', r.s === 201, r); const g2 = r.j.group.id;
-  const ao2 = mk(); await ao2('POST', '/api/auth/login', { username: 'ayse', password: 'secret1' }); await ao2('POST', '/api/auth/switch', { user_id: r.j.manager_id });
+  r = await a('POST', '/api/groups', { name: 'Is' }); t('ikinci grup acilamaz (hesap basina 1)', r.s === 409, r);
+  // kalan senaryolar icin 2. grup dogrudan DB'ye eklenir (ayni yonetici hesap sahip, ayse uye)
+  const mgrId = (await a('GET', '/api/groups')).j.groups[0].manager.id; const aid = (await a('GET', '/api/auth/me')).j.user.id;
+  const sdb = new DatabaseSync(require('node:path').join(__dirname, 'data', 'test.db')); const nw = new Date().toISOString();
+  const g2 = Number(sdb.prepare("INSERT INTO groups (owner_id,invite_token,name,created_at) VALUES (?,?,'Is',?)").run(mgrId, require('node:crypto').randomBytes(12).toString('hex'), nw).lastInsertRowid);
+  sdb.prepare("INSERT INTO group_members (user_id,group_id,role,joined_at) VALUES (?,?,'owner',?)").run(mgrId, g2, nw); sdb.prepare("INSERT INTO group_members (user_id,group_id,role,joined_at) VALUES (?,?,'member',?)").run(aid, g2, nw); sdb.close();
+  const ao2 = mk(); await ao2('POST', '/api/auth/login', { username: 'ayse', password: 'secret1' }); await ao2('POST', '/api/auth/switch', { user_id: mgrId });
   r = await a('POST', '/api/entries', { catalog_id: catId, status: 'devam' }); t('kayit olustu', r.s === 201, r); const eid = r.j.entry.id;
   r = await a('GET', `/api/entries/${eid}/groups`); t('varsayilan: tum gruplar gorunur', r.s === 200 && r.j.groups.length === 2 && r.j.groups.every((g) => g.visible), r);
   r = await a('PUT', `/api/entries/${eid}/groups`, { group_ids: [g2] }); t('sadece Is', r.s === 200 && r.j.groups.filter((g) => g.visible).map((g) => g.id).join() === String(g2), r);

@@ -2,6 +2,7 @@ import { requireUser, requireGroupAdmin } from '../auth.js';
 import { err, bad, int, oneOf, todayStr, userToday, publicUser } from '../util.js';
 import { norm } from '../services/sources.js';
 import { notify } from '../services/notify.js';
+import { postRating, dropRatingPost } from '../services/posts.js';
 import { catalogOut } from '../services/catalog.js';
 import { getEntry } from '../services/entries.js';
 import { GENRES, SCALE, ratingSummary, canRate, saveRatings } from '../services/ratings.js';
@@ -41,7 +42,8 @@ export default async function routes(app) {
     const had = !!db.prepare('SELECT 1 FROM book_ratings WHERE user_id=? AND catalog_id=? LIMIT 1').get(me.id, cat.id);
     const allowed = ratingAllowedGroups(db, me.id, cat.id);
     const groups = spec ? parseVisibility(b, allowed) : (had ? null : allowed);
-    tx(db, () => { saveRatings(db, me.id, cat.id, b.genre, b.scores); if (groups) setRatingGroups(db, me.id, cat.id, groups); });
+    tx(db, () => { saveRatings(db, me.id, cat.id, b.genre, b.scores, b.comments); if (groups) setRatingGroups(db, me.id, cat.id, groups); });
+    postRating(db, me.id, cat.id);
     return ratingOut(me.id, cat);
   });
   // Puanin gorunurlugunu sonradan degistir: { group_ids: [..] } | { all: true } | { none: true }
@@ -59,6 +61,7 @@ export default async function routes(app) {
     const cat = needBook(Number(req.params.id));
     db.prepare('DELETE FROM book_ratings WHERE user_id=? AND catalog_id=?').run(me.id, cat.id);
     setRatingGroups(db, me.id, cat.id, []);
+    dropRatingPost(db, me.id, cat.id);
     return ratingOut(me.id, cat);
   });
 
@@ -73,7 +76,7 @@ export default async function routes(app) {
     const count = () => db.prepare('SELECT COUNT(*) c FROM congrats WHERE entry_id=?').get(e.id).c;
     if (!ins.changes) return { ok: true, already_sent: true, message: 'Zaten tebrik gonderdin', congrats_count: count(), i_congratulated: true };
     const title = db.prepare('SELECT title FROM catalog WHERE id=?').get(e.catalog_id)?.title;
-    notify(db, e.user_id, { kind: 'congrats', title: `${me.display_name} ${WHAT[e.type]} için seni tebrik etti 🎉`, body: title, link: { type: 'entry', id: e.id } });
+    notify(db, e.user_id, { from: me.id, kind: 'congrats', title: `${me.display_name} ${WHAT[e.type]} için seni tebrik etti 🎉`, body: title, link: { type: 'entry', id: e.id } });
     return { ok: true, already_sent: false, congrats_count: count(), i_congratulated: true };
   });
 
@@ -171,7 +174,7 @@ export default async function routes(app) {
     if (!db.prepare("INSERT OR IGNORE INTO push_log (user_id,kind,day) VALUES (?,'nudge',?)").run(u.id, today).changes) {
       throw err(409, 'Bu kişiye bugün zaten hatırlatma gönderildi', undefined, 'ALREADY_SENT');
     }
-    notify(db, u.id, { kind: 'nudge', title: NUDGE_TEXT, link: null });
+    notify(db, u.id, { from: me.id, kind: 'nudge', title: NUDGE_TEXT, link: null });
     return { ok: true, sent: true };
   });
 }

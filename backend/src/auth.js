@@ -49,9 +49,9 @@ export function requireAdmin(req) {
   if (req.user.role !== 'admin') throw err(403, 'Bu islem icin yonetici yetkisi gerekir');
   return req.user;
 }
-// Katalog ekleme/duzenleme: platform yoneticisi ya da herhangi bir grubun sahibi (db: req.server.db)
+// Katalog ekleme/duzenleme/silme ve istek onayi: SADECE platform yoneticisi (admin). Grup yonetici hesaplari ve grup sahipleri yapamaz
 export function requireCatalogEditor(req) {
   requireUser(req);
-  if (req.user.role !== 'admin' && !isGroupOwner(req.server.db, req.user.id)) throw err(403, 'Bu islem icin yonetici ya da grup sahibi olmaniz gerekir');
+  if (req.user.role !== 'admin') throw err(403, 'Katalog islemleri sadece yonetici icindir');
   return req.user;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api.js';
+import StoryComments from './StoryComments.jsx';
 import { ErrorBox, Skeleton, useAsync } from './ui.jsx';
 import { STORY_COLORS } from './StoryCard.jsx';
 
@@ -107,6 +108,32 @@ function useSpread() {
 
 // 3B kitap: kapagi acilir, sayfalar cevrilir. Yazarsa duzenleme ekranina da gecer.
 // idx = sag yapragin sayfa numarasi (iki yaprakli modda hep cift: 0 = sol bos / sag ilk sayfa)
+// Bolum cubugu: okuyan sayisi (kucuk), okudum isareti ve bolum puani
+function ChapterBar({ storyId, chapter, mine }) {
+  const [st, setSt] = useState(null);
+  useEffect(() => { setSt(null); }, [chapter?.id]);
+  if (!chapter) return null;
+  const v = { read_count: chapter.read_count, my_read: chapter.my_read, rating_avg: chapter.rating_avg, rating_count: chapter.rating_count, my_rating: chapter.my_rating, ...(st || {}) };
+  const act = async (fn) => { try { setSt(await fn()); } catch { /* onemsiz */ } };
+  return (
+    <div className="sr-chbar">
+      <span className="sr-chn">{chapter.n}. {chapter.title}</span>
+      <span title="Bu bölümü okuyan kişi sayısı">👁 {v.read_count}</span>
+      {!mine && (
+        <>
+          <button className={'sr-chb' + (v.my_read ? ' on' : '')} onClick={() => act(() => api.chapterRead(storyId, chapter.id, !v.my_read))}>{v.my_read ? '✔ Okudum' : 'Okudum'}</button>
+          <span className="sr-stars" role="group" aria-label="Bölüm puanı">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} className={n <= (v.my_rating || 0) ? 'on' : ''} aria-label={n + ' yıldız'} onClick={() => act(() => api.chapterRating(storyId, chapter.id, v.my_rating === n ? null : n))}>★</button>
+            ))}
+          </span>
+        </>
+      )}
+      {v.rating_count > 0 && <span title="Bölüm puan ortalaması">⭐ {v.rating_avg} ({v.rating_count})</span>}
+    </div>
+  );
+}
+
 export default function StoryReader({ id, startEditing, onClose, onChanged }) {
   const d = useAsync(() => api.story(id), [id]);
   const spread = useSpread();
@@ -116,6 +143,7 @@ export default function StoryReader({ id, startEditing, onClose, onChanged }) {
   const [idx, setIdx] = useState(0);
   const [turn, setTurn] = useState(null); // { dir: 'next'|'prev', to }
   const [toc, setToc] = useState(false);
+  const [cmt, setCmt] = useState(false);
   const [fs, setFs] = useState(getFs);
   const measure = useRef(null);
   const resumed = useRef(false);
@@ -236,10 +264,15 @@ export default function StoryReader({ id, startEditing, onClose, onChanged }) {
             <button className="sr-btn" onClick={() => setToc((v) => !v)} aria-label="Bölümler" aria-expanded={toc}>☰</button>
           </>
         )}
+        {story && !editing && <button className="sr-btn" onClick={() => setCmt((v) => !v)} aria-label="Yorumlar" aria-expanded={cmt}>💬</button>}
         {story?.mine && (
           <button className="sr-btn" onClick={() => { setEditing((v) => !v); setToc(false); }} aria-label={editing ? 'Okumaya dön' : 'Düzenle'}>{editing ? '📖' : '✎'}</button>
         )}
       </div>
+
+      {story && !editing && phase === 'open' && cur && <ChapterBar storyId={story.id} chapter={(chapters || []).find((c) => c.id === cur.chapterId)} mine={story.mine} />}
+
+      {cmt && story && <StoryComments storyId={story.id} onClose={() => setCmt(false)} />}
 
       {d.loading && !d.data && <div style={{ padding: 20 }}><Skeleton h={120} n={2} /></div>}
       {d.error && <div style={{ padding: 20 }}><ErrorBox error={d.error} onRetry={d.reload} /></div>}

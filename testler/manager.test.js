@@ -1,4 +1,4 @@
-// Grup yonetici hesabi: otomatik olusur, sifreyle girilmez, okumaz, gecisle yonetir; mevcut gruplar icin tek seferlik migrate.
+﻿// Grup yonetici hesabi: otomatik olusur, sifreyle girilmez, okumaz, gecisle yonetir; mevcut gruplar icin tek seferlik migrate.
 // Calisan test backend'i gerekir (node testler/start-backend.js --fresh); migrate bolumu kendi gecici sunucusunu (4101) acar
 const B = 'http://localhost:4100';
 const mk = (base = B) => { let ck = ''; return async (m, p, body) => {
@@ -29,9 +29,11 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await a('GET', '/api/admin/invite'); t('davet linki (admin/invite)', r.s === 200 && r.j.token === tok, r);
   r = await a('PUT', '/api/admin/group-name', { name: 'Yeni Ad' }); t('grup adi (admin/group-name)', r.s === 200 && r.j.group_name === 'Yeni Ad', r);
   r = await a('PUT', `/api/groups/${gid}/name`, { name: 'Ev' }); t('grup adi (groups)', r.s === 200, r);
-  r = await a('GET', '/api/admin/requests'); t('istekler', r.s === 200, r);
-  r = await a('GET', '/api/admin/catalog'); t('katalog listesi', r.s === 200, r);
-  r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Yonetici Kitabi', pages: 50 }); t('katalog ekler', r.s === 201, r); const cat = r.j.item.id;
+  r = await a('GET', '/api/admin/requests'); t('istekler: yonetici hesap goremez (sadece admin)', r.s === 403, r);
+  r = await a('GET', '/api/admin/catalog'); t('katalog listesi: yonetici hesap goremez', r.s === 403, r);
+  r = await a('POST', '/api/admin/catalog', { type: 'book', title: 'Yonetici Kitabi', pages: 50 }); t('katalog ekleyemez (sadece admin)', r.s === 403, r);
+  const { DatabaseSync: DS0 } = require('node:sqlite'); const cdb0 = new DS0(require('node:path').join(__dirname, 'data', 'test.db'));
+  const cat = Number(cdb0.prepare("INSERT INTO catalog (type,title,pages,norm,created_at) VALUES ('book','Yonetici Kitabi',50,'yonetici kitabi',?)").run(new Date().toISOString()).lastInsertRowid); cdb0.close();
   // okuma durumu: yonetici yalniz kendi grubunun uyelerini gorur ve hatirlatir
   r = await a('GET', '/api/admin/reading-status?all=1'); const rs = r.j && r.j.users;
   t('okuma durumu: yalniz kendi grubu', r.s === 200 && rs.length === 1 && rs[0].user.display_name === 'mgra', r);
@@ -58,10 +60,10 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await b('GET', `/api/groups/${gid}`); t('uye sayisi 2', r.j.group.member_count === 2 && r.j.group.members.length === 2, r);
   r = await b('GET', '/api/auth/linked'); t('b yonetici goremez (bagli degil)', r.j.accounts.length === 0, r);
   // ayrilinca baglanti duser; baska grubun yoneticisine baglanti kalir
-  r = await a2('POST', '/api/groups', { name: 'Diger' }); const mid2 = r.j.manager_id;
-  r = await a2('GET', '/api/auth/linked'); t('ayrilmadan once iki yonetici bagli', r.j.accounts.filter((x) => x.is_manager).length === 2, r);
+  r = await a2('POST', '/api/groups', { name: 'Diger' }); t('ikinci grup acilamaz (hesap basina 1)', r.s === 409, r);
+  r = await a2('GET', '/api/auth/linked'); t('ayrilmadan once yonetici bagli', r.j.accounts.filter((x) => x.is_manager).length === 1, r);
   r = await a2('POST', `/api/groups/${gid}/leave`); t('gruptan ayrilir', r.s === 200, r);
-  r = await a2('GET', '/api/auth/linked'); t('ayrilinca yonetici baglantisi duser, digeri kalir', r.j.accounts.filter((x) => x.is_manager).map((x) => x.id).join() === String(mid2), r);
+  r = await a2('GET', '/api/auth/linked'); t('ayrilinca yonetici baglantisi duser', r.j.accounts.filter((x) => x.is_manager).length === 0, r);
   r = await a2('POST', '/api/auth/switch', { user_id: mid }); t('eski yoneticiye gecemez 403', r.s === 403, r);
 
   // ---- migrate: eski veri (sahip = kisisel hesap) -> yonetici hesap, bir kez ----

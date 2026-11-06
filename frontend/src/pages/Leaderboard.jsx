@@ -4,6 +4,7 @@ import { useGroup } from '../auth.js';
 import { Avatar, CountUp, Empty, PageHead, ErrorBox, Skeleton, fmtDate, useAsync } from '../ui.jsx';
 
 const BOARDS = [
+  { key: 'today', label: '📅 Bugün', short: 'Bugün', unit: 'sayfa', note: 'Bugün kim ne yaptı? Gece 00:00’da sıfırlanır', dec: 0, noPeriod: true },
   { key: 'record', label: '🏆 Rekor', short: 'Rekor', unit: 'sayfa', note: 'Bir günde en çok okunan sayfa', dec: 0 },
   { key: 'average', label: '📈 Günlük ortalama', short: 'Günlük', unit: 'sayfa/gün', note: 'Günde ortalama okunan sayfa', dec: 1 },
   { key: 'finished', label: '📕 En çok bitiren', short: 'Bitiren', unit: 'kitap', note: 'Bitirilen kitap sayısı', dec: 0 },
@@ -66,13 +67,46 @@ function StreakBoard({ kind, title, note }) {
   );
 }
 
+// Bugun: her satir 5 sutun (sira, kisi, sayfa, dizi/film, ne yaptigi). Sira: sayfa, esitlikte dizi izleyen once.
+function TodayBoard() {
+  const gid = useGroup();
+  const { data, error, loading, reload } = useAsync(() => api.today(gid), [gid]);
+  const rows = data?.rows || [];
+  return (
+    <>
+      {loading && !data && <Skeleton h={56} n={3} />}
+      <ErrorBox error={error} onRetry={reload} />
+      {data && rows.length === 0 && <Empty icon="🌙" title="Bugün henüz kimse bir şey yapmadı">Sayfa okuyunca ya da dizi/film izleyince burada görünür.</Empty>}
+      {rows.length > 0 && (
+        <div className="card td">
+          <div className="td-row td-h">
+            <span>#</span><span>Kim</span><span>📖 Sayfa</span><span>📺 Dizi/Film</span><span>Ne yaptı</span>
+          </div>
+          {rows.map((r) => (
+            <div className="td-row" key={r.user.id}>
+              <span className="rank">{MEDAL[r.rank - 1] || r.rank}</span>
+              <span className="td-who"><Avatar user={r.user} size="sm" /><b>{r.user.display_name}</b></span>
+              <span className="td-n">{r.pages || '–'}</span>
+              <span className="td-n">{[r.episodes ? `${r.episodes} böl.` : null, r.series_done ? `${r.series_done} dizi bitti` : null, r.movies ? `${r.movies} film` : null].filter(Boolean).join(' · ') || '–'}</span>
+              <span className="td-did small" title={[...r.did, ...r.finished.map((t) => t + ' ✔')].join(', ')}>
+                {r.finished.length > 0 && <b>🎉 {r.finished.join(', ')} · </b>}{r.did.join(', ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Leaderboard() {
   const gid = useGroup();
-  const [kind, setKind] = useState('record');
+  const [kind, setKind] = useState('today');
   const [period, setPeriod] = useState('all');
   const board = BOARDS.find((b) => b.key === kind);
   const isStreak = kind === 'streak';
-  const { data, error, loading, reload } = useAsync(() => (isStreak ? Promise.resolve(null) : api.leaderboard(kind, period, gid)), [kind, period, gid]);
+  const isToday = kind === 'today';
+  const { data, error, loading, reload } = useAsync(() => (isStreak || isToday ? Promise.resolve(null) : api.leaderboard(kind, period, gid)), [kind, period, gid]);
   const list = data?.entries || [];
   const top = list.filter((e) => e.rank <= 3).slice(0, 3);
   const rest = list.filter((e) => !top.includes(e));
@@ -104,20 +138,21 @@ export default function Leaderboard() {
         )}
       </div>
 
+      {isToday && <TodayBoard />}
       {isStreak && (
         <>
           <StreakBoard kind="streak" title="🔥 Güncel seri" note="Şu an kesintisiz sürenler" />
           <StreakBoard kind="best_streak" title="🏅 En uzun seri" note="Bugüne kadarki en uzun kesintisiz seri" />
         </>
       )}
-      {!isStreak && loading && <Skeleton h={90} n={3} />}
-      {!isStreak && <ErrorBox error={error} onRetry={reload} />}
-      {!isStreak && !loading && !error && list.length === 0 && (
+      {!isStreak && !isToday && loading && <Skeleton h={90} n={3} />}
+      {!isStreak && !isToday && <ErrorBox error={error} onRetry={reload} />}
+      {!isStreak && !isToday && !loading && !error && list.length === 0 && (
         <Empty icon="🏁" title="Henüz kimse listede değil">
           {kind === 'streak' ? 'Ardışık günlerde kitap okudukça burası dolacak.' : 'Sayfa ilerlemeni kaydettikçe burası dolacak.'}
         </Empty>
       )}
-      {!isStreak && !loading && list.length > 0 && (
+      {!isStreak && !isToday && !loading && list.length > 0 && (
         <>
           <div className={`podium n${podium.length}`}>
             {podium.map((e) => (

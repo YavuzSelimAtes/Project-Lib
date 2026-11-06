@@ -14,16 +14,16 @@ export default function Admin() {
   const { user } = useAuth();
   const platform = user.role === 'admin'; // platform yöneticisi: kullanıcılar + okuma durumu da
   const ownedAll = (user.groups || []).filter((g) => g.role === 'owner');
-  const { tab = 'inbox' } = useParams();
-  const inbox = useAsync(() => api.adminRequests(), []);
+  const { tab: tabParam } = useParams();
+  const tab = tabParam || (user.is_manager ? 'link' : 'inbox');
+  const inbox = useAsync(() => (user.is_manager ? Promise.resolve(null) : api.adminRequests()), []);
   const open = inbox.data?.counts?.acik ?? 0;
   const mgr = !!user.is_manager; // grup yonetici hesabi: sade grup ayarlari
-  const tabs = mgr ? [['inbox', 'İstekler'], ['link', 'Grup'], ['reading', 'Okuma durumu'], ['catalog', 'Katalog ekle'], ['list', 'Katalog listesi']] : [
+  const tabs = mgr ? [['link', 'Grup'], ['reading', 'Okuma durumu']] : [
     ['inbox', `Gelen kutusu${open > 0 ? ` (${open})` : ''}`],
     ...(ownedAll.length ? [['link', 'Katılım linki']] : []),
     ...(platform ? [['users', 'Kullanıcılar'], ['reading', 'Okuma durumu'], ['feedback', 'Geri bildirim']] : []),
-    ['catalog', 'Katalog ekle'],
-    ['list', 'Katalog listesi'],
+    ...(platform ? [['catalog', 'Katalog ekle'], ['list', 'Katalog listesi']] : []),
   ];
   if (!tabs.some(([k]) => k === tab)) return <Navigate to="/yonetim" replace />;
   const MGR_TITLE = { inbox: 'İstekler', link: 'Grup', reading: 'Okuma durumu', catalog: 'Katalog', list: 'Katalog' };
@@ -33,8 +33,8 @@ export default function Admin() {
         title={mgr ? MGR_TITLE[tab] : 'Yönetim'}
         sub={mgr ? (user.managed_group_name ? `${user.managed_group_name} · yönetici hesabı` : 'Yönetici hesabı') : undefined}
       />
-      {(!mgr || tab === 'catalog' || tab === 'list') && (
-        <RouteTabs tabs={mgr ? tabs.slice(3) : tabs} current={tab} base="/yonetim" label="Yönetim bölümleri" />
+      {!mgr && (
+        <RouteTabs tabs={tabs} current={tab} base="/yonetim" label="Yönetim bölümleri" />
       )}
       {tab === 'inbox' && <Inbox state={inbox} />}
       {tab === 'link' && mgr && user.managed_group_id && (
@@ -49,8 +49,8 @@ export default function Admin() {
       {tab === 'users' && platform && <Users />}
       {tab === 'reading' && (platform || mgr) && <ReadingStatus />}
       {tab === 'feedback' && platform && <FeedbackList />}
-      {tab === 'catalog' && <CatalogForm onDone={inbox.reload} />}
-      {tab === 'list' && <CatalogList />}
+      {tab === 'catalog' && platform && <CatalogForm onDone={inbox.reload} />}
+      {tab === 'list' && platform && <CatalogList />}
     </>
   );
 }

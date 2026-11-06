@@ -48,7 +48,7 @@ export default function Groups() {
   return (
     <>
       <PageHead title="Gruplar" sub="Katıldığın gruplar. Kayıtların hangi gruplarda görüneceğini Hesabım’dan seçersin.">
-        <Link className="btn" to="/grup-olustur" style={{ textDecoration: 'none' }}>+ Grup oluştur</Link>
+        {!groups.some((g) => g.manager?.linked) && <Link className="btn" to="/grup-olustur" style={{ textDecoration: 'none' }}>+ Grup oluştur</Link>}
       </PageHead>
       {list.loading && !list.data && <Skeleton h={80} n={2} />}
       <ErrorBox error={list.error} onRetry={list.reload} />

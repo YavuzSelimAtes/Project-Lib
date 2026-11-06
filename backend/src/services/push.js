@@ -75,7 +75,8 @@ function familyTargets(db, e) {
   return db.prepare(`SELECT u.id, GROUP_CONCAT(eg.group_id) gids FROM users u JOIN group_members m ON m.user_id=u.id JOIN entry_groups eg ON eg.group_id=m.group_id AND eg.entry_id=?
     LEFT JOIN push_prefs p ON p.user_id=u.id
     WHERE u.active=1 AND u.id<>? AND COALESCE(p.family_updates,1)=1 AND EXISTS (SELECT 1 FROM push_subscriptions s WHERE s.user_id=u.id) GROUP BY u.id`).all(e.id, e.user_id)
-    .map((r) => ({ id: r.id, gids: String(r.gids).split(',').map(Number) }));
+    .map((r) => { const mu = new Set(db.prepare('SELECT group_id FROM group_mutes WHERE user_id=?').all(r.id).map((x) => x.group_id)); return { id: r.id, gids: String(r.gids).split(',').map(Number).filter((g) => !mu.has(g)) }; })
+    .filter((t) => t.gids.length);
 }
 const nameOf = (db, id) => db.prepare('SELECT display_name FROM users WHERE id=?').get(id)?.display_name || 'Biri';
 const titleOf = (db, e) => db.prepare('SELECT title FROM catalog WHERE id=?').get(e.catalog_id)?.title || 'bir kayıt';
