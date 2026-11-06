@@ -955,3 +955,6 @@ i[data-style='leather'] { background-image: radial-gradient(rgba(0,0,0,.22) 1px,
 .sr-chb.on { background: rgba(255, 255, 255, .18); }
 .sr-stars button { border: 0; background: none; color: rgba(255, 255, 255, .35); font-size: 1.15rem; cursor: pointer; padding: 0 1px; }
 .sr-stars button.on { color: #f1c40f; }
+
+.cal-total { margin: 10px 0 0; font-size: 1rem; }
+.cal-total b:last-child { color: var(--accent, #d9673a); }
