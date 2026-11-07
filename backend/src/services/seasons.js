@@ -1,6 +1,6 @@
 // Dizi sezon/bolum bilgisi (TVMaze): series_seasons tablosu + dogrulama + istatistik yardimcilari
 import { tx } from '../db.js';
-import { bad, userToday } from '../util.js';
+import { bad } from '../util.js';
 import { postRead } from './posts.js';
 import { fetchShowSeasons } from './sources.js';
 
@@ -144,6 +144,6 @@ export function logSeriesProgress(db, before, after, date) {
     const dm = Math.round(b.minutes - a.minutes);
     if (de === 0 && dm === 0) return;
     db.prepare('INSERT INTO series_progress (entry_id,user_id,date,episodes,minutes) VALUES (?,?,?,?,?)').run(after.id, after.user_id, date, de, dm);
-    if (de > 0 && date === userToday(db, after.user_id)) postRead(db, after, { episodes: de });
+    if (de > 0) postRead(db, after, { episodes: de, date });
   } catch { /* gunluk opsiyonel */ }
 }

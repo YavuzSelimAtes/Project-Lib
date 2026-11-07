@@ -120,7 +120,7 @@ export const api = {
   changePassword: (old_password, new_password) => request('POST', '/auth/change-password', { old_password, new_password }),
 
   feed: (group) => request('GET', '/feed' + qs({ group })),
-  today: (group) => request('GET', `/today${qs({ group })}`),
+  today: (group, date) => request('GET', `/today${qs({ group, date })}`),
   seriesDays: (id) => request('GET', `/entries/${id}/series-days`),
   addSeriesDay: (id, date, episodes) => request('POST', `/entries/${id}/series-days`, { date, episodes }),
   leaderboard: (kind, period, group) => request('GET', `/leaderboards/${kind}${qs({ period, group })}`),

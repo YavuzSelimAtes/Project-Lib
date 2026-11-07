@@ -4,6 +4,7 @@ export const WHATS_NEW = {
   days: 3,
   title: 'Neler yeni?',
   items: [
+    '🕘 Geçmiş tarihli girişler artık Gündem’e düşüyor (“6 Kasım kaydına 25 sayfa ekledim”). Liderlik › Bugün’de oklarla ya da takvimle önceki günlere bakabilirsin.',
     '📰 Gündem: Ana Sayfa’da yeni Gündem sekmesi var; grubundakilerin son hareketleri (okuma, izleme, yorum, puan) en yeni üstte akar. Beğenebilir ve yorum yazabilirsin. Kart görünümü Profiller sekmesinde.',
     '📚 Hikaye bölümleri: Her bölümü “Okudum” diye işaretleyebilir ve puanlayabilirsin; kaç kişinin okuduğu küçük olarak görünür.',
     '🔢 Kitap kartlarında artık kaç yorum ve kaç puan olduğu yazıyor.',

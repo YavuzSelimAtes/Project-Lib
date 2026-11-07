@@ -279,7 +279,7 @@ export default async function routes(app) {
     if (!e.total_pages) throw bad('Bu kitabin toplam sayfa sayisi yok. Once toplam sayfayi girin (PATCH total_pages)', { total_pages: 'gerekli' });
     const r = tx(db, () => applyProgress(db, getEntry(db, e.id), cp, d));
     const entry = getEntry(db, e.id);
-    if (d === today && r.delta > 0) postRead(db, entry, { pages: r.delta });
+    if (r.delta > 0) postRead(db, entry, { pages: r.delta, date: d });
     if (d === today) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
       if (r.finished) { familyFinishedPush(db, entry); familyFinishedNotify(db, entry); postEvent(db, entry, 'finished'); }
       else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
@@ -324,7 +324,15 @@ export default async function routes(app) {
       list = b.days.map((d) => ({ date: vdate(d?.date, { field: 'date', required: true }), pages: int(d?.pages, { min: 0, max: 20000, field: 'pages', required: true }) }));
     }
     list.sort((a, c) => a.date.localeCompare(c.date));
-    tx(db, () => { for (const d of list) setDayPages(db, getEntry(db, id), d.date, d.pages, { add: b.add === true, keepCurrent: b.keep_current === true }); });
+    const dayPages = (date) => db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE entry_id=? AND date=?').get(id, date).s;
+    tx(db, () => {
+      for (const d of list) {
+        const before = dayPages(d.date);
+        setDayPages(db, getEntry(db, id), d.date, d.pages, { add: b.add === true, keepCurrent: b.keep_current === true });
+        const diff = dayPages(d.date) - before;
+        if (diff > 0) postRead(db, getEntry(db, id), { pages: diff, date: d.date }); // gecmis gunler tek kartta toplanir
+      }
+    });
     const entry = entryOut(db, getEntry(db, id));
     return { entry, applied: list.length, open_days: openDays(db, getEntry(db, id)) };
   });
@@ -391,7 +399,7 @@ export default async function routes(app) {
     db.prepare("UPDATE entries SET season=?, episode=?, status='devam', start_date=?, end_date=NULL, updated_at=? WHERE id=?").run(season, episode, startDate, nowIso(), e.id);
     db.prepare('INSERT INTO series_progress (entry_id,user_id,date,episodes,minutes) VALUES (?,?,?,?,?)').run(e.id, me.id, date, n, minutes);
     pinSeriesFinish(db, e.id);
-    if (date === today) postRead(db, getEntry(db, e.id), { episodes: n });
+    postRead(db, getEntry(db, e.id), { episodes: n, date });
     return { entry: entryOut(db, getEntry(db, e.id), { viewer: me.id }), added: n, date };
   });
 
