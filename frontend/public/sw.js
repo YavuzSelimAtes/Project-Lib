@@ -114,6 +114,7 @@ self.addEventListener('push', (e) => {
       icon: '/icon-192.png',
       badge: '/badge-96.png',
       tag: d.tag || undefined,
+      renotify: !!d.tag, // ayni etiketli bildirim gelince de ses/titresim ver
       data: { url: d.url || '/' },
     }),
   );

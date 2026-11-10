@@ -7,7 +7,7 @@ import { catalogOut } from '../services/catalog.js';
 import { getEntry } from '../services/entries.js';
 import { GENRES, SCALE, ratingSummary, canRate, saveRatings } from '../services/ratings.js';
 import { tx } from '../db.js';
-import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, ratingVisibleSql, ratingAllowedGroups, parseVisibility, setRatingGroups } from '../groups.js';
+import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, questionVisibleSql, ratingVisibleSql, ratingAllowedGroups, parseVisibility, setRatingGroups } from '../groups.js';
 
 const NUDGE_TEXT = 'Neden okumuyorsun? Bir sayfa bile olur 📖';
 
@@ -135,7 +135,7 @@ export default async function routes(app) {
     return {
       item: { ...libOut(row), my_status: db.prepare('SELECT status FROM entries WHERE user_id=? AND catalog_id=? ORDER BY id DESC LIMIT 1').get(me.id, id)?.status ?? null }, readers, rating: ratingOut(me.id, row, groupId),
       comment_count: db.prepare(`SELECT COUNT(*) c FROM comments c JOIN entries e ON e.id=c.entry_id WHERE e.catalog_id=? AND ${commentVisibleSql(me.id, gids)}`).get(id).c,
-      question_count: db.prepare(`SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis}`).get(id).c,
+      question_count: db.prepare(`SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis} AND ${questionVisibleSql(me.id, gids)}`).get(id).c,
     }; // yorumlar / sorular: GET /api/library/:id/comments ve /questions (social.js)
   });
 
