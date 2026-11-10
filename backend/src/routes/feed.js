@@ -1,5 +1,5 @@
 import { requireUser } from '../auth.js';
-import { userToday } from '../util.js';
+import { userToday, bad, date as vdate } from '../util.js';
 import { oneOf, todayStr, addDays, nowIso, publicUser, round1 } from '../util.js';
 import { entryAvg } from '../services/entries.js';
 import { leaderboard, streaksOf } from '../services/stats.js';
@@ -76,9 +76,14 @@ export default async function routes(app) {
     const vis = groupId ? ' AND EXISTS (SELECT 1 FROM entry_groups eg WHERE eg.entry_id=e.id AND eg.group_id=?)' : ' AND e.user_id<>0';
     const va = (uid) => (groupId ? [uid, groupId] : [uid]);
     const rows = [];
-    let day = todayStr();
+    // ?date=YYYY-AA-GG gecmis bir gunu gosterir (hepsi icin ayni takvim gunu); bos ya da bugun ise herkes kendi saat dilimindeki bugunu
+    const myToday = userToday(db, me.id);
+    const asked = vdate(req.query.date, { field: 'date' });
+    if (asked && asked > myToday) throw bad('Gelecek bir gun gosterilemez', { date: 'gelecek tarih' });
+    const fixed = asked && asked < myToday ? asked : null;
+    let day = fixed || myToday;
     for (const u of users) {
-      day = userToday(db, u.id);
+      if (!fixed) day = userToday(db, u.id);
       const logs = db.prepare(`SELECT e.id, c.title, SUM(l.pages_read) p FROM reading_logs l JOIN entries e ON e.id=l.entry_id JOIN catalog c ON c.id=e.catalog_id WHERE l.user_id=? AND l.date=?${vis.replace('e.user_id<>0', '1=1')} GROUP BY e.id HAVING p>0`).all(u.id, day, ...(groupId ? [groupId] : []));
       const eps = db.prepare(`SELECT e.id, c.title, SUM(s.episodes) n FROM series_progress s JOIN entries e ON e.id=s.entry_id JOIN catalog c ON c.id=e.catalog_id WHERE s.user_id=? AND s.date=?${vis.replace('e.user_id<>0', '1=1')} GROUP BY e.id HAVING n>0`).all(u.id, day, ...(groupId ? [groupId] : []));
       const done = db.prepare(`SELECT e.type, c.title FROM entries e JOIN catalog c ON c.id=e.catalog_id WHERE e.user_id=? AND e.status='bitti' AND e.end_date=?${vis.replace('e.user_id<>0', '1=1')}`).all(u.id, day, ...(groupId ? [groupId] : []));
@@ -98,7 +103,7 @@ export default async function routes(app) {
     }
     const sw = (r) => (r.episodes > 0 || r.series_done > 0 ? 1 : 0);
     rows.sort((a, b) => b.pages - a.pages || sw(b) - sw(a) || b.episodes - a.episodes || b.movies - a.movies || a.user.display_name.localeCompare(b.user.display_name, 'tr'));
-    return { date: day, rows: rows.map((r, i) => ({ rank: i + 1, ...r })) };
+    return { date: fixed || myToday, today: myToday, rows: rows.map((r, i) => ({ rank: i + 1, ...r })) };
   });
 
   for (const kind of ['record', 'average', 'finished', 'streak', 'best_streak']) {

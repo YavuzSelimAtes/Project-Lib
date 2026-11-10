@@ -4,12 +4,35 @@ import { Avatar, Cover, Empty, ErrorBox, Skeleton, timeAgo } from './ui.jsx';
 
 const when = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+const PAST_LIST_MAX = 4; // bundan fazla gecmis gun girildiyse gun gun listelenmez, tek toplam yazilir
+const dayName = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const opt = { day: 'numeric', month: 'long', timeZone: 'UTC' };
+  if (y !== new Date().getFullYear()) opt.year = 'numeric';
+  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('tr-TR', opt);
+};
+
+// Okuma / izleme: bugunku giris ("25 sayfa okudum") ve gecmis tarihli girisler ("6 Kasım kaydına 25 sayfa ekledim")
+function sayRead(p, d) {
+  const book = p.kind === 'read';
+  const unit = book ? 'sayfa' : 'bölüm';
+  const past = Object.entries(d.past || {}).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
+  const lines = [];
+  if (d.last > 0) lines.push(<span key="today" className="gd-line"><b className="gd-big">{d.last} {unit}</b> {d.times > 1 ? 'daha ' : ''}{book ? 'okudum' : 'izledim'}</span>);
+  if (past.length > PAST_LIST_MAX) {
+    lines.push(<span key="sum" className="gd-line">{book ? 'Kitap' : 'Dizi'} kaydına <b className="gd-big">{past.reduce((s, [, n]) => s + n, 0)} {unit}</b> ekledim</span>);
+  } else {
+    past.forEach(([day, n], i) => lines.push(<span key={day} className="gd-line">{dayName(day)} kaydına <b className="gd-big">{n} {unit}</b>{i === past.length - 1 ? ' ekledim' : ''}</span>));
+  }
+  return <>{lines} <span aria-hidden="true">{book ? '📖' : '📺'}</span></>;
+}
+
 // Paylasim metni birinci agizdan: kisi kendisi paylasmis gibi
 function say(p) {
   const d = p.data || {};
   switch (p.kind) {
-    case 'read': return <><b className="gd-big">{d.last} sayfa</b> {d.times > 1 ? 'daha ' : ''}okudum 📖</>;
-    case 'watch': return <><b className="gd-big">{d.last} bölüm</b> {d.times > 1 ? 'daha ' : ''}izledim 📺</>;
+    case 'read':
+    case 'watch': return sayRead(p, d);
     case 'started': return p.catalog?.type === 'series' ? <>Yeni bir diziye başladım 📺</> : <>Yeni bir kitaba başladım 📖</>;
     case 'finished': return p.catalog?.type === 'movie' ? <>Bu filmi izledim 🎬</> : p.catalog?.type === 'series' ? <>Bu diziyi bitirdim 🎉</> : <>Bu kitabı bitirdim 🎉</>;
     case 'rating': return <>Bu kitaba <b className="gd-big">{p.rating?.average ?? '–'}</b> puan verdim <span className="gd-stars">{'★'.repeat(Math.round(p.rating?.average || 0))}</span></>;

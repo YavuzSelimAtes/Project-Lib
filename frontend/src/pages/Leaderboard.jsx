@@ -4,7 +4,7 @@ import { useGroup } from '../auth.js';
 import { Avatar, CountUp, Empty, PageHead, ErrorBox, Skeleton, fmtDate, useAsync } from '../ui.jsx';
 
 const BOARDS = [
-  { key: 'today', label: '📅 Bugün', short: 'Bugün', unit: 'sayfa', note: 'Bugün kim ne yaptı? Gece 00:00’da sıfırlanır', dec: 0, noPeriod: true },
+  { key: 'today', label: '📅 Bugün', short: 'Bugün', unit: 'sayfa', note: 'Bugün kim ne yaptı? Oklarla önceki günlere bakabilirsin', dec: 0, noPeriod: true },
   { key: 'record', label: '🏆 Rekor', short: 'Rekor', unit: 'sayfa', note: 'Bir günde en çok okunan sayfa', dec: 0 },
   { key: 'average', label: '📈 Günlük ortalama', short: 'Günlük', unit: 'sayfa/gün', note: 'Günde ortalama okunan sayfa', dec: 1 },
   { key: 'finished', label: '📕 En çok bitiren', short: 'Bitiren', unit: 'kitap', note: 'Bitirilen kitap sayısı', dec: 0 },
@@ -68,15 +68,37 @@ function StreakBoard({ kind, title, note }) {
 }
 
 // Bugun: her satir 5 sutun (sira, kisi, sayfa, dizi/film, ne yaptigi). Sira: sayfa, esitlikte dizi izleyen once.
+const shiftDay = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const dayLabel = (d, today) => (d === today ? 'Bugün' : d === shiftDay(today, -1) ? 'Dün' : new Date(d + 'T12:00:00Z').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', timeZone: 'UTC' }));
+
+// Gun secici: oklarla gun gun geri/ileri, ortadaki tarihe dokununca takvim acilir
+function DayNav({ date, today, onPick }) {
+  const isToday = date === today;
+  return (
+    <div className="td-nav">
+      <button className="btn ghost small" aria-label="Önceki gün" onClick={() => onPick(shiftDay(date, -1))}>‹</button>
+      <label className="td-date">
+        <span>{dayLabel(date, today)}</span>
+        <input type="date" aria-label="Tarih seç" value={date} max={today} onChange={(e) => e.target.value && onPick(e.target.value > today ? today : e.target.value)} />
+      </label>
+      <button className="btn ghost small" aria-label="Sonraki gün" disabled={isToday} onClick={() => onPick(shiftDay(date, 1))}>›</button>
+      {!isToday && <button className="btn small" onClick={() => onPick(today)}>Bugün</button>}
+    </div>
+  );
+}
+
 function TodayBoard() {
   const gid = useGroup();
-  const { data, error, loading, reload } = useAsync(() => api.today(gid), [gid]);
+  const [date, setDate] = useState(null); // null = bugun (herkes kendi saat diliminde)
+  const { data, error, loading, reload } = useAsync(() => api.today(gid, date), [gid, date]);
   const rows = data?.rows || [];
+  const past = !!data && data.date !== data.today;
   return (
     <>
+      {data && <DayNav date={data.date} today={data.today} onPick={(d) => setDate(d === data.today ? null : d)} />}
       {loading && !data && <Skeleton h={56} n={3} />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && rows.length === 0 && <Empty icon="🌙" title="Bugün henüz kimse bir şey yapmadı">Sayfa okuyunca ya da dizi/film izleyince burada görünür.</Empty>}
+      {data && rows.length === 0 && <Empty icon="🌙" title={past ? 'Bu gün kimse bir şey yapmadı' : 'Bugün henüz kimse bir şey yapmadı'}>{past ? 'Bu tarihe kayıtlı okuma ya da izleme yok.' : 'Sayfa okuyunca ya da dizi/film izleyince burada görünür.'}</Empty>}
       {rows.length > 0 && (
         <div className="card td">
           <div className="td-row td-h">
