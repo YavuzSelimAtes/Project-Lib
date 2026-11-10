@@ -4,7 +4,7 @@ import { notify } from '../services/notify.js';
 import { postComment } from '../services/posts.js';
 import { getEntry } from '../services/entries.js';
 import { tx } from '../db.js';
-import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, commentAllowedGroups, parseVisibility, setCommentGroups, commentGroupIds, idList } from '../groups.js';
+import { scopeGroup, viewerGroups, needSeeEntry, entryVisibleSql, commentVisibleSql, questionVisibleSql, setQuestionGroups, commentAllowedGroups, parseVisibility, setCommentGroups, commentGroupIds, idList } from '../groups.js';
 
 export const REACTIONS = ['❤️', '👍', '😂', '😮', '🔥'];
 
@@ -106,7 +106,8 @@ export default async function routes(app) {
     const id = Number(req.params.id);
     needCat(id);
     const { limit, offset } = page(req.query);
-    const vis = entryVisibleSql(me.id, viewerGroups(db, me.id, scopeGroup(db, me, req.query.group)));
+    const gids = viewerGroups(db, me.id, scopeGroup(db, me, req.query.group));
+    const vis = `${entryVisibleSql(me.id, gids)} AND ${questionVisibleSql(me.id, gids)}`;
     const total = db.prepare(`SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis}`).get(id).c;
     const rows = db.prepare(`SELECT q.* FROM questions q JOIN entries e ON e.id=q.entry_id WHERE e.catalog_id=? AND ${vis} ORDER BY q.id DESC LIMIT ? OFFSET ?`).all(id, limit, offset);
     return { questions: rows.map(questionOut), total };
@@ -136,14 +137,21 @@ export default async function routes(app) {
   app.get('/api/entries/:id/questions', async (req) => {
     const me = requireUser(req);
     const e = needEntry(req, me);
-    return { questions: db.prepare('SELECT * FROM questions WHERE entry_id=? ORDER BY id').all(e.id).map(questionOut) };
+    const gids = viewerGroups(db, me.id, scopeGroup(db, me, req.query.group));
+    return { questions: db.prepare(`SELECT q.* FROM questions q JOIN entries e ON e.id=q.entry_id WHERE q.entry_id=? AND ${questionVisibleSql(me.id, gids)} ORDER BY q.id`).all(e.id).map(questionOut) };
   });
   app.post('/api/entries/:id/questions', async (req, reply) => {
     const me = requireUser(req);
     const e = needEntry(req, me);
     if (e.user_id === me.id) throw bad('Kendi kaydiniza soru soramazsiniz');
     const question = str((req.body || {}).question, { field: 'question', required: true, max: 1000 });
-    const info = db.prepare('INSERT INTO questions (entry_id,asker_id,question,created_at) VALUES (?,?,?,?)').run(e.id, me.id, question, nowIso());
+    // soru yalniz soranin uye oldugu ve kaydin gorunur oldugu gruplarda gorunur (?group= verilmisse yalniz o grup)
+    const qGroups = commentAllowedGroups(db, e.id, me.id).filter((g) => !req.query.group || g === Number(req.query.group));
+    const info = tx(db, () => {
+      const i = db.prepare('INSERT INTO questions (entry_id,asker_id,question,created_at) VALUES (?,?,?,?)').run(e.id, me.id, question, nowIso());
+      setQuestionGroups(db, Number(i.lastInsertRowid), qGroups);
+      return i;
+    });
     notify(db, e.user_id, { from: me.id, kind: 'question_asked', title: `${me.display_name}, "${entryTitle(e)}" hakkinda soru sordu`, body: question.slice(0, 140), link: { type: 'entry', id: e.id } });
     reply.code(201);
     return { question: questionOut(db.prepare('SELECT * FROM questions WHERE id=?').get(info.lastInsertRowid)) };

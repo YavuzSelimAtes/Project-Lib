@@ -62,7 +62,7 @@ export function sendPush(db, userId, { title, body = '', url = '/', tag = undefi
 export function pushOwnEvent(db, userId, { title, body }) {
   if (!enabled) return;
   try {
-    if (prefsOf(db, userId).own_events) sendPush(db, userId, { title, body: body || '', url: '/', tag: 'own' });
+    if (prefsOf(db, userId).own_events) sendPush(db, userId, { title, body: body || '', url: '/', tag: `own-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }); // benzersiz etiket: ayni etiket eski bildirimin ustune sessizce yazar
   } catch { /* push asla akisi bozmaz */ }
 }
 

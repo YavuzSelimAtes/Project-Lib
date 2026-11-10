@@ -10,7 +10,7 @@ import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../se
 import { familyFinishedNotify } from '../services/notify.js';
 import { postRead, postEvent } from '../services/posts.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress, seasonRows, watchedOf } from '../services/seasons.js';
-import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql } from '../groups.js';
+import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql, questionVisibleSql } from '../groups.js';
 
 const STATUSES = ['devam', 'bitti', 'birakildi', 'planlandi'];
 
@@ -80,7 +80,7 @@ export default async function routes(app) {
       entry: entryOut(db, e, { viewer: me.id }),
       logs,
       comment_count: db.prepare(`SELECT COUNT(*) c FROM comments c WHERE c.entry_id=? AND ${commentVisibleSql(me.id, viewerGroups(db, me.id, null))}`).get(e.id).c,
-      question_count: db.prepare('SELECT COUNT(*) c FROM questions WHERE entry_id=?').get(e.id).c,
+      question_count: db.prepare(`SELECT COUNT(*) c FROM questions q JOIN entries e ON e.id=q.entry_id WHERE q.entry_id=? AND ${questionVisibleSql(me.id, viewerGroups(db, me.id, scopeGroup(db, me, req.query.group)))}`).get(e.id).c,
     };
   });
 

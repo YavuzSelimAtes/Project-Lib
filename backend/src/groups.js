@@ -57,6 +57,7 @@ export function addMember(db, groupId, userId, role = 'member', shareExisting = 
 export function removeMember(db, groupId, userId) {
   db.prepare('DELETE FROM entry_groups WHERE group_id=? AND entry_id IN (SELECT id FROM entries WHERE user_id=?)').run(groupId, userId);
   db.prepare('DELETE FROM comment_groups WHERE group_id=? AND comment_id IN (SELECT id FROM comments WHERE user_id=?)').run(groupId, userId);
+  db.prepare('DELETE FROM question_groups WHERE group_id=? AND question_id IN (SELECT id FROM questions WHERE asker_id=?)').run(groupId, userId);
   db.prepare('DELETE FROM rating_groups WHERE group_id=? AND user_id=?').run(groupId, userId);
   db.prepare('DELETE FROM group_members WHERE group_id=? AND user_id=?').run(groupId, userId);
   // Gruptan ayrilan kisinin bu grubun yonetici hesabina baglantisi duser (baska grup yoneticilerine baglantisi kalir)
@@ -108,6 +109,15 @@ export function entryVisibleSql(meId, groupIds, { own = true, alias = 'e' } = {}
 export function commentVisibleSql(meId, groupIds, alias = 'c') {
   return `(${alias}.user_id=${Math.trunc(meId)} OR EXISTS (SELECT 1 FROM comment_groups cg JOIN entry_groups eg ON eg.entry_id=${alias}.entry_id AND eg.group_id=cg.group_id
     WHERE cg.comment_id=${alias}.id AND cg.group_id IN (${idList(groupIds)})))`;
+}
+// Soru gorunurlugu: soran kisi, kayit sahibi (cevaplar) ya da sorunun grubunda olan + kayit o grupta gorunur
+export function questionVisibleSql(meId, groupIds, alias = 'q', entryAlias = 'e') {
+  return `(${alias}.asker_id=${Math.trunc(meId)} OR ${entryAlias}.user_id=${Math.trunc(meId)} OR EXISTS (SELECT 1 FROM question_groups qg JOIN entry_groups eg ON eg.entry_id=${alias}.entry_id AND eg.group_id=qg.group_id
+    WHERE qg.question_id=${alias}.id AND qg.group_id IN (${idList(groupIds)})))`;
+}
+export function setQuestionGroups(db, questionId, ids) {
+  const ins = db.prepare('INSERT OR IGNORE INTO question_groups (question_id,group_id) VALUES (?,?)');
+  for (const g of ids) ins.run(questionId, g);
 }
 export function ratingVisibleSql(meId, groupIds, alias = 'r') {
   return `(${alias}.user_id=${Math.trunc(meId)} OR EXISTS (SELECT 1 FROM rating_groups rg JOIN entries e2 ON e2.user_id=rg.user_id AND e2.catalog_id=rg.catalog_id JOIN entry_groups eg ON eg.entry_id=e2.id AND eg.group_id=rg.group_id

@@ -200,6 +200,12 @@ CREATE TABLE IF NOT EXISTS comment_groups (
   PRIMARY KEY (comment_id, group_id)
 );
 CREATE INDEX IF NOT EXISTS idx_comment_groups_group ON comment_groups(group_id);
+CREATE TABLE IF NOT EXISTS question_groups (
+  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (question_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_question_groups_group ON question_groups(group_id);
 CREATE TABLE IF NOT EXISTS rating_groups (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   catalog_id INTEGER NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
@@ -470,6 +476,15 @@ function migrate(db) {
       db.exec('INSERT OR IGNORE INTO comment_groups (comment_id,group_id) SELECT c.id,eg.group_id FROM comments c JOIN entry_groups eg ON eg.entry_id=c.entry_id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=c.user_id');
       db.exec('INSERT OR IGNORE INTO rating_groups (user_id,catalog_id,group_id) SELECT DISTINCT r.user_id,r.catalog_id,eg.group_id FROM book_ratings r JOIN entries e ON e.user_id=r.user_id AND e.catalog_id=r.catalog_id JOIN entry_groups eg ON eg.entry_id=e.id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=r.user_id');
       db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('review_groups_v1', ?)").run(new Date().toISOString());
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  // Soru gorunurlugu (bir kez): mevcut sorular, kaydin gruplari ∩ soran kisinin uyelikleri kadar gorunur kalir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='question_groups_v1'").get()) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec('INSERT OR IGNORE INTO question_groups (question_id,group_id) SELECT q.id,eg.group_id FROM questions q JOIN entry_groups eg ON eg.entry_id=q.entry_id JOIN group_members m ON m.group_id=eg.group_id AND m.user_id=q.asker_id');
+      db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('question_groups_v1', ?)").run(new Date().toISOString());
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
