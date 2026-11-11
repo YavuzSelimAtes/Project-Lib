@@ -71,7 +71,8 @@ export default async function routes(app) {
     const me = requireUser(req);
     const p = seePost(me, req.params.id);
     const ins = db.prepare('INSERT OR IGNORE INTO post_likes (post_id,user_id,created_at) VALUES (?,?,?)').run(p.id, me.id, nowIso());
-    if (ins.changes && p.user_id !== me.id) notify(db, p.user_id, { from: me.id, kind: 'post_like', title: `${me.display_name} paylaşımını beğendi ❤️`, link: linkOf(p) });
+    // ayni kisi+paylasim icin yalnizca ilk begenide bildirim (begeniyi geri alip tekrar basinca yeniden bildirilmez)
+    if (ins.changes && p.user_id !== me.id && db.prepare('INSERT OR IGNORE INTO post_like_notified (post_id,user_id) VALUES (?,?)').run(p.id, me.id).changes) notify(db, p.user_id, { from: me.id, kind: 'post_like', title: `${me.display_name} paylaşımını beğendi ❤️`, link: linkOf(p) });
     return { like_count: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c, i_liked: true };
   });
   app.delete('/api/posts/:id/like', async (req) => {

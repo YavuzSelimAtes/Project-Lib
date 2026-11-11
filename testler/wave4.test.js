@@ -41,6 +41,9 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await b('POST', `/api/posts/${cp.id}/comments`, { body: 'katiliyorum' }); t('post yorumu', r.s === 201, r);
   r = await a('GET', `/api/posts/${cp.id}/comments`); t('post yorum listesi', r.j.comments.length === 1 && r.j.comments[0].can_delete, r.j);
   r = await b('DELETE', `/api/posts/${cp.id}/like`); t('begeni geri', r.j.like_count === 0 && !r.j.i_liked, r);
+  await b('POST', `/api/posts/${cp.id}/like`); await b('DELETE', `/api/posts/${cp.id}/like`); await b('POST', `/api/posts/${cp.id}/like`);
+  r = await a('GET', '/api/notifications'); t('begen/geri al/begen: tek bildirim', r.j.notifications.filter((n) => n.kind === 'post_like').length === 1, r.j.notifications.filter((n) => n.kind === 'post_like').length);
+  r = await b('DELETE', `/api/posts/${cp.id}/like`);
   r = await c('GET', `/api/posts/${cp.id}/comments`); t('grup disi post goremez 404', r.s === 404, r);
   r = await c('GET', `/api/gundem?group=${gid}`); t('grup disi gundem 403/404', r.s === 403 || r.s === 404, r);
   // bitir + puan
