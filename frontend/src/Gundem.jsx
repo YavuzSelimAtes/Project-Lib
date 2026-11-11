@@ -125,7 +125,7 @@ export function Post({ p, me, onOpen, defaultOpen = false }) {
       )}
       {p.catalog && (
         <button className="gd-book" onClick={() => p.entry_id && onOpen(p.entry_id)} disabled={!p.entry_id} aria-label={p.catalog.title}>
-          <span className="gd-cov"><Cover src={p.catalog.cover_url} title={p.catalog.title} /></span>
+          <span className="gd-cov"><Cover src={p.catalog.cover_url} fallback={p.catalog.cover_fallback} title={p.catalog.title} /></span>
           <span className="gd-bm">
             <b className="gd-bt">{p.catalog.title}</b>
             {sub && <span className="gd-bs">{sub}</span>}

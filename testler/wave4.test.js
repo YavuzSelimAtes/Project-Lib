@@ -20,6 +20,11 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   const cat = Number(db.prepare("INSERT INTO catalog (type,title,pages,norm,created_at) VALUES ('book','W4 Kitap',300,'w4 kitap',?)").run(new Date().toISOString()).lastInsertRowid);
   r = await a('POST', '/api/entries', { catalog_id: cat, status: 'devam', total_pages: 300 }); const eid = r.j.entry.id;
   r = await b('GET', `/api/gundem?group=${gid}`); t('basladi karti', r.j.posts.some((p) => p.kind === 'started' && p.user.display_name === 'w4a'), r.j);
+  // secilen baskinin kapagi Gundem'de gorunur (katalog kapagi yedek)
+  const edId = Number(db.prepare("INSERT INTO editions (catalog_id,publisher,pub_norm,cover_url,source,created_at) VALUES (?,'Is Bankasi','is bankasi','/c/baski.jpg','manual',?)").run(cat, new Date().toISOString()).lastInsertRowid);
+  db.prepare('UPDATE catalog SET cover_url=? WHERE id=?').run('/c/katalog.jpg', cat); db.prepare('UPDATE entries SET edition_id=? WHERE id=?').run(edId, eid);
+  r = await b('GET', `/api/gundem?group=${gid}`); const sp = r.j.posts.find((p) => p.kind === 'started');
+  t('gundem baski kapagi', sp?.catalog.cover_url === '/c/baski.jpg' && sp.catalog.cover_fallback === '/c/katalog.jpg', sp?.catalog);
   await a('POST', `/api/entries/${eid}/progress`, { current_page: 15 });
   r = await b('GET', `/api/gundem?group=${gid}`);
   let rd = r.j.posts.filter((p) => p.kind === 'read');

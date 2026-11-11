@@ -19,9 +19,12 @@ export default async function routes(app) {
   const out = (me, p) => {
     const cat = db.prepare('SELECT id,title,type,cover_url,author_or_creator FROM catalog WHERE id=?').get(p.catalog_id);
     const user = publicUser(db.prepare('SELECT id,display_name,avatar,color FROM users WHERE id=?').get(p.user_id));
+    // Paylasanin sectigi baski varsa onun kapagi (profildeki gibi); puan kartinda kayit yok: paylasanin o kitaptaki son kaydi
+    const ed = db.prepare('SELECT ed.cover_url FROM entries e JOIN editions ed ON ed.id=e.edition_id WHERE ' + (p.entry_id ? 'e.id=?' : 'e.user_id=? AND e.catalog_id=?') + ' AND ed.cover_url IS NOT NULL ORDER BY e.id DESC LIMIT 1').get(...(p.entry_id ? [p.entry_id] : [p.user_id, p.catalog_id]));
+    const cover = ed?.cover_url || cat?.cover_url;
     const o = {
       id: p.id, kind: p.kind, user, at: p.updated_at, created_at: p.created_at,
-      catalog: cat ? { id: cat.id, title: cat.title, type: cat.type, cover_url: cat.cover_url, author: cat.author_or_creator } : null,
+      catalog: cat ? { id: cat.id, title: cat.title, type: cat.type, cover_url: cover, cover_fallback: cover !== cat.cover_url ? cat.cover_url : undefined, author: cat.author_or_creator } : null,
       entry_id: p.entry_id, data: p.data ? JSON.parse(p.data) : {},
       like_count: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c,
       i_liked: !!db.prepare('SELECT 1 FROM post_likes WHERE post_id=? AND user_id=?').get(p.id, me.id),
