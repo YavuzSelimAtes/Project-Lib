@@ -1,11 +1,27 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
-import { timeAgo } from './ui.jsx';
+import { ErrorBox, Modal, timeAgo } from './ui.jsx';
 import EntryDetail from './EntryDetail.jsx';
+import { Post } from './Gundem.jsx';
 
 const StoryReader = lazy(() => import('./StoryReader.jsx'));
+const LINKS = ['entry', 'story', 'post'];
 
-export default function Bell() {
+// Bildirimden acilan Gundem paylasimi (yorumlar acik gelir)
+function PostView({ id, me, onClose, onOpenEntry }) {
+  const [p, setP] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { api.post(id).then((r) => setP(r.post), setErr); }, [id]);
+  return (
+    <Modal title="Paylaşım" onClose={onClose}>
+      <ErrorBox error={err} />
+      {!p && !err && <p className="muted">Yükleniyor…</p>}
+      {p && <Post p={p} me={me} defaultOpen onOpen={(eid) => { onClose(); onOpenEntry(eid); }} />}
+    </Modal>
+  );
+}
+
+export default function Bell({ me }) {
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('new'); // new | archive | settings
@@ -52,7 +68,7 @@ export default function Bell() {
     if (next && unread > 0) api.readNotifications({ all: true }).then(() => setTimeout(load, 3000), () => {});
   };
   const go = (n) => {
-    if (n.link && (n.link.type === 'entry' || n.link.type === 'story')) {
+    if (n.link && LINKS.includes(n.link.type)) {
       setTarget(n.link);
       setOpen(false);
     }
@@ -63,7 +79,7 @@ export default function Bell() {
   };
 
   const item = (n) => {
-    const clickable = n.link && (n.link.type === 'entry' || n.link.type === 'story');
+    const clickable = n.link && LINKS.includes(n.link.type);
     return (
       <div
         key={n.id}
@@ -123,6 +139,7 @@ export default function Bell() {
         </div>
       )}
       {target?.type === 'entry' && <EntryDetail entryId={target.id} onClose={() => setTarget(null)} onChanged={load} />}
+      {target?.type === 'post' && <PostView id={target.id} me={me} onClose={() => setTarget(null)} onOpenEntry={(eid) => setTarget({ type: 'entry', id: eid })} />}
       {target?.type === 'story' && <Suspense fallback={null}><StoryReader id={target.id} onClose={() => setTarget(null)} onChanged={load} /></Suspense>}
     </div>
   );

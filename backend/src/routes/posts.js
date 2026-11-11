@@ -65,14 +65,24 @@ export default async function routes(app) {
     if (!p) throw err(404, 'Paylasim bulunamadi');
     return p;
   };
-  const linkOf = (p) => (p.entry_id ? { type: 'entry', id: p.entry_id } : null);
+  // Bildirim paylasimin kendisine acilir (kayit detayi paylasim yorumlarini gostermez); metinde hangi kitap/dizi oldugu yazar
+  const linkOf = (p) => ({ type: 'post', id: p.id });
+  const bookOf = (p) => (p.catalog_id ? db.prepare('SELECT title FROM catalog WHERE id=?').get(p.catalog_id)?.title : null);
+  const likedText = (p) => (bookOf(p) ? `“${bookOf(p)}” paylaşımını beğendi` : 'paylaşımını beğendi');
+  const commentedText = (p) => (bookOf(p) ? `“${bookOf(p)}” paylaşımına yorum yazdı` : 'paylaşımına yorum yazdı');
+
+  // Tek paylasim (bildirimden acilir); gorunurluk seePost ile ayni
+  app.get('/api/posts/:id', async (req) => {
+    const me = requireUser(req);
+    return { post: out(me, seePost(me, req.params.id)) };
+  });
 
   app.post('/api/posts/:id/like', async (req) => {
     const me = requireUser(req);
     const p = seePost(me, req.params.id);
     const ins = db.prepare('INSERT OR IGNORE INTO post_likes (post_id,user_id,created_at) VALUES (?,?,?)').run(p.id, me.id, nowIso());
     // ayni kisi+paylasim icin yalnizca ilk begenide bildirim (begeniyi geri alip tekrar basinca yeniden bildirilmez)
-    if (ins.changes && p.user_id !== me.id && db.prepare('INSERT OR IGNORE INTO post_like_notified (post_id,user_id) VALUES (?,?)').run(p.id, me.id).changes) notify(db, p.user_id, { from: me.id, kind: 'post_like', title: `${me.display_name} paylaşımını beğendi ❤️`, link: linkOf(p) });
+    if (ins.changes && p.user_id !== me.id && db.prepare('INSERT OR IGNORE INTO post_like_notified (post_id,user_id) VALUES (?,?)').run(p.id, me.id).changes) notify(db, p.user_id, { from: me.id, kind: 'post_like', title: `${me.display_name}, ${likedText(p)} ❤️`, link: linkOf(p) });
     return { like_count: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c, i_liked: true };
   });
   app.delete('/api/posts/:id/like', async (req) => {
@@ -95,7 +105,7 @@ export default async function routes(app) {
     const info = db.prepare('INSERT INTO post_comments (post_id,user_id,body,created_at) VALUES (?,?,?,?)').run(p.id, me.id, body, nowIso());
     const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM post_comments WHERE post_id=? AND user_id<>?').all(p.id, me.id).map((r) => r.user_id));
     if (p.user_id !== me.id) targets.add(p.user_id);
-    for (const uid of targets) notify(db, uid, { from: me.id, kind: 'post_comment', title: uid === p.user_id ? `${me.display_name} paylaşımına yorum yazdı` : `${me.display_name} yorum yazdığın paylaşıma yorum yazdı`, body: body.slice(0, 140), link: linkOf(p) });
+    for (const uid of targets) notify(db, uid, { from: me.id, kind: 'post_comment', title: uid === p.user_id ? `${me.display_name}, ${commentedText(p)}` : `${me.display_name}, yorum yazdığın paylaşıma yorum yazdı`, body: body.slice(0, 140), link: linkOf(p) });
     reply.code(201);
     return { comment: cOut(me, p, db.prepare('SELECT * FROM post_comments WHERE id=?').get(info.lastInsertRowid)) };
   });

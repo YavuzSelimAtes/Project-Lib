@@ -270,7 +270,7 @@ export default function App() {
           <span className="spacer" />
           <PendingBadge />
           <WhatsNew />
-          <Bell />
+          <Bell me={user} />
           <AccountMenu user={user} dark={dark} toggleTheme={toggleTheme} onProfile={() => setProfileOpen(true)} onFeedback={() => setFbOpen(true)} onLogout={logout} />
         </div>
       </header>

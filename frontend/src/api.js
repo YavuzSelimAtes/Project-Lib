@@ -219,6 +219,7 @@ export const api = {
   addStoryComment: (id, body, parent_id) => request('POST', `/stories/${id}/comments`, { body, ...(parent_id ? { parent_id } : {}) }),
   deleteStoryComment: (id, cid) => request('DELETE', `/stories/${id}/comments/${cid}`),
   gundem: (group, before) => request('GET', `/gundem${qs({ group, before })}`),
+  post: (id) => request('GET', `/posts/${id}`),
   likePost: (id) => request('POST', `/posts/${id}/like`),
   unlikePost: (id) => request('DELETE', `/posts/${id}/like`),
   postComments: (id) => request('GET', `/posts/${id}/comments`),

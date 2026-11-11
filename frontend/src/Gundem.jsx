@@ -94,10 +94,10 @@ function LongText({ text }) {
   );
 }
 
-function Post({ p, me, onOpen }) {
+export function Post({ p, me, onOpen, defaultOpen = false }) {
   const [liked, setLiked] = useState(p.i_liked);
   const [likes, setLikes] = useState(p.like_count);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [cc, setCc] = useState(p.comment_count);
   const like = async () => {
     const was = liked;
