@@ -36,6 +36,9 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   r = await a('POST', `/api/entries/${eid}/comments`, { body: 'harika kitap' }); t('yorum', r.s === 201, r);
   r = await b('GET', `/api/gundem?group=${gid}`); const cp = r.j.posts[0];
   t('yorum karti en ustte', cp.kind === 'comment' && cp.comment?.body === 'harika kitap', r.j.posts[0]);
+  // notu yorum olarak paylas -> kart
+  r = await a('POST', '/api/notes', { catalog_id: cat, body: 'paylasilan not' }); r = await a('POST', `/api/notes/${r.j.note.id}/share`, {});
+  r = await b('GET', `/api/gundem?group=${gid}`); t('paylasilan not gundemde', r.j.posts.some((p) => p.kind === 'comment' && p.comment?.body === 'paylasilan not'), r.j.posts.length);
   // gizli yorum kart olmaz
   r = await a('POST', `/api/entries/${eid}/comments`, { body: 'gizli', none: true });
   r = await b('GET', `/api/gundem?group=${gid}`); t('gizli yorum gundemde yok', !r.j.posts.some((p) => p.comment?.body === 'gizli'), r.j.posts.length);
@@ -63,8 +66,8 @@ const acc = (u) => ({ username: u, display_name: u, password: 'secret1', avatar:
   t('sirali: en yeni en ustte', r.j.posts[0].kind === 'rating', r.j.posts.map((p) => p.kind));
   // kitap karti adetleri
   r = await b('GET', `/api/entries?user_id=${aid}&type=book`); const ce = r.j.entries.find((x) => x.id === eid);
-  t('kart adetleri: yorum 1 (gizli gorunmez), puan 1', ce.comment_total === 1 && ce.rating_total === 1, ce);
-  r = await a('GET', `/api/entries?user_id=${aid}&type=book`); t('sahibi kendi: yorum 2', r.j.entries.find((x) => x.id === eid).comment_total === 2, r.j.entries[0]);
+  t('kart adetleri: yorum 2 (gizli gorunmez), puan 1', ce.comment_total === 2 && ce.rating_total === 1, ce);
+  r = await a('GET', `/api/entries?user_id=${aid}&type=book`); t('sahibi kendi: yorum 3', r.j.entries.find((x) => x.id === eid).comment_total === 3, r.j.entries[0]);
   // hikaye bolum puani
   db.prepare('UPDATE users SET story_author=1 WHERE id=?').run(aid);
   r = await a('POST', '/api/stories', { title: 'W4 H', group_ids: [gid] }); const sid = r.j.story?.id || r.j.id;

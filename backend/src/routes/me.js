@@ -1,6 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, str, int, nowIso, userToday, diffDays } from '../util.js';
 import { notify } from '../services/notify.js';
+import { postComment } from '../services/posts.js';
 import { catalogOut } from '../services/catalog.js';
 import { streakDates } from '../services/stats.js';
 import { prePagesBetween } from '../services/entries.js';
@@ -110,6 +111,7 @@ export default async function routes(app) {
       setCommentGroups(db, i, groups);
       return i;
     });
+    postComment(db, cid, e, me.id); // Gundem'e de duser (yorum yazmayla ayni)
     const audience = new Set(groups.length ? db.prepare(`SELECT DISTINCT user_id FROM group_members WHERE group_id IN (${idList(groups)})`).all().map((r) => r.user_id) : []);
     const targets = new Set(db.prepare('SELECT DISTINCT user_id FROM comments WHERE entry_id=? AND user_id<>?').all(e.id, me.id).map((r) => r.user_id).filter((u) => audience.has(u)));
     if (e.user_id !== me.id && audience.has(e.user_id)) targets.add(e.user_id);

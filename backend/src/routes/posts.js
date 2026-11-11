@@ -37,7 +37,7 @@ export default async function routes(app) {
     }
     if (p.kind === 'rating') {
       const rows = db.prepare('SELECT metric,score,comment FROM book_ratings WHERE user_id=? AND catalog_id=?').all(p.user_id, p.catalog_id);
-      o.rating = { average: rows.length ? Math.round((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 10) / 10 : null, comments: rows.filter((r) => r.comment).slice(0, 3).map((r) => ({ metric: r.metric, text: r.comment })) };
+      o.rating = { average: rows.length ? Math.round((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 10) / 10 : null, comments: rows.filter((r) => r.comment).map((r) => ({ metric: r.metric, text: r.comment })) };
     }
     return o;
   };
