@@ -343,7 +343,7 @@ function PickedForm({ item, onBack, onClose, onAdded }) {
                   </div>
                 ))}
                 <p className={remainder < 0 ? 'small' : 'small muted'} style={remainder < 0 ? { color: 'var(--danger)' } : undefined}>
-                  {remainder < 0 ? `Toplam ${sumDays}, şu anki sayfadan fazla.` : `Bugün: kalan ${remainder} sayfa bugüne yazılacak.`}
+                  {remainder < 0 ? `Toplam ${sumDays}, şu anki sayfadan fazla.` : `Kalan ${remainder} sayfa başlangıçtan önce okunmuş sayılacak (bugüne yazılmaz).`}
                 </p>
               </>
             )}
