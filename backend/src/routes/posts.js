@@ -1,6 +1,7 @@
 import { requireUser } from '../auth.js';
 import { err, bad, int, str, nowIso, publicUser } from '../util.js';
 import { notify } from '../services/notify.js';
+import { deleteOwnPost } from '../services/posts.js';
 import { scopeGroup, viewerGroups, idList } from '../groups.js';
 
 // Gundem: grup uyelerinin son hareketleri (en yeni uste), begeni ve yorum
@@ -78,6 +79,13 @@ export default async function routes(app) {
   app.get('/api/posts/:id', async (req) => {
     const me = requireUser(req);
     return { post: out(me, seePost(me, req.params.id)) };
+  });
+
+  // Kendi paylasimini gundemden kaldir (kayit, yorum, puan yerinde kalir; begeni/yorumlari silinir)
+  app.delete('/api/posts/:id', async (req) => {
+    const me = requireUser(req);
+    if (!deleteOwnPost(db, me.id, Number(req.params.id))) throw err(404, 'Paylasim bulunamadi ya da senin degil');
+    return { ok: true };
   });
 
   app.post('/api/posts/:id/like', async (req) => {

@@ -220,6 +220,7 @@ export const api = {
   deleteStoryComment: (id, cid) => request('DELETE', `/stories/${id}/comments/${cid}`),
   gundem: (group, before) => request('GET', `/gundem${qs({ group, before })}`),
   post: (id) => request('GET', `/posts/${id}`),
+  deletePost: (id) => request('DELETE', `/posts/${id}`),
   likePost: (id) => request('POST', `/posts/${id}/like`),
   unlikePost: (id) => request('DELETE', `/posts/${id}/like`),
   postComments: (id) => request('GET', `/posts/${id}/comments`),

@@ -24,6 +24,40 @@ export function postRead(db, e, { pages = 0, episodes = 0, date = null }) {
   } catch { /* gundem asla akisi bozmaz */ }
 }
 
+// Okuma geri alindi / gun azaltildi: date gunune yazilmis sayfalar kartlardan duser (gundem takvimle ayni kalsin).
+// Once en yeni kart (bugun girilen gecmis gun), en son o gunun kendi karti; bos kalan kart silinir.
+export function postReadUndo(db, e, { pages = 0, episodes = 0, date }) {
+  try {
+    const kind = e.type === 'book' ? 'read' : 'watch';
+    let n = kind === 'read' ? pages : episodes;
+    if (n <= 0 || !date) return;
+    const cards = db.prepare('SELECT * FROM posts WHERE user_id=? AND entry_id=? AND kind=? AND day>=? ORDER BY day DESC, id DESC').all(e.user_id, e.id, kind, date);
+    for (const p of cards) {
+      if (n <= 0) break;
+      const d = JSON.parse(p.data || '{}');
+      if (p.day === date) {
+        const take = Math.min(n, d.total || 0);
+        if (take <= 0) continue;
+        d.total -= take;
+        d.last = Math.min(d.last || 0, d.total);
+        n -= take;
+      } else {
+        const take = Math.min(n, d.past?.[date] || 0);
+        if (take <= 0) continue;
+        d.past[date] -= take;
+        if (d.past[date] <= 0) delete d.past[date];
+        n -= take;
+      }
+      const empty = !(d.total > 0) && !Object.keys(d.past || {}).length;
+      if (empty) db.prepare('DELETE FROM posts WHERE id=?').run(p.id);
+      else db.prepare('UPDATE posts SET data=? WHERE id=?').run(JSON.stringify(d), p.id); // duzeltme karti yukari tasimaz
+    }
+  } catch { /* gundem asla akisi bozmaz */ }
+}
+
+// Kisi kendi paylasimini gundemden kaldirir (kaydi/yorumu/puani silmez)
+export const deleteOwnPost = (db, userId, postId) => db.prepare('DELETE FROM posts WHERE id=? AND user_id=?').run(postId, userId).changes > 0;
+
 // Basladi / bitirdi: kayit basina bir kart (tekrarinda yukari tasinir)
 export function postEvent(db, e, kind) {
   try {
