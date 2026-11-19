@@ -108,7 +108,7 @@ export default function Shelf() {
       <Calendars uid={uid} filter={filter} rev={calRev} group={gid} />
 
       {own && pending.data?.questions?.length > 0 && (
-        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
+        <div className="card notice">
           <b>❓ Cevap bekleyen sorular</b>
           {pending.data.questions.map((q) => (
             <div key={q.id}>
@@ -145,7 +145,7 @@ export default function Shelf() {
                 {e.end_date ? ` · ${fmtDate(e.end_date)}` : ''}
               </div>
               {e.type === 'book' && e.total_pages ? <Progress value={e.percent} color={owner?.color ?? me.color} /> : null}
-              {e.type === 'book' && <div className="line" style={{ marginTop: 4 }}>💬 {e.comment_total ?? 0} yorum · ⭐ {e.rating_total ?? 0} puan</div>}
+              {e.type === 'book' && (e.comment_total > 0 || e.rating_total > 0) && <div className="line" style={{ marginTop: 4 }}>{[e.comment_total > 0 && `💬 ${e.comment_total} yorum`, e.rating_total > 0 && `⭐ ${e.rating_total} puan`].filter(Boolean).join(' · ')}</div>}
             </div>
           </button>
         ))}
@@ -189,71 +189,58 @@ function Mins({ v, plus, animate }) {
 function StatCards({ s, type, animate }) {
   const num = (v, dec = 0) => <CountUp value={v} decimals={dec} animate={animate} />;
   const has = (k) => s[k] != null;
-  const card = (key, big, label, extra) => (
-    <Stat key={key} value={big} label={label} extra={extra} />
-  );
+  // raw: kartin ham degeri; 0 ise kart sessiz gorunur ("Hepsi"nde hic gosterilmez)
+  const card = (key, raw, big, label, extra) => ({ key, zero: !raw, el: <Stat key={key} value={big} label={label} extra={extra} zero={!raw} /> });
   const movieUnk = s.movie_runtime_unknown || 0;
   const epUnk = !!s.episodes_unknown;
   let cards = [];
   if (type === 'book') {
     cards = [
-      card('pg', num(s.total_pages), 'sayfa okundu'),
-      card('bf', num(s.books_finished), 'kitap bitti'),
-      card('avg', num(s.avg_pages_per_day, 1), 'sayfa / gün'),
-      card('rec', s.record ? s.record.pages : '–', 'rekor', s.record && <div className="small muted">{fmtDate(s.record.date)}</div>),
-      card('st', <>🔥 {s.current_streak ?? 0}</>, 'gün seri', s.longest_streak != null && <div className="small muted">en uzun {s.longest_streak}</div>),
+      card('pg', s.total_pages, num(s.total_pages), 'sayfa okundu'),
+      card('bf', s.books_finished, num(s.books_finished), 'kitap bitti'),
+      card('avg', s.avg_pages_per_day, num(s.avg_pages_per_day, 1), 'sayfa / gün'),
+      card('rec', s.record?.pages, s.record ? s.record.pages : '–', 'rekor', s.record && <div className="small muted">{fmtDate(s.record.date)}</div>),
+      card('st', s.current_streak, <>🔥 {s.current_streak ?? 0}</>, 'gün seri', s.longest_streak ? <div className="small muted">en uzun {s.longest_streak}</div> : null),
     ];
   } else if (type === 'series') {
     cards = [
       has('series_minutes') &&
         card(
           'sm',
+          s.series_minutes,
           s.series_minutes === 0 && epUnk ? '–' : <Mins v={s.series_minutes} plus={epUnk} animate={animate} />,
           epUnk ? 'en az izlenen süre' : 'izlenen süre',
           epUnk && <div className="small muted">bazı dizilerin süresi bilinmiyor</div>,
         ),
-      card('sf', num(s.series_finished), 'dizi bitti'),
-      has('episodes_watched') &&
-        card(
-          'ep',
-          <>
-            {num(s.episodes_watched)}
-            {epUnk ? '+' : ''}
-          </>,
-          epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi',
-        ),
+      card('sf', s.series_finished, num(s.series_finished), 'dizi bitti'),
+      has('episodes_watched') && card('ep', s.episodes_watched, <>{num(s.episodes_watched)}{epUnk ? '+' : ''}</>, epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi'),
     ];
   } else if (type === 'movie') {
     cards = [
       has('movie_minutes') &&
         card(
           'mm',
+          s.movie_minutes,
           s.movie_minutes === 0 && movieUnk > 0 ? '–' : <Mins v={s.movie_minutes} plus={movieUnk > 0} animate={animate} />,
           movieUnk > 0 ? 'en az izlenen süre' : 'izlenen süre',
           movieUnk > 0 && <div className="small muted">{movieUnk} filmin süresi bilinmiyor</div>,
         ),
-      card('mv', num(s.movies_watched), 'film izlendi'),
+      card('mv', s.movies_watched, num(s.movies_watched), 'film izlendi'),
     ];
   } else {
     cards = [
-      card('bf', num(s.books_finished), 'kitap bitti'),
-      card('pg', num(s.total_pages), 'sayfa okundu'),
-      card('sf', num(s.series_finished), 'dizi bitti'),
-      has('episodes_watched') &&
-        card(
-          'ep',
-          <>
-            {num(s.episodes_watched)}
-            {epUnk ? '+' : ''}
-          </>,
-          epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi',
-        ),
-      card('mv', num(s.movies_watched), 'film izlendi'),
-    ];
+      card('pg', s.total_pages, num(s.total_pages), 'sayfa okundu'),
+      card('bf', s.books_finished, num(s.books_finished), 'kitap bitti'),
+      has('episodes_watched') && card('ep', s.episodes_watched, <>{num(s.episodes_watched)}{epUnk ? '+' : ''}</>, epUnk ? 'en az bölüm izlendi' : 'bölüm izlendi'),
+      card('sf', s.series_finished, num(s.series_finished), 'dizi bitti'),
+      card('mv', s.movies_watched, num(s.movies_watched), 'film izlendi'),
+    ].filter((c) => c && !c.zero);
   }
+  const shown = cards.filter(Boolean);
+  if (!shown.length) return <p className="stats-empty">Bu dönemde henüz bir şey kaydedilmedi.</p>;
   return (
     <>
-      <div className="stats fade-in">{cards.filter(Boolean)}</div>
+      <div className="stats fade-in">{shown.map((c) => c.el)}</div>
       {epUnk && (type === 'series' || type === 'all') && <p className="small muted" style={{ marginTop: -8 }}>Sezon bilgisi olmayan dizilerde bölümler sayılamadı; gerçek sayı daha yüksek olabilir.</p>}
     </>
   );

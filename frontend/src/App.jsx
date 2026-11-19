@@ -17,6 +17,7 @@ import AccountMenu from './AccountSwitch.jsx';
 import FeedbackModal from './Feedback.jsx';
 import ChangePassword from './ChangePassword.jsx';
 import ProfileEdit from './Profile.jsx';
+import GroupSwitch from './GroupSwitch.jsx';
 import { dropPushOnLogout, autoEnablePush } from './pushClient.js';
 
 import { AuthCtx } from './auth.js';
@@ -206,6 +207,7 @@ export default function App() {
     );
   }
   if (!user) {
+    delete document.documentElement.dataset.mode;
     return (
       <>
         <Suspense fallback={<div className="page"><Skeleton h={80} n={3} /></div>}>
@@ -233,6 +235,8 @@ export default function App() {
   const mode = isManager ? 'manager' : gid ? 'group' : 'account';
   const items = isManager ? MANAGER_NAV : gid ? groupNav(gid, user.id) : [...ACCOUNT_NAV, ...(canManage ? [['/yonetim', 'Yönetim', (p) => p.startsWith('/yonetim')]] : [])];
   const mgrName = user.managed_group_name || 'Grup';
+  // Grup icindeyken zemin bir ton koyulasir: "baska bir alandayim" hissi
+  document.documentElement.dataset.mode = mode;
   return (
     <AuthCtx.Provider value={{ user, refresh, editProfile: () => setProfileOpen(true) }}>
       <header className="topbar">
@@ -244,25 +248,11 @@ export default function App() {
               <span className="chip mgr-chip">Yönetici</span>
             </Link>
           ) : gid ? (
-            <span key="g" className="brand-wrap">
-              <Link to="/ben" className="back-pill" aria-label="Hesabıma dön" title="Hesabıma dön">
-                <span aria-hidden="true">‹</span> <span className="back-txt">Hesabım</span>
-              </Link>
-              <Link to={`/g/${gid}`} className="brand brand-group">
-                <img className="brand-tile" src="/brand.png" alt="" width="28" height="28" />
-                <span>{group?.name || 'Grup'}</span>
-              </Link>
-            </span>
+            <GroupSwitch key="g" group={group || { id: gid, name: 'Grup' }} groups={user.groups || []} />
           ) : (
             <span key="a" className="brand-wrap">
-              {/* Defterim'de alt menü her cihazda görünmeyebilir (ör. iOS ana ekran uygulaması): çıkış yolu hep açık kalsın */}
-              {pathname.startsWith('/ben/defterim') && (
-                <Link to="/ana" className="back-pill" aria-label="Ana Sayfa'ya dön" title="Ana Sayfa'ya dön">
-                  <span aria-hidden="true">‹</span> <span className="back-txt">Ana Sayfa</span>
-                </Link>
-              )}
               <Link to="/ana" className="brand">
-                <img src="/brand.png" alt="" width="28" height="28" /> <span>Kütüphane</span>
+                <img className="brand-tile" src="/brand.png" alt="" width="28" height="28" /> <span>Kütüphane</span>
               </Link>
             </span>
           )}

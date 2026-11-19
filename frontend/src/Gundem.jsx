@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
+import { Star } from 'lucide-react';
 import { Avatar, Cover, Empty, ErrorBox, Skeleton, timeAgo } from './ui.jsx';
 
 const when = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -43,6 +44,25 @@ function say(p) {
 const TrashIc = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
 );
+
+// Isim altindaki kisa eylem satiri
+const RATED = { book: 'bir kitaba puan verdi', series: 'bir diziye puan verdi', movie: 'bir filme puan verdi' };
+const STARTED = { book: 'yeni bir kitaba başladı', series: 'yeni bir diziye başladı', movie: 'yeni bir filme başladı' };
+const FINISHED = { book: 'bir kitap bitirdi', series: 'bir dizi bitirdi', movie: 'bir film izledi' };
+function action(p) {
+  const t = p.catalog?.type || 'book';
+  switch (p.kind) {
+    case 'comment': return `bir ${{ book: 'kitap', series: 'dizi', movie: 'film' }[t]} hakkında yorum yaptı`;
+    case 'rating': return RATED[t];
+    case 'read': return 'okumaya devam etti';
+    case 'watch': return 'izlemeye devam etti';
+    case 'started': return STARTED[t];
+    case 'finished': return FINISHED[t];
+    default: return null;
+  }
+}
+// Gundem filtresi (Ana Sayfa'daki Filtrele)
+const MATCH = { all: () => true, comment: (p) => p.kind === 'comment', rating: (p) => p.kind === 'rating', progress: (p) => ['read', 'watch', 'started'].includes(p.kind), finished: (p) => p.kind === 'finished' };
 
 const HeartIc = ({ on }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /></svg>
@@ -126,7 +146,8 @@ export function Post({ p, me, onOpen, onRemoved, defaultOpen = false }) {
       <header className="gd-head">
         <Avatar user={p.user} />
         <div className="gd-who">
-          <b>{p.user.display_name}</b>{p.user.id === me.id && <span className="gd-me">(sen)</span>}
+          <b>{p.user.display_name}{p.user.id === me.id && <span className="gd-me"> (sen)</span>}</b>
+          {action(p) && <span className="gd-act">{action(p)}</span>}
         </div>
         <time className="gd-time" dateTime={p.at} title={when(p.at)}>{timeAgo(p.at)}</time>
       </header>
@@ -144,12 +165,17 @@ export function Post({ p, me, onOpen, onRemoved, defaultOpen = false }) {
             {total && <span className="gd-bs">{total}</span>}
             {pct != null && <span className="gd-bar" aria-label={'%' + pct}><i style={{ width: pct + '%' }} /></span>}
           </span>
-          <span className="gd-go" aria-hidden="true">›</span>
+          {p.kind === 'rating' && p.rating?.average != null ? (
+            <span className="gd-score"><Star size={16} fill="currentColor" aria-hidden="true" /> {p.rating.average}</span>
+          ) : (
+            <span className="gd-go" aria-hidden="true">›</span>
+          )}
         </button>
       )}
       <footer className="gd-foot">
         <button className={'gd-btn like' + (liked ? ' on' : '')} onClick={like} aria-pressed={liked} aria-label="Beğen"><HeartIc on={liked} /><span>{likes > 0 ? likes : ''}</span></button>
         <button className={'gd-btn' + (open ? ' on' : '')} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Yorumlar"><CommentIc /><span>{cc > 0 ? cc : ''}</span></button>
+        <span className="gd-exact">{when(p.at)}</span>
         {p.user.id === me.id && <button className="gd-btn gd-del" onClick={remove} aria-label="Gündemden kaldır" title="Gündemden kaldır"><TrashIc /></button>}
       </footer>
       {open && <Thread post={p} onCount={setCc} />}
@@ -158,24 +184,37 @@ export function Post({ p, me, onOpen, onRemoved, defaultOpen = false }) {
 }
 
 // Gundem: grup uyelerinin son hareketleri, en yeni en ustte (twitter/instagram gibi)
-export default function Gundem({ gid, me, onOpen }) {
+const PAGE = 10;
+
+export default function Gundem({ gid, me, onOpen, filter = 'all' }) {
   const [posts, setPosts] = useState(null);
   const [next, setNext] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [shown, setShown] = useState(PAGE); // ekranda gosterilen kart sayisi
+  useEffect(() => setShown(PAGE), [gid, filter]);
   const load = (reset) => {
     setBusy(true);
     api.gundem(gid, reset ? undefined : next).then((r) => { setPosts((cur) => (reset ? r.posts : [...(cur || []), ...r.posts])); setNext(r.next); setErr(null); }, setErr).finally(() => setBusy(false));
   };
   useEffect(() => { setPosts(null); load(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [gid]);
   useEffect(() => { const t = setInterval(() => !document.hidden && load(true), 60000); return () => clearInterval(t); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [gid]);
+  const list = (posts || []).filter(MATCH[filter]);
+  // once eldeki kartlardan 10 tane daha ac; yetmezse sunucudan sonraki sayfayi da cek
+  const more = () => {
+    setShown((n) => n + PAGE);
+    if (list.length < shown + PAGE && next) load(false);
+  };
   return (
     <div className="gd">
       {posts == null && !err && <Skeleton h={120} n={3} />}
       <ErrorBox error={err} onRetry={() => load(true)} />
       {posts && posts.length === 0 && <Empty icon="📰" title="Gündem henüz boş">Biri okuyunca, izleyince ya da yorum yazınca burada görünür.</Empty>}
-      {(posts || []).map((p) => <Post key={p.id + '-' + p.at} p={p} me={me} onOpen={onOpen} onRemoved={(id) => setPosts((cur) => cur.filter((x) => x.id !== id))} />)}
-      {next && <button className="btn ghost" disabled={busy} onClick={() => load(false)}>Daha fazla göster</button>}
+      {posts && posts.length > 0 && !posts.some(MATCH[filter]) && <p className="hint">Bu filtreye uyan paylaşım yok{next ? '; daha eskilere bakabilirsin.' : '.'}</p>}
+      {list.slice(0, shown).map((p) => <Post key={p.id + '-' + p.at} p={p} me={me} onOpen={onOpen} onRemoved={(id) => setPosts((cur) => cur.filter((x) => x.id !== id))} />)}
+      {(list.length > shown || next) && (
+        <button className="btn ghost gd-moreall" disabled={busy} onClick={more}>{busy ? 'Yükleniyor…' : 'Daha fazla göster'}</button>
+      )}
     </div>
   );
 }

@@ -71,17 +71,49 @@ export function PageHead({ title, sub, children }) {
   );
 }
 
-// Istatistik karti: tum sayfalarda ayni (sayi + etiket + istege bagli ek satir)
-const STAT_ICON = [['kitap', '📖'], ['sayfa', '📄'], ['dizi', '📺'], ['bölüm', '🎞️'], ['film', '🎬'], ['seri', '🔥'], ['hedef', '🎯']];
-export function Stat({ value, label, extra }) {
+// Istatistik: tek bir ozet seridinin hucresi (sayi + etiket + istege bagli ek satir). zero: deger 0 ise sessiz gorunur
+const STAT_ICON = [['kitap', '📖'], ['sayfa', '📄'], ['dizi', '📺'], ['bölüm', '🎞️'], ['süre', '⏱️'], ['film', '🎬'], ['rekor', '🏆'], ['puan', '⭐']];
+export function Stat({ value, label, extra, zero }) {
   const l = typeof label === 'string' ? label.toLocaleLowerCase('tr') : '';
-  const icon = (STAT_ICON.find(([k]) => l.includes(k)) || [0, '✦'])[1];
+  const icon = (STAT_ICON.find(([k]) => l.includes(k)) || [])[1];
   return (
-    <div className="card stat">
-      <span className="stat-ic" aria-hidden="true">{icon}</span>
+    <div className={'stat' + (zero ? ' is-zero' : '')}>
       <b>{value}</b>
-      <span className="stat-l">{label}</span>
+      <span className="stat-l">{icon && <span aria-hidden="true">{icon} </span>}{label}</span>
       {extra}
+    </div>
+  );
+}
+
+// Sekme cubugu (WAI-ARIA tabs): oklarla/Home/End ile gezilir, yalniz secili sekme Tab sirasinda
+export function SegTabs({ tabs, value, onChange, label, idBase, className = '' }) {
+  const ref = useRef(null);
+  const onKey = (e) => {
+    const i = tabs.findIndex(([k]) => k === value);
+    const n = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (n === undefined) return;
+    e.preventDefault();
+    const k = tabs[(n + tabs.length) % tabs.length][0];
+    onChange(k);
+    ref.current?.querySelector(`#${idBase}-tab-${k}`)?.focus();
+  };
+  return (
+    <div className={'tabs seg ' + className} role="tablist" aria-label={label} ref={ref} onKeyDown={onKey}>
+      {tabs.map(([k, l]) => (
+        <button
+          key={k}
+          id={`${idBase}-tab-${k}`}
+          role="tab"
+          type="button"
+          className="tab"
+          aria-selected={value === k}
+          aria-controls={`${idBase}-panel`}
+          tabIndex={value === k ? 0 : -1}
+          onClick={() => onChange(k)}
+        >
+          {l}
+        </button>
+      ))}
     </div>
   );
 }
@@ -225,7 +257,8 @@ export function timeAgo(iso) {
   if (s < 3600) return `${Math.floor(s / 60)} dk önce`;
   if (s < 86400) return `${Math.floor(s / 3600)} saat önce`;
   if (s < 86400 * 30) return `${Math.floor(s / 86400)} gün önce`;
-  return new Date(iso).toLocaleDateString('tr-TR');
+  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))} ay önce`;
+  return `${Math.floor(s / (86400 * 365))} yıl önce`;
 }
 
 // "2026-10-22" -> "22.10.2026"

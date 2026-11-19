@@ -13,7 +13,7 @@ const fmt = (n) => (n ?? 0).toLocaleString('tr-TR');
 export default function Goals() {
   return (
     <>
-      <PageHead title="Hedefler" sub="Aylık ve yıllık hedeflerin, yıl özetin ve okumak istediklerin." />
+      <PageHead title="Hedefler" />
       <GoalsCard />
       <YearSummary />
       <WantToRead />
@@ -25,7 +25,7 @@ export default function Goals() {
 export function Settings() {
   return (
     <>
-      <PageHead title="Hesap ayarları" sub="Profil, şifre, bildirimler ve verilerin." />
+      <PageHead title="Hesap ayarları" />
       <Account />
       <Export />
     </>
@@ -39,6 +39,7 @@ function GoalsCard() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(false);
+  const [editing, setEditing] = useState(false);
   const d = g.data?.goals;
   const monthly = mp ?? d?.monthly_pages ?? '';
   const yearly = yb ?? d?.yearly_books ?? '';
@@ -53,6 +54,7 @@ function GoalsCard() {
       setMp(null);
       setYb(null);
       setOk(true);
+      setEditing(false);
       g.reload();
     } catch (x) {
       setErr(x);
@@ -62,12 +64,26 @@ function GoalsCard() {
   };
   return (
     <section className="card" style={{ marginBottom: 16 }}>
-      <h2 style={{ marginTop: 0 }}>🎯 İlerleme</h2>
+      <div className="row">
+        <h2 className="grow" style={{ margin: 0 }}>🎯 İlerleme</h2>
+        {d && !editing && (
+          <button className="btn small ghost" onClick={() => { setEditing(true); setOk(false); }}>
+            {d.monthly_pages > 0 || d.yearly_books > 0 ? 'Hedefleri düzenle' : 'Hedef koy'}
+          </button>
+        )}
+      </div>
       {g.loading && !d && <Skeleton h={70} />}
       {g.error?.status === 404 ? <Hint>Hedefler henüz hazır değil.</Hint> : <ErrorBox error={g.error} onRetry={g.reload} />}
       {d && (
         <>
-          <div className="goal">
+          {!(d.monthly_pages > 0 || d.yearly_books > 0) && !editing && (
+            <p className="small muted" style={{ margin: '8px 0 0' }}>
+              Henüz hedef koymadın. Bu ay {fmt(d.month_pages)} sayfa okudun, bu yıl {fmt(d.year_books)} kitap bitirdin.
+            </p>
+          )}
+          {(d.monthly_pages > 0 || d.yearly_books > 0 || editing) && (
+          <>
+          <div className="goal" style={{ marginTop: 12 }}>
             <div className="row"><b className="grow">Bu ay</b><span className="small">{fmt(d.month_pages)}{d.monthly_pages > 0 ? ` / ${fmt(d.monthly_pages)} sayfa` : ' sayfa'}</span></div>
             {d.monthly_pages > 0 ? <Progress value={pct(d.month_pages, d.monthly_pages)} /> : <p className="small muted" style={{ margin: '2px 0 0' }}>Aylık sayfa hedefi koymadın.</p>}
           </div>
@@ -75,6 +91,11 @@ function GoalsCard() {
             <div className="row"><b className="grow">Bu yıl</b><span className="small">{fmt(d.year_books)}{d.yearly_books > 0 ? ` / ${fmt(d.yearly_books)} kitap` : ' kitap'}</span></div>
             {d.yearly_books > 0 ? <Progress value={pct(d.year_books, d.yearly_books)} /> : <p className="small muted" style={{ margin: '2px 0 0' }}>Yıllık kitap hedefi koymadın.</p>}
           </div>
+          </>
+          )}
+          {ok && !editing && <p className="ok-note small" role="status" style={{ margin: '12px 0 0' }}>✅ Kaydedildi</p>}
+          {editing && (
+          <>
           <form onSubmit={save} className="goal-form">
             <label className="field">
               <span>Aylık sayfa</span>
@@ -84,10 +105,14 @@ function GoalsCard() {
               <span>Yıllık kitap</span>
               <input type="number" min="0" max="500" inputMode="numeric" value={yearly} onChange={(e) => setYb(e.target.value)} />
             </label>
-            <button className="btn small" disabled={busy || (mp === null && yb === null)}>Kaydet</button>
-            {ok && <span className="ok-note small" role="status">✅ Kaydedildi</span>}
+            <span className="row" style={{ gap: 6 }}>
+              <button className="btn small" disabled={busy || (mp === null && yb === null)}>Kaydet</button>
+              <button type="button" className="btn small ghost" onClick={() => { setEditing(false); setMp(null); setYb(null); }}>Vazgeç</button>
+            </span>
           </form>
           <p className="small muted" style={{ marginBottom: 0 }}>0 yazarsan hedef kapanır.</p>
+          </>
+          )}
           <ErrorBox error={err} />
         </>
       )}
@@ -124,11 +149,11 @@ function YearSummary() {
       {d && !none && (
         <>
           <div className="stats">
-            <Stat value={<CountUp value={d.finished.books} />} label="kitap bitti" />
-            <Stat value={<CountUp value={d.total_pages} />} label="sayfa okundu" />
-            <Stat value={<CountUp value={d.finished.series} />} label="dizi bitti" />
-            <Stat value={<CountUp value={d.finished.movies} />} label="film izlendi" />
-            <Stat value={`🔥 ${fmt(d.longest_streak)}`} label="gün en uzun seri" />
+            {d.finished.books > 0 && <Stat value={<CountUp value={d.finished.books} />} label="kitap bitti" />}
+            {d.total_pages > 0 && <Stat value={<CountUp value={d.total_pages} />} label="sayfa okundu" />}
+            {d.finished.series > 0 && <Stat value={<CountUp value={d.finished.series} />} label="dizi bitti" />}
+            {d.finished.movies > 0 && <Stat value={<CountUp value={d.finished.movies} />} label="film izlendi" />}
+            {d.longest_streak > 0 && <Stat value={`🔥 ${fmt(d.longest_streak)}`} label="gün en uzun seri" />}
             {d.avg_rating != null && <Stat value={`⭐ ${d.avg_rating.toLocaleString('tr-TR')}`} label="ortalama puan" />}
           </div>
           {d.best_month && (

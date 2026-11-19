@@ -41,7 +41,7 @@ export default function Notes() {
 
   return (
     <>
-      <PageHead title="Defterim" sub="Okurken ya da izlerken aklına gelenleri hızlıca not al; istersen yorum olarak paylaş.">
+      <PageHead title="Defterim" sub="Aklına gelenleri not al; istersen yorum olarak paylaş.">
         <button className="btn" onClick={() => setComposing((v) => !v)}>{composing ? 'Kapat' : '+ Yeni not'}</button>
       </PageHead>
       {composing && <Composer onSaved={() => { setComposing(false); list.reload(); }} onCancel={() => setComposing(false)} />}

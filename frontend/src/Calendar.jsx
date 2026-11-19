@@ -355,17 +355,24 @@ function Calendar({ type, mode, keys, todayKey, data, loading, error, onRetry, p
           </div>
         )}
       </div>
-      <div className="cal-legend small muted">
-        <span className="cal-leg">
+      {/* Kisa olcek: kutular dusukten yuksege; her kademenin adi ipucu / ekran okuyucu metninde */}
+      <div className="cal-legend small muted" role="list" aria-label="Renk ölçeği">
+        <span className="cal-leg" role="listitem" title={`0 ${cfg.unit}`}>
           <i style={{ background: 'var(--cal-red)' }} />
-          0 {cfg.unit}
+          <span>0</span>
         </span>
-        {cfg.tiers.map((t, i) => (
-          <span className="cal-leg" key={t.label}>
-            <i style={{ background: t.color, boxShadow: t.gold ? 'inset 0 0 0 2px var(--cal-gold)' : undefined }} />
-            {rangeText(cfg, i)} {t.label}
-          </span>
-        ))}
+        <span className="cal-scale">
+          {cfg.tiers.map((t, i) => (
+            <i
+              key={t.label}
+              role="listitem"
+              aria-label={`${rangeText(cfg, i)} ${cfg.unit}: ${t.label}`}
+              title={`${rangeText(cfg, i)} ${cfg.unit} · ${t.label}`}
+              style={{ background: t.color, boxShadow: t.gold ? 'inset 0 0 0 2px var(--cal-gold)' : undefined }}
+            />
+          ))}
+        </span>
+        <span aria-hidden="true">{rangeText(cfg, cfg.tiers.length - 1)} {cfg.unit}</span>
       </div>
       {data && !loading && (() => {
         const sum = cells.reduce((s, x) => s + (x && !x.future ? x.n : 0), 0);

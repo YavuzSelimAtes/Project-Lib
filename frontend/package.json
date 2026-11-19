@@ -15,6 +15,7 @@
     "@dicebear/open-peeps": "^9.4.2",
     "@dicebear/pixel-art": "^9.4.2",
     "kutuphane-backend": "file:../backend",
+    "lucide-react": "^1.76.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4"
