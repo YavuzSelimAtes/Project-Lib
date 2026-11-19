@@ -281,7 +281,9 @@ export function backfillLogs(db, e, mode, days) {
   let page = 0;
   let rows = 0;
   const put = (date, p, est, noStreak = 0) => { ins.run(e.id, e.user_id, date, page, page + p, p, est ? 1 : 0, noStreak); page += p; rows++; };
-  if (past === 0) { put(today, cur, false); return { rows }; }
+  // Gunlere dagitilmayan sayfalar kayittan once okunmus sayilir (base/pre_pages): bugune yazilirsa gunun sonraki guncellemeleri sisirir
+  const pre = (p) => { if (p > 0) { db.prepare('UPDATE entries SET base_page=?, pre_pages=? WHERE id=?').run(p, p, e.id); page = p; } };
+  if (past === 0) { pre(cur); return { rows }; }
   const dates = Array.from({ length: Math.min(past, 90) }, (_, i) => addDays(today, -(Math.min(past, 90) - i)));
   if (mode === 'spread') {
     const n = dates.length;
@@ -301,11 +303,11 @@ export function backfillLogs(db, e, mode, days) {
   }
   const sum = [...given.values()].reduce((a, b) => a + b, 0);
   if (sum > cur) throw bad(`Girdiginiz gunluk sayfalarin toplami (${sum}), su an bulundugunuz sayfayi (${cur}) asiyor`, { days: 'toplam fazla' });
+  pre(cur - sum); // 'kalan' sayfalar bugunun okumasi degil: baslangictan once okunmus sayilir
   for (const d of dates) { // bos birakilan gun = okumadim (0, gercek satir)
     const p = given.get(d) || 0;
     if (p > 0) put(d, p, false);
     else { ins.run(e.id, e.user_id, d, page, page, 0, 0, 0); rows++; }
   }
-  if (cur - sum > 0) put(today, cur - sum, false, 1); // 'kalan' sayfalar bugunun okumasi degil: ortalamaya girer, rekora girmez
   return { rows };
 }

@@ -579,8 +579,8 @@ PUT /api/entries/:id/day-logs    [sahibi]
    Kitap 'devam', current_page>0 ve start_date gecmisteyse arayuz KAYIT ACARKEN su secimi sormali ve gondermeli:
      "backfill":"manual" + "days":[{"date":"2026-10-20","pages":20}, ...]   // GUN GUN DOLDUR
          days = start_date..DUN arasi gunler icin o gun okunan sayfa. Bos birakilan/verilmeyen gun = 0 (okumadim,
-         gercek satir). GERCEK satirlar: rekora ve seriye islenir. Toplam < current_page ise kalan BUGUNE gercek yazilir
-         (arayuz "bugun: kalan N" gostersin). Toplam > current_page -> 400.
+         gercek satir). GERCEK satirlar: rekora ve seriye islenir. Toplam < current_page ise kalan BUGUNE YAZILMAZ: kayittan once
+         okunmus sayilir (base_page=pre_pages=kalan; donem toplamina girer, gunlere girmez). Toplam > current_page -> 400.
      "backfill":"spread"                                                  // GUNLERE ESIT DAGIT
          current_page, start_date..DUN gunlerine esit bolunur (38 / 3 gun -> 12,13,13), TAHMINI: rekora ve seriye
          EKLENMEZ, ortalamaya girer. ARAYUZ UYARISI (kullaniciya goster): "Sayfalar gunlere esit dagitilacak; bu gunler
