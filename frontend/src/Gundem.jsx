@@ -40,6 +40,10 @@ function say(p) {
   }
 }
 
+const TrashIc = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+);
+
 const HeartIc = ({ on }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /></svg>
 );
@@ -94,7 +98,8 @@ function LongText({ text }) {
   );
 }
 
-export function Post({ p, me, onOpen, defaultOpen = false }) {
+export function Post({ p, me, onOpen, onRemoved, defaultOpen = false }) {
+  const [gone, setGone] = useState(false);
   const [liked, setLiked] = useState(p.i_liked);
   const [likes, setLikes] = useState(p.like_count);
   const [open, setOpen] = useState(defaultOpen);
@@ -105,6 +110,13 @@ export function Post({ p, me, onOpen, defaultOpen = false }) {
     try { const r = await (was ? api.unlikePost(p.id) : api.likePost(p.id)); setLikes(r.like_count); setLiked(r.i_liked); }
     catch { setLiked(was); setLikes((n) => n + (was ? 1 : -1)); }
   };
+  // Kendi paylasimini gundemden kaldirir; kayit/yorum/puan yerinde kalir
+  const remove = async () => {
+    if (!window.confirm('Bu paylaşım Gündem\'den kaldırılsın mı? Kaydın, yorumun ya da puanın silinmez.')) return;
+    try { await api.deletePost(p.id); setGone(true); onRemoved?.(p.id); }
+    catch (x) { window.alert(x.message); }
+  };
+  if (gone) return null;
   const d = p.data || {};
   const pct = p.entry?.type === 'book' && p.entry.total_pages > 0 && p.kind === 'read' ? Math.min(100, Math.round((p.entry.current_page / p.entry.total_pages) * 100)) : null;
   const sub = [p.catalog?.author, p.entry?.type === 'series' && p.entry.season != null && p.kind !== 'finished' ? 'S' + p.entry.season + ' B' + p.entry.episode : null].filter(Boolean).join(' · ');
@@ -114,7 +126,7 @@ export function Post({ p, me, onOpen, defaultOpen = false }) {
       <header className="gd-head">
         <Avatar user={p.user} />
         <div className="gd-who">
-          <b>{p.user.display_name}</b>{p.user.id === me.id && <span className="gd-me">Sen</span>}
+          <b>{p.user.display_name}</b>{p.user.id === me.id && <span className="gd-me">(sen)</span>}
         </div>
         <time className="gd-time" dateTime={p.at} title={when(p.at)}>{timeAgo(p.at)}</time>
       </header>
@@ -138,7 +150,7 @@ export function Post({ p, me, onOpen, defaultOpen = false }) {
       <footer className="gd-foot">
         <button className={'gd-btn like' + (liked ? ' on' : '')} onClick={like} aria-pressed={liked} aria-label="Beğen"><HeartIc on={liked} /><span>{likes > 0 ? likes : ''}</span></button>
         <button className={'gd-btn' + (open ? ' on' : '')} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Yorumlar"><CommentIc /><span>{cc > 0 ? cc : ''}</span></button>
-        <span className="gd-exact">{when(p.at)}</span>
+        {p.user.id === me.id && <button className="gd-btn gd-del" onClick={remove} aria-label="Gündemden kaldır" title="Gündemden kaldır"><TrashIc /></button>}
       </footer>
       {open && <Thread post={p} onCount={setCc} />}
     </article>
@@ -162,7 +174,7 @@ export default function Gundem({ gid, me, onOpen }) {
       {posts == null && !err && <Skeleton h={120} n={3} />}
       <ErrorBox error={err} onRetry={() => load(true)} />
       {posts && posts.length === 0 && <Empty icon="📰" title="Gündem henüz boş">Biri okuyunca, izleyince ya da yorum yazınca burada görünür.</Empty>}
-      {(posts || []).map((p) => <Post key={p.id + '-' + p.at} p={p} me={me} onOpen={onOpen} />)}
+      {(posts || []).map((p) => <Post key={p.id + '-' + p.at} p={p} me={me} onOpen={onOpen} onRemoved={(id) => setPosts((cur) => cur.filter((x) => x.id !== id))} />)}
       {next && <button className="btn ghost" disabled={busy} onClick={() => load(false)}>Daha fazla göster</button>}
     </div>
   );
