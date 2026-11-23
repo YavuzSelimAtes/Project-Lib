@@ -55,6 +55,30 @@ export function postReadUndo(db, e, { pages = 0, episodes = 0, date }) {
   } catch { /* gundem asla akisi bozmaz */ }
 }
 
+// Gundem takvimle ayni kalsin: bir kayit icin hicbir gunun kartlardaki sayfa toplami o gunun gunluk kaydindan (reading_logs, net) fazla olamaz.
+// Geri alma / duzeltme / eksi (duzeltme) satirlari baska bir gune dustugunde ya da tahmini satirlar yeniden dagitildiginda kartta artan sayfalar burada duser.
+// Yalniz FAZLAYI duser; eksik olani yazmaz (yeni kart/yukari tasima yalniz kullanicinin kendi girisiyle olur).
+export function syncReadPosts(db, e) {
+  try {
+    if (e.type !== 'book') return 0;
+    const cards = db.prepare("SELECT * FROM posts WHERE user_id=? AND entry_id=? AND kind='read'").all(e.user_id, e.id);
+    if (!cards.length) return 0;
+    const have = new Map();
+    for (const p of cards) {
+      const d = JSON.parse(p.data || '{}');
+      if (d.total > 0) have.set(p.day, (have.get(p.day) || 0) + d.total);
+      for (const [dt, n] of Object.entries(d.past || {})) have.set(dt, (have.get(dt) || 0) + n);
+    }
+    const logOf = db.prepare('SELECT COALESCE(SUM(pages_read),0) s FROM reading_logs WHERE entry_id=? AND date=?');
+    let fixed = 0;
+    for (const [date, n] of have) {
+      const target = Math.max(0, logOf.get(e.id, date).s);
+      if (n > target) { postReadUndo(db, e, { pages: n - target, date }); fixed += n - target; }
+    }
+    return fixed;
+  } catch { return 0; }
+}
+
 // Kisi kendi paylasimini gundemden kaldirir (kaydi/yorumu/puani silmez)
 export const deleteOwnPost = (db, userId, postId) => db.prepare('DELETE FROM posts WHERE id=? AND user_id=?').run(postId, userId).changes > 0;
 
