@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { norm } from './services/sources.js';
 import { createManager } from './groups.js';
+import { syncReadPosts } from './services/posts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -507,6 +508,11 @@ function migrate(db) {
   if (!db.prepare("SELECT 1 FROM meta WHERE key='pre_pages_v1'").get()) {
     db.exec("UPDATE entries SET pre_pages=base_page WHERE type='book' AND base_page>0 AND status<>'planlandi' AND created_at<'2026-10-29T21:54:54Z'");
     db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('pre_pages_v1', ?)").run(new Date().toISOString());
+  }
+  // Gundem kartlari takvimden fazla sayfa gosteriyorsa (geri alma/duzeltme sonrasi kalan artik) bir kez takvime esitlenir
+  if (!db.prepare("SELECT 1 FROM meta WHERE key='posts_sync_v1'").get()) {
+    for (const e of db.prepare("SELECT * FROM entries WHERE type='book'").all()) syncReadPosts(db, e);
+    db.prepare("INSERT OR REPLACE INTO meta (key,value) VALUES ('posts_sync_v1', ?)").run(new Date().toISOString());
   }
   // Kiril basliklar da aranabilsin diye arama alani (norm) bir kez yeniden hesaplanir
   if (!db.prepare("SELECT 1 FROM meta WHERE key='norm_v2'").get()) {

@@ -8,7 +8,7 @@ import { getEdition } from '../services/editions.js';
 import { setGenre } from '../services/ratings.js';
 import { familyProgressPush, familyFinishedPush, familyStartedPush } from '../services/push.js';
 import { familyFinishedNotify } from '../services/notify.js';
-import { postRead, postReadUndo, postEvent } from '../services/posts.js';
+import { postRead, postReadUndo, postEvent, syncReadPosts } from '../services/posts.js';
 import { ensureSeasons, ensureForPosition, validateSeriesPosition, pinSeriesFinish, logSeriesProgress, seasonRows, watchedOf } from '../services/seasons.js';
 import { defaultEntryGroups, scopeGroup, commonGroups, memberRow, canSeeEntry, entryVisibleSql, viewerGroups, commentVisibleSql, questionVisibleSql } from '../groups.js';
 
@@ -281,6 +281,7 @@ export default async function routes(app) {
     const entry = getEntry(db, e.id);
     if (r.delta > 0) postRead(db, entry, { pages: r.delta, date: d });
     else if (r.delta < 0) postReadUndo(db, entry, { pages: -r.delta, date: d }); // geri alma gundemden de duser
+    syncReadPosts(db, entry); // gundem hicbir gunde takvimden (gunluk kayit) fazla gostermesin
     if (d === today) { // eski tarihli (gec gelen / cevrimdisi kuyruk) kayitlar icin aile bildirimi gitmez
       if (r.finished) { familyFinishedPush(db, entry); familyFinishedNotify(db, entry); postEvent(db, entry, 'finished'); }
       else if (r.delta > 0 && r.spread === 1) familyProgressPush(db, entry);
@@ -335,6 +336,7 @@ export default async function routes(app) {
         else if (diff < 0) postReadUndo(db, getEntry(db, id), { pages: -diff, date: d.date });
       }
     });
+    syncReadPosts(db, getEntry(db, id)); // tahmini satirlar yeniden dagitilinca baska gunler de degisebilir: gundem takvimle ayni kalsin
     const entry = entryOut(db, getEntry(db, id));
     return { entry, applied: list.length, open_days: openDays(db, getEntry(db, id)) };
   });
